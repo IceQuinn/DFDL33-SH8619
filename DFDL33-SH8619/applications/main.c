@@ -14,15 +14,14 @@
 #define DBG_LVL DBG_LOG
 #include <rtdbg.h>
 
+#include "sys.h"
+
 int main(void)
 {
-    int count = 1;
+    Sys_Run_Time_Init();
 
-    while (count++)
-    {
-        LOG_D("Hello RT-Thread!");
-        rt_thread_mdelay(1000);
-    }
+    show_ctu_msg();
+
 
     return RT_EOK;
 }

@@ -173,7 +173,7 @@ static rt_base_t at32_pin_get(const char *name)
     return pin;
 }
 
-static void at32_pin_write(rt_device_t dev, rt_base_t pin, rt_uint8_t value)
+static void at32_pin_write(rt_device_t dev, rt_base_t pin, rt_base_t value)
 {
     gpio_type *gpio_port;
 
@@ -190,7 +190,7 @@ static void at32_pin_write(rt_device_t dev, rt_base_t pin, rt_uint8_t value)
     gpio_bits_write(gpio_port, gpio_pin, (confirm_state)value);
 }
 
-static rt_size_t at32_pin_read(rt_device_t dev, rt_base_t pin)
+static int at32_pin_read(rt_device_t dev, rt_base_t pin)
 {
     gpio_type *gpio_port;
     uint16_t gpio_pin;
@@ -212,7 +212,7 @@ static rt_size_t at32_pin_read(rt_device_t dev, rt_base_t pin)
     return value;
 }
 
-static void at32_pin_mode(rt_device_t dev, rt_base_t pin, rt_uint8_t mode)
+static void at32_pin_mode(rt_device_t dev, rt_base_t pin, rt_base_t mode)
 {
     gpio_init_type gpio_init_struct;
     gpio_type *gpio_port;
@@ -294,8 +294,8 @@ rt_inline const struct pin_irq_map *get_pin_irq_map(uint32_t pinbit)
     return &pin_irq_map[mapindex];
 };
 
-static rt_err_t at32_pin_attach_irq(struct rt_device *device, rt_base_t pin,
-                                    rt_uint8_t mode, void (*hdr)(void *args), void *args)
+static rt_err_t at32_pin_attach_irq(struct rt_device *device, rt_int32_t pin,
+                                    rt_uint32_t mode, void (*hdr)(void *args), void *args)
 {
     uint16_t gpio_pin;
     rt_base_t level;
@@ -339,7 +339,7 @@ static rt_err_t at32_pin_attach_irq(struct rt_device *device, rt_base_t pin,
     return RT_EOK;
 }
 
-static rt_err_t at32_pin_dettach_irq(struct rt_device *device, rt_base_t pin)
+static rt_err_t at32_pin_dettach_irq(struct rt_device *device, rt_int32_t pin)
 {
     uint16_t gpio_pin;
     rt_base_t level;
@@ -375,12 +375,11 @@ static rt_err_t at32_pin_dettach_irq(struct rt_device *device, rt_base_t pin)
 }
 
 static rt_err_t at32_pin_irq_enable(struct rt_device *device, rt_base_t pin,
-                                    rt_uint8_t enabled)
+                                    rt_uint32_t enabled)
 {
     gpio_init_type gpio_init_struct;
     exint_init_type exint_init_struct;
     gpio_type *gpio_port;
-    IRQn_Type irqn;
     uint16_t gpio_pin;
     const struct pin_irq_map *irqmap;
     rt_base_t level;
