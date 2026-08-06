@@ -65,7 +65,7 @@ static struct at32_spi_config spi_config[] = {
 
 /* private rt-thread spi ops function */
 static rt_err_t configure(struct rt_spi_device* device, struct rt_spi_configuration* configuration);
-static rt_ssize_t xfer(struct rt_spi_device* device, struct rt_spi_message* message);
+static rt_size_t xfer(struct rt_spi_device* device, struct rt_spi_message* message);
 
 static struct rt_spi_ops at32_spi_ops =
 {
@@ -358,7 +358,7 @@ static void _spi_polling_receive_transmit(struct at32_spi *instance, rt_uint8_t 
     }
 }
 
-static rt_ssize_t xfer(struct rt_spi_device* device, struct rt_spi_message* message)
+static rt_size_t xfer(struct rt_spi_device* device, struct rt_spi_message* message)
 {
     struct rt_spi_bus * at32_spi_bus = (struct rt_spi_bus *)device->bus;
     struct at32_spi *instance = (struct at32_spi *)at32_spi_bus->parent.user_data;

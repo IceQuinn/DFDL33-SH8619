@@ -7,6 +7,7 @@
 
 #include "inverter_archive.h"
 #include "meas_cfg.h"
+#include "AB_check.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,7 +56,7 @@ typedef enum Inv_ByteOrder
 } Inv_ByteOrder_t;
 
 /* 单个Modbus寄存器块的通用描述。 此结构体不保存实时数据，只描述一个测量点的地址、长度和数据解析方式。 读写功能码不在寄存器块中保存，由三大分类对应的业务逻辑或厂家协议驱动 统一确定。 */
-#pragma pack(push, 1)
+#pragma pack(1)
 typedef struct Inv_RegBlk
 {
     /* Modbus PDU中的零基寄存器地址。例如设备手册中的保持寄存器40001，
@@ -77,10 +78,9 @@ typedef struct Inv_RegBlk
      * 浮点、ASCII、时间和位域类型通常配置为0。 */
     uint8_t decimal_places;
 } Inv_RegBlk_t;
-#pragma pack(pop)
+
 
 /* 数据类：运行过程中周期采集的只读数据。*/
-#pragma pack(push, 1)
 typedef struct Inv_ProtoData
 {
     /* A、B、C三相电压寄存器，每相独立配置起始地址和读取数量，并分别发起 Modbus读取。数组下标使用 INVERTER_PROTOCOL_PHASE_A/B/C。 */
@@ -99,7 +99,7 @@ typedef struct Inv_ProtoData
     Inv_RegBlk_t pwr_factor[ENUM_PHASE_MAX];
 
 } Inv_ProtoData_t;
-#pragma pack(pop)
+
 
 /* 当前字段布局在1字节对齐下应固定占用105字节：
  * 三相电压、三相电流               3×7×2 = 42字节
@@ -139,7 +139,6 @@ typedef char Inv_ProtoParamSizeCheck_t[
     (sizeof(Inv_ProtoParam_t) == INV_PROTO_PARAM_SIZE) ? 1 : -1];
 
 /* 一个固定命令值控制点。适用于开机、关机、复位等“写入固定值触发”的控制。 即使开机和关机共用同一寄存器，也分别配置两个控制点，以兼容某些厂家将 开机和关机定义在不同地址的情况。 */
-#pragma pack(push, 1)
 typedef struct Inv_FixedCmd
 {
     /* 控制寄存器的地址、长度、数据类型、字节顺序和小数位。 */
@@ -148,7 +147,6 @@ typedef struct Inv_FixedCmd
     /* 执行该控制时写入寄存器的原始值。 */
     uint32_t cmd_val;
 } Inv_FixedCmd_t;
-#pragma pack(pop)
 
 #define INV_FIXED_CMD_SIZE                          11U
 typedef char Inv_FixedCmdSizeCheck_t[
@@ -158,7 +156,6 @@ typedef char Inv_FixedCmdSizeCheck_t[
  * 开机和关机可能共用同一个地址但写入值不同，也可能使用不同寄存器，因此
  * 使用两个独立的固定命令控制点。控制百分比及功率值按各自
  * decimal_places 转换。 */
-#pragma pack(push, 1)
 typedef struct Inv_ProtoCtrl
 {
     /* 逆变器开机控制寄存器。 */
@@ -182,7 +179,6 @@ typedef struct Inv_ProtoCtrl
     /* 无功功率百分比控制寄存器。 */
     Inv_RegBlk_t reactive_pwr_pct_ctrl;
 } Inv_ProtoCtrl_t;
-#pragma pack(pop)
 
 /* 控制类包含7个控制寄存器块，按1字节对齐后共7×7=49字节。 */
 #define INV_PROTO_CTRL_SIZE                         49U
@@ -190,9 +186,9 @@ typedef char Inv_ProtoCtrlSizeCheck_t[
     (sizeof(Inv_ProtoCtrl_t) == INV_PROTO_CTRL_SIZE) ? 1 : -1];
 
 /* 一条完整逆变器协议配置，包含数据类、参数类和控制类。 */
-#pragma pack(push, 1)
 typedef struct Inv_Proto
 {
+    rcd_head head;
     /* 与逆变器档案共用的厂家名称及规约版本。 */
     Inv_MfrInfo_t mfr_info;
 
@@ -205,15 +201,18 @@ typedef struct Inv_Proto
     /* 控制类。 */
     Inv_ProtoCtrl_t ctrl;
 } Inv_Proto_t;
-#pragma pack(pop)
+#pragma pack()
 
 /* 厂家信息34字节、数据类105字节、参数类42字节、控制类49字节，共230字节。 */
-#define INV_PROTO_SIZE                              230U
+#define INV_PROTO_SIZE                              236U
 typedef char Inv_ProtoSizeCheck_t[
     (sizeof(Inv_Proto_t) == INV_PROTO_SIZE) ? 1 : -1];
 
 /* 全局逆变器协议库，数组下标范围为0~99，前4项分别对应阳光、华为、固德威和锦浪。 */
 extern Inv_Proto_t g_inv_proto_lib[INVERTER_PROTOCOL_LIBRARY_COUNT];
+
+
+void Inv_Proto_Init(void);
 
 #ifdef __cplusplus
 }
