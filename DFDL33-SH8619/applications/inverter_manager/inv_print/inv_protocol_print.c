@@ -40,30 +40,56 @@ static const char *inv_proto_byte_order_name(uint8_t byte_order)
     }
 }
 
-/* 使用与数据行完全相同的固定列宽打印分类名称和寄存器表头，避免Tab引起列错位。 */
-static void inv_proto_print_table_header(const char *section_name)
+/* 使用与只读数据行相同的固定列宽打印数据类或参数类表头。 */
+static void inv_proto_print_read_table_header(const char *section_name)
 {
-    rt_kprintf("\t%-20s %-8s %-8s %-8s %-14s %-12s %-7s\n",
+    rt_kprintf("\t%-20s %-8s %-8s %-14s %-12s %-7s\n",
+               section_name,
+               "addr",
+               "read_fc",
+               "type",
+               "order",
+               "decimal");
+}
+
+/* 按只读表格中的一行打印数据类或参数类寄存器块。 */
+static void inv_proto_print_reg(const char *name, const Inv_RegBlk_t *reg)
+{
+    rt_kprintf("\t%-20s 0x%04X   0x%02X     %-14s %-12s %-7u\n",
+               name,
+               (unsigned int)reg->reg_addr,
+               (unsigned int)reg->read_func_code,
+               inv_proto_data_type_name(reg->data_type),
+               inv_proto_byte_order_name(reg->byte_order),
+               (unsigned int)reg->decimal_places);
+}
+
+/* 使用与控制数据行相同的固定列宽打印控制类表头。 */
+static void inv_proto_print_ctrl_table_header(const char *section_name)
+{
+    rt_kprintf("\t%-20s %-8s %-8s %-8s %-14s %-12s %-7s %-10s\n",
                section_name,
                "addr",
                "read_fc",
                "write_fc",
                "type",
                "order",
-               "decimal");
+               "decimal",
+               "default");
 }
 
-/* 按表格中的一行打印单个寄存器块。 */
-static void inv_proto_print_reg(const char *name, const Inv_RegBlk_t *reg)
+/* 按控制表格中的一行打印可读写寄存器块及其4字节默认写入值。 */
+static void inv_proto_print_ctrl_reg(const char *name, const Inv_CtrlRegBlk_t *reg)
 {
-    rt_kprintf("\t%-20s 0x%04X   0x%02X     0x%02X     %-14s %-12s %-7u\n",
+    rt_kprintf("\t%-20s 0x%04X   0x%02X     0x%02X     %-14s %-12s %-7u 0x%08X\n",
                name,
                (unsigned int)reg->reg_addr,
                (unsigned int)reg->read_func_code,
                (unsigned int)reg->write_func_code,
                inv_proto_data_type_name(reg->data_type),
                inv_proto_byte_order_name(reg->byte_order),
-               (unsigned int)reg->decimal_places);
+               (unsigned int)reg->decimal_places,
+               (unsigned int)reg->write_default_val);
 }
 
 /* 将固定32字节厂家名称转换为保证以NUL结束的可打印字符串。 */
@@ -114,7 +140,7 @@ static void inv_proto_print_one(uint16_t proto_number,
                (unsigned int)proto->mfr_info.proto_ver[0],
                (unsigned int)proto->mfr_info.proto_ver[1]);
 
-    inv_proto_print_table_header("[data]");
+    inv_proto_print_read_table_header("[data]");
     inv_proto_print_reg("Ua", &proto->data.Ux[ENUM_PHASE_A]);
     inv_proto_print_reg("Ub", &proto->data.Ux[ENUM_PHASE_B]);
     inv_proto_print_reg("Uc", &proto->data.Ux[ENUM_PHASE_C]);
@@ -136,7 +162,7 @@ static void inv_proto_print_one(uint16_t proto_number,
     inv_proto_print_reg("PFc", &proto->data.PFx[ENUM_PHASE_C]);
 
     rt_kprintf("\n");
-    inv_proto_print_table_header("[parameter]");
+    inv_proto_print_read_table_header("[parameter]");
     inv_proto_print_reg("device_no", &proto->param.dev_no);
     inv_proto_print_reg("pv_rated_p", &proto->param.pv_rated_active_pwr);
     inv_proto_print_reg("pv_rated_q", &proto->param.pv_rated_reactive_pwr);
@@ -145,14 +171,14 @@ static void inv_proto_print_one(uint16_t proto_number,
     inv_proto_print_reg("power_status", &proto->param.pwr_status);
 
     rt_kprintf("\n");
-    inv_proto_print_table_header("[control]");
-    inv_proto_print_reg("power_on", &proto->ctrl.pwr_on);
-    inv_proto_print_reg("power_off", &proto->ctrl.pwr_off);
-    inv_proto_print_reg("active_pwr_value", &proto->ctrl.active_pwr_ctrl);
-    inv_proto_print_reg("reactive_pwr_value", &proto->ctrl.reactive_pwr_ctrl);
-    inv_proto_print_reg("power_factor", &proto->ctrl.pwr_factor_ctrl);
-    inv_proto_print_reg("active_pwr_pct", &proto->ctrl.active_pwr_pct_ctrl);
-    inv_proto_print_reg("reactive_pwr_pct", &proto->ctrl.reactive_pwr_pct_ctrl);
+    inv_proto_print_ctrl_table_header("[control]");
+    inv_proto_print_ctrl_reg("power_on", &proto->ctrl.pwr_on);
+    inv_proto_print_ctrl_reg("power_off", &proto->ctrl.pwr_off);
+    inv_proto_print_ctrl_reg("active_pwr_value", &proto->ctrl.active_pwr_ctrl);
+    inv_proto_print_ctrl_reg("reactive_pwr_value", &proto->ctrl.reactive_pwr_ctrl);
+    inv_proto_print_ctrl_reg("power_factor", &proto->ctrl.pwr_factor_ctrl);
+    inv_proto_print_ctrl_reg("active_pwr_pct", &proto->ctrl.active_pwr_pct_ctrl);
+    inv_proto_print_ctrl_reg("reactive_pwr_pct", &proto->ctrl.reactive_pwr_pct_ctrl);
 }
 
 void Inv_Proto_Print(uint16_t count)

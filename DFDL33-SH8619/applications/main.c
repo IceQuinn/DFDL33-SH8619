@@ -17,6 +17,7 @@
 #include "sys.h"
 #include "drv_ex_flash.h"
 #include "inverter_protocol_library.h"
+#include "ctu_cfg.h"
 
 int main(void)
 {
@@ -25,6 +26,8 @@ int main(void)
     show_ctu_msg();             //打印装置信息
 
     flash_init();               //flash_sfud初始化
+
+    config_para_init();
 
     Inv_Proto_Init();             //逆变器协议库初始化
 

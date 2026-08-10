@@ -16,6 +16,9 @@
 #define EXTFLASH_PAGE_NUM_MAX   (EXTFLASH_TOTAL_SIZE/EXTFLASH_PAGE_SIZE)    //共2048个扇
 
 //--------------------------------------------------------------------------------  协议库 --------------------------------
+#define CTU_CFG_ADDR_A                    (0      * EXTFLASH_PAGE_SIZE)
+#define CTU_CFG_ADDR_B                    (1      * EXTFLASH_PAGE_SIZE)
+
 #define PROTO_LIB_ADDR_A                  (13     * EXTFLASH_PAGE_SIZE)
 #define PROTO_LIB_ADDR_B                  (19     * EXTFLASH_PAGE_SIZE)
 
