@@ -25,15 +25,38 @@ static const char *inv_proto_data_type_name(uint8_t data_type)
     }
 }
 
-/* 返回多字节数据排列方式的可读名称。 */
-static const char *inv_proto_byte_order_name(uint8_t byte_order)
+/* 返回压缩字节序在当前数据类型下对应的可读名称。 */
+static const char *inv_proto_byte_order_name(uint8_t data_type,
+                                              uint8_t byte_order)
 {
     switch (byte_order)
     {
-    case INVERTER_BYTE_ORDER_AB:   return "AB";
-    case INVERTER_BYTE_ORDER_BA:   return "BA";
-    case INVERTER_BYTE_ORDER_ABCD: return "ABCD";
-    case INVERTER_BYTE_ORDER_CDAB: return "CDAB";
+    case INVERTER_BYTE_ORDER_NORMAL:
+        if ((data_type == TYPE_I16) || (data_type == TYPE_U16))
+        {
+            return "AB";
+        }
+        if ((data_type == TYPE_I32) ||
+            (data_type == TYPE_U32) ||
+            (data_type == TYPE_FLOAT32))
+        {
+            return "ABCD";
+        }
+        return "NORMAL";
+
+    case INVERTER_BYTE_ORDER_SWAP:
+        if ((data_type == TYPE_I16) || (data_type == TYPE_U16))
+        {
+            return "BA";
+        }
+        if ((data_type == TYPE_I32) ||
+            (data_type == TYPE_U32) ||
+            (data_type == TYPE_FLOAT32))
+        {
+            return "CDAB";
+        }
+        return "SWAP";
+
     case INVERTER_BYTE_ORDER_BADC: return "BADC";
     case INVERTER_BYTE_ORDER_DCBA: return "DCBA";
     default:                        return "UNKNOWN";
@@ -60,7 +83,7 @@ static void inv_proto_print_reg(const char *name, const Inv_RegBlk_t *reg)
                (unsigned int)reg->reg_addr,
                (unsigned int)reg->read_func_code,
                inv_proto_data_type_name(reg->data_type),
-               inv_proto_byte_order_name(reg->byte_order),
+               inv_proto_byte_order_name(reg->data_type, reg->byte_order),
                (unsigned int)reg->decimal_places);
 }
 
@@ -87,9 +110,31 @@ static void inv_proto_print_ctrl_reg(const char *name, const Inv_CtrlRegBlk_t *r
                (unsigned int)reg->read_func_code,
                (unsigned int)reg->write_func_code,
                inv_proto_data_type_name(reg->data_type),
-               inv_proto_byte_order_name(reg->byte_order),
+               inv_proto_byte_order_name(reg->data_type, reg->byte_order),
                (unsigned int)reg->decimal_places,
                (unsigned int)reg->write_default_val);
+}
+
+/* 打印特征寄存器地址、数量、解析格式和32位特征值。 */
+static void inv_proto_print_feature(const Inv_Feature_t *feature)
+{
+    rt_kprintf("\t%-20s %-8s %-7s %-14s %-12s %-7s %-10s\n",
+               "[feature]",
+               "addr",
+               "count",
+               "type",
+               "order",
+               "decimal",
+               "value");
+    rt_kprintf("\t%-20s 0x%04X   %-7u %-14s %-12s %-7u 0x%08X\n",
+               "feature",
+               (unsigned int)feature->reg_addr,
+               (unsigned int)feature->reg_cnt,
+               inv_proto_data_type_name(feature->data_type),
+               inv_proto_byte_order_name(feature->data_type,
+                                          feature->byte_order),
+               (unsigned int)feature->decimal_places,
+               (unsigned int)feature->feature_val);
 }
 
 /* 将固定32字节厂家名称转换为保证以NUL结束的可打印字符串。 */
@@ -140,6 +185,9 @@ static void inv_proto_print_one(uint16_t proto_number,
                (unsigned int)proto->mfr_info.proto_ver[0],
                (unsigned int)proto->mfr_info.proto_ver[1]);
 
+    inv_proto_print_feature(&proto->feature);
+
+    rt_kprintf("\n");
     inv_proto_print_read_table_header("[data]");
     inv_proto_print_reg("Ua", &proto->data.Ux[ENUM_PHASE_A]);
     inv_proto_print_reg("Ub", &proto->data.Ux[ENUM_PHASE_B]);
