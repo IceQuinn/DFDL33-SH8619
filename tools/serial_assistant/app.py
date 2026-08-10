@@ -27,8 +27,6 @@ class SerialAssistant(tk.Tk):
         self.reader_thread = None
         self.stop_event = threading.Event()
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
-        self.rx_buffer = bytearray()
-        self.last_rx_time = 0.0
         self.rx_count = 0
         self.tx_count = 0
         self._build_ui()
@@ -157,14 +155,44 @@ class SerialAssistant(tk.Tk):
             combo.configure(state="normal")
 
     def _reader(self) -> None:
+        """Read one complete RTU frame from the driver buffer at a time.
+
+        Do not submit a one-byte read while the buffer is empty. Doing so makes
+        Windows complete the first IRP with the slave address and a second IRP
+        with the rest of the frame. Instead, observe ``in_waiting`` until its
+        value remains stable for an RTU frame gap, then issue one exact-sized
+        read. Serial monitoring tools will therefore also see a complete frame.
+        """
         while not self.stop_event.is_set():
             port = self.serial_port
             if not port:
                 break
             try:
-                data = port.read(port.in_waiting or 1)
-                if data:
-                    self.events.put(("rx", data))
+                waiting = port.in_waiting
+                if waiting <= 0:
+                    self.stop_event.wait(0.001)
+                    continue
+
+                # 1 start bit + data bits + optional parity + stop bits.
+                bits_per_char = 1 + port.bytesize + (0 if port.parity == serial.PARITY_NONE else 1) + float(port.stopbits)
+                frame_gap = max(0.006, 3.5 * bits_per_char / max(port.baudrate, 1))
+                stable_count = waiting
+                last_change = time.monotonic()
+
+                while not self.stop_event.is_set():
+                    self.stop_event.wait(min(0.002, frame_gap / 3))
+                    current_count = port.in_waiting
+                    now = time.monotonic()
+                    if current_count != stable_count:
+                        stable_count = current_count
+                        last_change = now
+                    if stable_count >= 256 or (stable_count > 0 and now - last_change >= frame_gap):
+                        # Bytes are already buffered, so this produces one
+                        # IRP_MJ_READ containing the complete RTU request.
+                        data = port.read(stable_count)
+                        if data:
+                            self.events.put(("frame", data))
+                        break
             except Exception as exc:
                 self.events.put(("error", str(exc)))
                 break
@@ -173,24 +201,15 @@ class SerialAssistant(tk.Tk):
         try:
             while True:
                 kind, payload = self.events.get_nowait()
-                if kind == "rx":
-                    self.rx_buffer.extend(payload)  # type: ignore[arg-type]
+                if kind == "frame":
                     self.rx_count += len(payload)  # type: ignore[arg-type]
-                    self.last_rx_time = time.monotonic()
                     self._update_counter()
+                    self.add_frame("RX", payload)  # type: ignore[arg-type]
                 elif kind == "error":
                     messagebox.showerror("串口读取错误", str(payload))
                     self.close_port()
         except queue.Empty:
             pass
-        # A silence of roughly 3.5 characters delimits RTU frames. Use a safe
-        # lower bound so Tk scheduling and USB serial latency do not split frames.
-        baud = max(int(self.baud_var.get() or 9600), 1)
-        gap = max(0.006, 3.5 * 11 / baud)
-        if self.rx_buffer and time.monotonic() - self.last_rx_time >= gap:
-            frame = bytes(self.rx_buffer)
-            self.rx_buffer.clear()
-            self.add_frame("RX", frame)
         self.after(15, self._drain_events)
 
     def add_frame(self, direction: str, frame: bytes) -> None:
