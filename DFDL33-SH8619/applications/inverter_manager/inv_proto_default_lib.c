@@ -498,71 +498,71 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
     // 厂家三：固德威
     {
         .mfr_info = {   // 厂家信息
-            .name = "GEWEI",
+            .name = "GOODWE",
             .proto_ver = {1U, 0U}
         },
         .feature = {    // 厂家特征数据
-            .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-            .reg_cnt = 0U,
+            .reg_addr = 0x75AC,
+            .reg_cnt = 1U,
             .data_type = TYPE_U16,
             .byte_order = INVERTER_BYTE_ORDER_NORMAL,
-            .decimal_places = 0U,
-            .feature_val = 0U
+            .decimal_places = 2U,
+            .feature_val = -1,
         },
         .data = {
             .Ux = {
                 {   // A相电压寄存器
-                    .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-                    .read_func_code = 0U,
+                    .reg_addr = 0x75A6,
+                    .read_func_code = 0x03U,
                     .data_type = TYPE_U16,
                     .byte_order = INVERTER_BYTE_ORDER_NORMAL,
-                    .decimal_places = 0U
+                    .decimal_places = 1U
                 },
                 {   // B相电压寄存器
-                    .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-                    .read_func_code = 0U,
+                    .reg_addr = 0x75A7,
+                    .read_func_code = 0x03U,
                     .data_type = TYPE_U16,
                     .byte_order = INVERTER_BYTE_ORDER_NORMAL,
-                    .decimal_places = 0U
+                    .decimal_places = 1U
                 },
                 {   // C相电压寄存器
-                    .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-                    .read_func_code = 0U,
+                    .reg_addr = 0x75A8,
+                    .read_func_code = 0x03U,
                     .data_type = TYPE_U16,
                     .byte_order = INVERTER_BYTE_ORDER_NORMAL,
-                    .decimal_places = 0U
+                    .decimal_places = 1U
                 }
             },
             .Ix = {
                 {   // A相电流寄存器
-                    .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-                    .read_func_code = 0U,
+                    .reg_addr = 0x75A9,
+                    .read_func_code = 0x03U,
                     .data_type = TYPE_U16,
                     .byte_order = INVERTER_BYTE_ORDER_NORMAL,
-                    .decimal_places = 0U
+                    .decimal_places = 1U
                 },
                 {   // B相电流寄存器
-                    .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-                    .read_func_code = 0U,
+                    .reg_addr = 0x75AA,
+                    .read_func_code = 0x03U,
                     .data_type = TYPE_U16,
                     .byte_order = INVERTER_BYTE_ORDER_NORMAL,
-                    .decimal_places = 0U
+                    .decimal_places = 1U
                 },
                 {   // C相电流寄存器
-                    .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-                    .read_func_code = 0U,
+                    .reg_addr = 0x75AB,
+                    .read_func_code = 0x03U,
                     .data_type = TYPE_U16,
                     .byte_order = INVERTER_BYTE_ORDER_NORMAL,
-                    .decimal_places = 0U
+                    .decimal_places = 1U
                 }
             },
             .Px = {
                 {   // A相有功功率寄存器
-                    .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-                    .read_func_code = 0U,
-                    .data_type = TYPE_U16,
+                    .reg_addr = 0x75AF,
+                    .read_func_code = 0x03U,
+                    .data_type = TYPE_I32,
                     .byte_order = INVERTER_BYTE_ORDER_NORMAL,
-                    .decimal_places = 0U
+                    .decimal_places = 3U
                 },
                 {   // B相有功功率寄存器
                     .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
@@ -581,11 +581,11 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
             },
             .Qx = {
                 {   // A相无功功率寄存器
-                    .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-                    .read_func_code = 0U,
-                    .data_type = TYPE_U16,
+                    .reg_addr = 0x75B7,
+                    .read_func_code = 0x03U,
+                    .data_type = TYPE_I32,
                     .byte_order = INVERTER_BYTE_ORDER_NORMAL,
-                    .decimal_places = 0U
+                    .decimal_places = 3U
                 },
                 {   // B相无功功率寄存器
                     .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
@@ -635,8 +635,8 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .decimal_places = 0U
             },
             .pv_rated_active_pwr = {    // PV额定有功功率寄存器
-                .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-                .read_func_code = 0U,
+                .reg_addr = 0x8131,
+                .read_func_code = 0x03U,
                 .data_type = TYPE_U16,
                 .byte_order = INVERTER_BYTE_ORDER_NORMAL,
                 .decimal_places = 0U

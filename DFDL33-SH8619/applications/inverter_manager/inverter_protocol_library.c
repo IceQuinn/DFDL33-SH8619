@@ -36,6 +36,7 @@ void Inv_Proto_Default_Init(void)
             sizeof(g_inv_proto_lib),
             "PROTO LIB");
 }
+MSH_CMD_EXPORT(Inv_Proto_Default_Init, Inv_Proto_Default_Init);
 
 
 void Inv_Proto_Init(void)

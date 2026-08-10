@@ -28,6 +28,29 @@ class ModbusParserTests(unittest.TestCase):
         self.assertFalse(result.crc_ok)
         self.assertEqual(result.operation, "写")
 
+    def test_zero_read_count_is_structurally_invalid(self):
+        result = parse_master_request(with_crc(bytes.fromhex("01 03 00 00 00 00")))
+        self.assertFalse(result.valid)
+        self.assertTrue(result.crc_ok)
+        self.assertIn("读取数量应为 1~125", result.detail)
+
+    def test_write_multiple_byte_count_mismatch(self):
+        result = parse_master_request(with_crc(bytes.fromhex("01 10 00 10 00 02 02 12 34")))
+        self.assertFalse(result.valid)
+        self.assertIn("字节数异常", result.detail)
+
+    def test_invalid_device_address(self):
+        result = parse_master_request(with_crc(bytes.fromhex("F8 06 00 01 00 03")))
+        self.assertFalse(result.valid)
+        self.assertTrue(result.crc_ok)
+        self.assertIn("超出 Modbus 范围", result.detail)
+
+    def test_unsupported_function_is_not_valid(self):
+        result = parse_master_request(with_crc(bytes.fromhex("01 45")))
+        self.assertFalse(result.valid)
+        self.assertTrue(result.crc_ok)
+        self.assertEqual(result.operation, "未知")
+
     def test_read_write_multiple(self):
         frame = with_crc(bytes.fromhex("01 17 00 10 00 02 00 20 00 02 04 00 01 00 02"))
         result = parse_master_request(frame)

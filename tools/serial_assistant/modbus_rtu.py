@@ -101,24 +101,36 @@ def parse_master_request(frame: bytes) -> ParseResult:
     values: tuple[int, ...] = ()
     read_address = None
     read_count = None
-    detail = ""
+    details: list[str] = []
     minimum = 8
+    supported = function in FUNCTION_NAMES
+    semantic_ok = True
+
+    if address > 247:
+        details.append(f"设备地址 {address} 超出 Modbus 范围 0~247")
+        semantic_ok = False
 
     try:
         if function in (0x01, 0x02, 0x03, 0x04):
             operation = "读"
             reg_address, reg_count = _u16(frame, 2), _u16(frame, 4)
+            maximum = 2000 if function in (0x01, 0x02) else 125
+            if not 1 <= reg_count <= maximum:
+                details.append(f"读取数量应为 1~{maximum}，实际为 {reg_count}")
+                semantic_ok = False
         elif function == 0x05:
             operation = "写"
             reg_address, reg_count = _u16(frame, 2), 1
             raw = _u16(frame, 4)
             values = (raw,)
-            detail = "线圈值：" + ("ON" if raw == 0xFF00 else "OFF" if raw == 0 else f"非法值 0x{raw:04X}")
+            details.append("线圈值：" + ("ON" if raw == 0xFF00 else "OFF" if raw == 0 else f"非法值 0x{raw:04X}"))
+            if raw not in (0x0000, 0xFF00):
+                semantic_ok = False
         elif function == 0x06:
             operation = "写"
             reg_address, reg_count = _u16(frame, 2), 1
             values = (_u16(frame, 4),)
-            detail = f"写入值：0x{values[0]:04X} ({values[0]})"
+            details.append(f"写入值：0x{values[0]:04X} ({values[0]})")
         elif function in (0x0F, 0x10):
             operation = "写"
             reg_address, reg_count = _u16(frame, 2), _u16(frame, 4)
@@ -127,17 +139,22 @@ def parse_master_request(frame: bytes) -> ParseResult:
             payload = frame[7:7 + byte_count]
             if function == 0x10:
                 values = tuple(_u16(payload, i) for i in range(0, len(payload) - 1, 2))
-                detail = "写入值：" + ", ".join(f"0x{x:04X}" for x in values)
+                details.append("写入值：" + ", ".join(f"0x{x:04X}" for x in values))
             else:
-                detail = f"线圈数据：{hex_bytes(payload)}"
+                details.append(f"线圈数据：{hex_bytes(payload)}")
             expected = reg_count * 2 if function == 0x10 else (reg_count + 7) // 8
             if byte_count != expected:
-                detail += f"；字节数异常（声明 {byte_count}，应为 {expected}）"
+                details.append(f"字节数异常（声明 {byte_count}，应为 {expected}）")
+                semantic_ok = False
+            maximum = 123 if function == 0x10 else 1968
+            if not 1 <= reg_count <= maximum:
+                details.append(f"写入数量应为 1~{maximum}，实际为 {reg_count}")
+                semantic_ok = False
         elif function == 0x16:
             operation = "写"
             reg_address, reg_count = _u16(frame, 2), 1
             minimum = 10
-            detail = f"AND掩码：0x{_u16(frame, 4):04X}，OR掩码：0x{_u16(frame, 6):04X}"
+            details.append(f"AND掩码：0x{_u16(frame, 4):04X}，OR掩码：0x{_u16(frame, 6):04X}")
         elif function == 0x17:
             operation = "读/写"
             read_address, read_count = _u16(frame, 2), _u16(frame, 4)
@@ -146,22 +163,32 @@ def parse_master_request(frame: bytes) -> ParseResult:
             minimum = 13 + byte_count
             payload = frame[11:11 + byte_count]
             values = tuple(_u16(payload, i) for i in range(0, len(payload) - 1, 2))
-            detail = "写入值：" + ", ".join(f"0x{x:04X}" for x in values)
+            details.append("写入值：" + ", ".join(f"0x{x:04X}" for x in values))
+            if byte_count != reg_count * 2:
+                details.append(f"写入字节数异常（声明 {byte_count}，应为 {reg_count * 2}）")
+                semantic_ok = False
+            if not 1 <= read_count <= 125:
+                details.append(f"读取数量应为 1~125，实际为 {read_count}")
+                semantic_ok = False
+            if not 1 <= reg_count <= 121:
+                details.append(f"写入数量应为 1~121，实际为 {reg_count}")
+                semantic_ok = False
         elif function == 0x08:
             operation = "诊断"
             reg_address, reg_count = _u16(frame, 2), 1
-            detail = f"子功能码：0x{reg_address:04X}，数据：0x{_u16(frame, 4):04X}"
+            details.append(f"子功能码：0x{reg_address:04X}，数据：0x{_u16(frame, 4):04X}")
         else:
             minimum = 4
-            detail = f"暂不支持解析功能码 0x{function:02X} 的数据域"
+            details.append(f"暂不支持解析功能码 0x{function:02X} 的数据域")
     except IndexError:
-        detail = "数据域不完整"
+        details.append("数据域不完整")
+        semantic_ok = False
 
     length_ok = len(frame) >= minimum
     if len(frame) != minimum and function in FUNCTION_NAMES:
         suffix = f"报文长度 {len(frame)} 字节，应为 {minimum} 字节"
-        detail = f"{detail}；{suffix}" if detail else suffix
+        details.append(suffix)
         length_ok = False
-    return ParseResult(length_ok, address, function, operation, reg_address,
+    return ParseResult(length_ok and semantic_ok and supported, address, function, operation, reg_address,
                        reg_count, crc_ok, received_crc, calculated_crc,
-                       detail, values, read_address, read_count)
+                       "；".join(details), values, read_address, read_count)

@@ -4,6 +4,7 @@ import queue
 import threading
 import time
 import tkinter as tk
+import webbrowser
 from datetime import datetime
 from tkinter import messagebox, ttk
 
@@ -15,20 +16,23 @@ except ImportError:  # Shown as a friendly error after the UI starts.
     list_ports = None
 
 from modbus_rtu import hex_bytes, parse_hex, parse_master_request
+from virtual_ports import COM0COM_DOWNLOAD_URL, create_pair_elevated, find_setupc, suggest_com_pair
 
 
 class SerialAssistant(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("串口收发与 Modbus RTU 主机报文解析工具")
+        self.title("串口代理监听与 Modbus RTU 主机报文解析工具")
         self.geometry("1180x760")
         self.minsize(960, 650)
         self.serial_port = None
-        self.reader_thread = None
+        self.proxy_port = None
+        self.reader_threads: list[threading.Thread] = []
         self.stop_event = threading.Event()
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.rx_count = 0
         self.tx_count = 0
+        self.virtual_pair_deadline = 0.0
         self._build_ui()
         self.refresh_ports()
         self.after(30, self._drain_events)
@@ -39,29 +43,44 @@ class SerialAssistant(tk.Tk):
         style.configure("Title.TLabel", font=("Microsoft YaHei UI", 13, "bold"))
         style.configure("Treeview", rowheight=27)
 
-        conn = ttk.LabelFrame(self, text="串口设置", padding=10)
+        conn = ttk.LabelFrame(self, text="串口及监听模式", padding=10)
         conn.pack(fill="x", padx=12, pady=(12, 6))
+        self.mode_var = tk.StringVar(value="代理监听")
+        self.proxy_var = tk.StringVar()
         self.port_var = tk.StringVar()
         self.baud_var = tk.StringVar(value="9600")
         self.data_var = tk.StringVar(value="8")
         self.stop_var = tk.StringVar(value="1")
         self.parity_var = tk.StringVar(value="无")
-        fields = [("端口", self.port_var, 11), ("波特率", self.baud_var, 10),
+        ttk.Label(conn, text="模式").grid(row=0, column=0, padx=(4, 3), sticky="w")
+        self.mode_combo = ttk.Combobox(conn, textvariable=self.mode_var,
+                                       values=("代理监听", "直接收发"), width=11, state="readonly")
+        self.mode_combo.grid(row=0, column=1, padx=(0, 10), sticky="w")
+        self.mode_combo.bind("<<ComboboxSelected>>", self._mode_changed)
+        ttk.Label(conn, text="代理端口（虚拟串口对的工具端）").grid(row=0, column=2, padx=(4, 3), sticky="w")
+        self.proxy_combo = ttk.Combobox(conn, textvariable=self.proxy_var, width=12, state="normal")
+        self.proxy_combo.grid(row=0, column=3, padx=(0, 10), sticky="w")
+        self.proxy_hint = ttk.Label(conn, text="其他串口软件连接虚拟串口对的另一端")
+        self.proxy_hint.grid(row=0, column=4, columnspan=5, padx=4, sticky="w")
+        self.create_pair_button = ttk.Button(conn, text="自动创建虚拟串口对", command=self.create_virtual_pair)
+        self.create_pair_button.grid(row=0, column=10, columnspan=2, padx=4, sticky="w")
+
+        fields = [("设备端口（真实串口）", self.port_var, 11), ("波特率", self.baud_var, 10),
                   ("数据位", self.data_var, 6), ("停止位", self.stop_var, 6),
                   ("校验位", self.parity_var, 7)]
-        self.combos = []
+        self.combos = [self.mode_combo, self.proxy_combo]
         choices = [[], ["1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200"],
                    ["5", "6", "7", "8"], ["1", "1.5", "2"], ["无", "奇", "偶"]]
         for col, ((label, var, width), values) in enumerate(zip(fields, choices)):
-            ttk.Label(conn, text=label).grid(row=0, column=col * 2, padx=(4, 3))
+            ttk.Label(conn, text=label).grid(row=1, column=col * 2, padx=(4, 3), pady=(8, 0))
             combo = ttk.Combobox(conn, textvariable=var, values=values, width=width, state="normal")
-            combo.grid(row=0, column=col * 2 + 1, padx=(0, 10))
+            combo.grid(row=1, column=col * 2 + 1, padx=(0, 10), pady=(8, 0))
             self.combos.append(combo)
-        ttk.Button(conn, text="刷新", command=self.refresh_ports).grid(row=0, column=10, padx=4)
+        ttk.Button(conn, text="刷新", command=self.refresh_ports).grid(row=1, column=10, padx=4, pady=(8, 0))
         self.open_button = ttk.Button(conn, text="打开串口", command=self.toggle_port)
-        self.open_button.grid(row=0, column=11, padx=4)
+        self.open_button.grid(row=1, column=11, padx=4, pady=(8, 0))
         self.status_var = tk.StringVar(value="串口已关闭")
-        ttk.Label(conn, textvariable=self.status_var).grid(row=0, column=12, padx=10)
+        ttk.Label(conn, textvariable=self.status_var).grid(row=1, column=12, padx=10, pady=(8, 0))
 
         paned = ttk.Panedwindow(self, orient="vertical")
         paned.pack(fill="both", expand=True, padx=12, pady=6)
@@ -75,7 +94,7 @@ class SerialAssistant(tk.Tk):
         columns = ("time", "dir", "raw", "device", "action", "address", "count", "crc", "detail")
         self.tree = ttk.Treeview(rx_frame, columns=columns, show="headings")
         headings = ("时间", "方向", "原始报文 (HEX)", "设备地址", "功能", "寄存器地址", "数量", "CRC", "解析详情")
-        widths = (85, 48, 245, 75, 125, 95, 60, 75, 300)
+        widths = (85, 85, 245, 75, 125, 95, 60, 75, 300)
         for name, heading, width in zip(columns, headings, widths):
             self.tree.heading(name, text=heading)
             self.tree.column(name, width=width, minwidth=45, stretch=name in ("raw", "detail"))
@@ -89,6 +108,7 @@ class SerialAssistant(tk.Tk):
         rx_frame.columnconfigure(0, weight=1)
         self.tree.tag_configure("bad", foreground="#c62828")
         self.tree.tag_configure("tx", foreground="#1565c0")
+        self.tree.tag_configure("slave", foreground="#2e7d32")
 
         toolbar = ttk.Frame(rx_frame)
         toolbar.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(7, 0))
@@ -113,9 +133,73 @@ class SerialAssistant(tk.Tk):
 
     def refresh_ports(self) -> None:
         ports = [p.device for p in list_ports.comports()] if list_ports else []
-        self.combos[0]["values"] = ports
+        self.proxy_combo["values"] = ports
+        self.combos[2]["values"] = ports
         if ports and self.port_var.get() not in ports:
             self.port_var.set(ports[0])
+        if ports and self.proxy_var.get() not in ports:
+            self.proxy_var.set(ports[1] if len(ports) > 1 else "")
+
+    def _mode_changed(self, _event=None) -> None:
+        proxy_mode = self.mode_var.get() == "代理监听"
+        self.proxy_combo.configure(state="normal" if proxy_mode else "disabled")
+        self.proxy_hint.configure(foreground="" if proxy_mode else "gray")
+
+    def create_virtual_pair(self) -> None:
+        if self.serial_port and self.serial_port.is_open:
+            messagebox.showwarning("请先关闭串口", "创建虚拟串口前请先关闭当前连接")
+            return
+        setupc = find_setupc()
+        if not setupc:
+            if messagebox.askyesno(
+                "未检测到 com0com",
+                "自动创建需要先安装 com0com 虚拟串口驱动。\n\n是否打开官方项目下载页面？",
+            ):
+                webbrowser.open(COM0COM_DOWNLOAD_URL)
+            return
+        current_ports = [p.device for p in list_ports.comports()] if list_ports else []
+        try:
+            first, second = suggest_com_pair(current_ports)
+            if not messagebox.askyesno(
+                "创建虚拟串口对",
+                f"将使用管理员权限创建 {first} ↔ {second}。\n\n"
+                f"其他串口软件使用 {first}，本工具使用 {second}。是否继续？",
+            ):
+                return
+            create_pair_elevated(setupc, first, second)
+        except Exception as exc:
+            messagebox.showerror("创建失败", str(exc))
+            return
+        self.status_var.set(f"正在等待系统创建 {first} ↔ {second}…")
+        self.create_pair_button.configure(state="disabled")
+        self.virtual_pair_deadline = time.monotonic() + 20.0
+        self._wait_for_virtual_pair(first, second)
+
+    def _wait_for_virtual_pair(self, first: str, second: str) -> None:
+        ports = [p.device.upper() for p in list_ports.comports()] if list_ports else []
+        if first.upper() in ports and second.upper() in ports:
+            self.refresh_ports()
+            self.mode_var.set("代理监听")
+            self.proxy_var.set(second)
+            self._mode_changed()
+            self.create_pair_button.configure(state="normal")
+            self.status_var.set(f"已创建 {first} ↔ {second}；代理端口已选择 {second}")
+            messagebox.showinfo(
+                "创建成功",
+                f"虚拟串口对 {first} ↔ {second} 已创建。\n\n"
+                f"其他串口软件请选择 {first}，本工具代理端口已设为 {second}。",
+            )
+            return
+        if time.monotonic() >= self.virtual_pair_deadline:
+            self.create_pair_button.configure(state="normal")
+            self.status_var.set("未检测到新虚拟串口")
+            messagebox.showerror(
+                "未检测到虚拟串口",
+                "com0com 命令已启动，但系统未出现目标端口。请确认已允许管理员授权，"
+                "并检查驱动是否正确安装和签名。",
+            )
+            return
+        self.after(500, self._wait_for_virtual_pair, first, second)
 
     def toggle_port(self) -> None:
         if self.serial_port and self.serial_port.is_open:
@@ -127,34 +211,65 @@ class SerialAssistant(tk.Tk):
         try:
             parity = {"无": serial.PARITY_NONE, "奇": serial.PARITY_ODD, "偶": serial.PARITY_EVEN}[self.parity_var.get()]
             stopbits = {"1": serial.STOPBITS_ONE, "1.5": serial.STOPBITS_ONE_POINT_FIVE, "2": serial.STOPBITS_TWO}[self.stop_var.get()]
+            if self.mode_var.get() == "代理监听" and self.proxy_var.get().upper() == self.port_var.get().upper():
+                raise ValueError("代理端口和设备端口不能相同")
             self.serial_port = serial.Serial(self.port_var.get(), int(self.baud_var.get()),
                                              bytesize=int(self.data_var.get()), parity=parity,
                                              stopbits=stopbits, timeout=0.03)
+            if self.mode_var.get() == "代理监听":
+                if not self.proxy_var.get():
+                    raise ValueError("请选择虚拟串口对的工具端口")
+                self.proxy_port = serial.Serial(self.proxy_var.get(), int(self.baud_var.get()),
+                                                bytesize=int(self.data_var.get()), parity=parity,
+                                                stopbits=stopbits, timeout=0.03)
         except Exception as exc:
+            self._close_serial_objects()
             messagebox.showerror("打开串口失败", str(exc))
             return
         self.stop_event.clear()
-        self.reader_thread = threading.Thread(target=self._reader, daemon=True)
-        self.reader_thread.start()
+        if self.proxy_port:
+            self._start_reader(self.proxy_port, "MASTER", self.serial_port)
+            self._start_reader(self.serial_port, "SLAVE", self.proxy_port)
+        else:
+            self._start_reader(self.serial_port, "RX", None)
         self.open_button.configure(text="关闭串口")
-        self.status_var.set(f"已连接 {self.port_var.get()} @ {self.baud_var.get()}")
+        if self.proxy_port:
+            self.status_var.set(f"代理中：{self.proxy_var.get()} ↔ {self.port_var.get()} @ {self.baud_var.get()}")
+        else:
+            self.status_var.set(f"已连接 {self.port_var.get()} @ {self.baud_var.get()}")
         for combo in self.combos:
             combo.configure(state="disabled")
+        self.create_pair_button.configure(state="disabled")
 
     def close_port(self) -> None:
         self.stop_event.set()
-        port, self.serial_port = self.serial_port, None
-        if port:
-            try:
-                port.close()
-            except Exception:
-                pass
+        self._close_serial_objects()
+        self.reader_threads.clear()
         self.open_button.configure(text="打开串口")
         self.status_var.set("串口已关闭")
         for combo in self.combos:
             combo.configure(state="normal")
+        self.mode_combo.configure(state="readonly")
+        self.create_pair_button.configure(state="normal")
+        self._mode_changed()
 
-    def _reader(self) -> None:
+    def _close_serial_objects(self) -> None:
+        ports = (self.serial_port, self.proxy_port)
+        self.serial_port = self.proxy_port = None
+        for port in ports:
+            if not port:
+                continue
+            try:
+                port.close()
+            except Exception:
+                pass
+
+    def _start_reader(self, port, direction: str, forward_port) -> None:
+        thread = threading.Thread(target=self._reader, args=(port, direction, forward_port), daemon=True)
+        self.reader_threads.append(thread)
+        thread.start()
+
+    def _reader(self, port, direction: str, forward_port) -> None:
         """Read one complete RTU frame from the driver buffer at a time.
 
         Do not submit a one-byte read while the buffer is empty. Doing so makes
@@ -164,9 +279,6 @@ class SerialAssistant(tk.Tk):
         read. Serial monitoring tools will therefore also see a complete frame.
         """
         while not self.stop_event.is_set():
-            port = self.serial_port
-            if not port:
-                break
             try:
                 waiting = port.in_waiting
                 if waiting <= 0:
@@ -191,10 +303,13 @@ class SerialAssistant(tk.Tk):
                         # IRP_MJ_READ containing the complete RTU request.
                         data = port.read(stable_count)
                         if data:
-                            self.events.put(("frame", data))
+                            if forward_port:
+                                forward_port.write(data)
+                            self.events.put(("frame", (direction, data)))
                         break
             except Exception as exc:
-                self.events.put(("error", str(exc)))
+                if not self.stop_event.is_set():
+                    self.events.put(("error", f"{direction}: {exc}"))
                 break
 
     def _drain_events(self) -> None:
@@ -202,9 +317,13 @@ class SerialAssistant(tk.Tk):
             while True:
                 kind, payload = self.events.get_nowait()
                 if kind == "frame":
-                    self.rx_count += len(payload)  # type: ignore[arg-type]
+                    direction, data = payload  # type: ignore[misc]
+                    if direction in ("SLAVE", "RX"):
+                        self.rx_count += len(data)
+                    else:
+                        self.tx_count += len(data)
                     self._update_counter()
-                    self.add_frame("RX", payload)  # type: ignore[arg-type]
+                    self.add_frame(direction, data)
                 elif kind == "error":
                     messagebox.showerror("串口读取错误", str(payload))
                     self.close_port()
@@ -214,10 +333,7 @@ class SerialAssistant(tk.Tk):
 
     def add_frame(self, direction: str, frame: bytes) -> None:
         now = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        if direction == "TX":
-            values = (now, "发送", hex_bytes(frame), "—", "—", "—", "—", "—", "")
-            self.tree.insert("", "end", values=values, tags=("tx",))
-        else:
+        if direction in ("RX", "MASTER"):
             result = parse_master_request(frame)
             device = "—" if result.device_address is None else f"{result.device_address} (0x{result.device_address:02X})"
             action = f"{result.operation} / {result.function_name} (0x{result.function_code:02X})" if result.function_code is not None else "未知"
@@ -228,10 +344,16 @@ class SerialAssistant(tk.Tk):
                 address = "—" if result.register_address is None else f"0x{result.register_address:04X} ({result.register_address})"
                 count = "—" if result.register_count is None else str(result.register_count)
             crc_text = "正确" if result.crc_ok else "错误"
-            if result.calculated_crc is not None:
-                crc_text += f" (计算 0x{result.calculated_crc:04X})"
-            values = (now, "接收", hex_bytes(frame), device, action, address, count, crc_text, result.detail)
+            if result.received_crc is not None and result.calculated_crc is not None:
+                crc_text += f" (接收 {result.received_crc:04X} / 计算 {result.calculated_crc:04X})"
+            direction_text = "主机→设备" if direction == "MASTER" else "接收"
+            values = (now, direction_text, hex_bytes(frame), device, action, address, count, crc_text, result.detail)
             tag = () if result.crc_ok and result.valid else ("bad",)
+            self.tree.insert("", "end", values=values, tags=tag)
+        else:
+            direction_text = "设备→主机" if direction == "SLAVE" else "发送"
+            tag = ("slave",) if direction == "SLAVE" else ("tx",)
+            values = (now, direction_text, hex_bytes(frame), "—", "—", "—", "—", "—", "透明转发" if direction == "SLAVE" else "")
             self.tree.insert("", "end", values=values, tags=tag)
         children = self.tree.get_children()
         if children:
@@ -261,7 +383,7 @@ class SerialAssistant(tk.Tk):
     def manual_parse(self) -> None:
         try:
             data = parse_hex(self.send_text.get("1.0", "end").strip())
-            self.add_frame("RX", data)
+            self.add_frame("MASTER", data)
         except ValueError as exc:
             messagebox.showerror("格式错误", str(exc))
 
@@ -271,7 +393,10 @@ class SerialAssistant(tk.Tk):
         self._update_counter()
 
     def _update_counter(self) -> None:
-        self.counter_var.set(f"接收 {self.rx_count} 字节 / 发送 {self.tx_count} 字节")
+        if self.mode_var.get() == "代理监听":
+            self.counter_var.set(f"主机→设备 {self.tx_count} 字节 / 设备→主机 {self.rx_count} 字节")
+        else:
+            self.counter_var.set(f"接收 {self.rx_count} 字节 / 发送 {self.tx_count} 字节")
 
     def on_close(self) -> None:
         self.close_port()
