@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 
+#include "user_comm.h"
 #include "inverter_archive.h"
 #include "meas_cfg.h"
 #include "AB_check.h"
@@ -16,31 +17,16 @@ extern "C" {
 
 /* 逆变器协议库固定提供100条厂家协议配置。 */
 #define INVERTER_PROTOCOL_LIBRARY_COUNT             100U
+#define INVERTER_PROTOCOL_DEFAULT_COUNT             4U
+#define INVERTER_PROTOCOL_LIBRARY_VERSION           5U
+#define INVERTER_PROTOCOL_INVALID                   0U
+#define INVERTER_PROTOCOL_VALID                     1U
 
 
 /* 使用 0xFFFF 表示某个厂家不支持或未配置该寄存器。 */
 #define INVERTER_PROTOCOL_REGISTER_UNUSED           UINT16_C(0xFFFF)
 
-/* Modbus寄存器数据类型。
- * UINT16/INT16 占1个寄存器；UINT32/INT32/FLOAT32通常占2个寄存器；
- * UINT64/INT64/FLOAT64通常占4个寄存器。ASCII、BCD和BCD_TIME的实际长度
- * 由 reg_cnt 决定。 */
-typedef enum Inv_RegDataType
-{
-    INVERTER_DATA_TYPE_UINT16 = 0,
-    INVERTER_DATA_TYPE_INT16,
-    INVERTER_DATA_TYPE_UINT32,
-    INVERTER_DATA_TYPE_INT32,
-    INVERTER_DATA_TYPE_UINT64,
-    INVERTER_DATA_TYPE_INT64,
-    INVERTER_DATA_TYPE_FLOAT32,
-    INVERTER_DATA_TYPE_FLOAT64,
-    INVERTER_DATA_TYPE_ASCII,
-    INVERTER_DATA_TYPE_BCD,
-    INVERTER_DATA_TYPE_BCD_TIME,
-    INVERTER_DATA_TYPE_BIT_FIELD
-} Inv_RegDataType_t;
-
+/* Modbus寄存器的数据解析类型统一使用user_comm.h中的enum data_type；读取的寄存器数量由数据类型和对应厂家的协议处理逻辑确定。 */
 /* 多字节数据排列方式。
  * 字母表示数据从最高有效字节到最低有效字节的正常顺序。例如32位数值的
  * 标准大端顺序为ABCD；CDAB表示两个16位寄存器交换；BADC表示每个寄存器
@@ -55,19 +41,20 @@ typedef enum Inv_ByteOrder
     INVERTER_BYTE_ORDER_DCBA
 } Inv_ByteOrder_t;
 
-/* 单个Modbus寄存器块的通用描述。 此结构体不保存实时数据，只描述一个测量点的地址、长度和数据解析方式。 读写功能码不在寄存器块中保存，由三大分类对应的业务逻辑或厂家协议驱动 统一确定。 */
+/* 单个Modbus RTU寄存器的通用描述，仅保存寄存器地址、读写功能码和数据解析方式，不保存实时数据。 */
 #pragma pack(1)
 typedef struct Inv_RegBlk
 {
-    /* Modbus PDU中的零基寄存器地址。例如设备手册中的保持寄存器40001，
-     * 如果手册采用1基编号，转换后的PDU地址通常是0。协议配置必须统一使用
-     * PDU地址，禁止同时混用40001编号和零基地址。 */
+    /* Modbus RTU请求报文中直接使用的16位寄存器地址，不保存40001等其他表示形式，也不在使用时执行地址转换。 */
     uint16_t reg_addr;
 
-    /* 读取的16位Modbus寄存器数量，不是字节数量。 */
-    uint16_t reg_cnt;
+    /* Modbus RTU读寄存器功能码，例如0x03表示读保持寄存器、0x04表示读输入寄存器；0表示未配置读功能。 */
+    uint8_t read_func_code;
 
-    /* 数据类型，取值见 Inv_RegDataType_t。 */
+    /* Modbus RTU写寄存器功能码，例如0x06表示写单个寄存器、0x10表示写多个寄存器；该字段仅在控制类中有效，0表示未配置写功能。 */
+    uint8_t write_func_code;
+
+    /* 数据类型，使用user_comm.h中enum data_type定义的TYPE_*枚举值，并固定按1字节存储。 */
     uint8_t data_type;
 
     /* 字节及字序，取值见 Inv_ByteOrder_t。 */
@@ -83,20 +70,20 @@ typedef struct Inv_RegBlk
 /* 数据类：运行过程中周期采集的只读数据。*/
 typedef struct Inv_ProtoData
 {
-    /* A、B、C三相电压寄存器，每相独立配置起始地址和读取数量，并分别发起 Modbus读取。数组下标使用 INVERTER_PROTOCOL_PHASE_A/B/C。 */
-    Inv_RegBlk_t volt[ENUM_PHASE_MAX];
+    /* A、B、C三相电压寄存器，每相独立配置Modbus RTU寄存器地址和读功能码。 */
+    Inv_RegBlk_t Ux[ENUM_PHASE_MAX];
 
-    /* A、B、C三相电流寄存器，每相独立配置起始地址和读取数量，并分别发起 Modbus读取。数组下标使用 INVERTER_PROTOCOL_PHASE_A/B/C。 */
-    Inv_RegBlk_t curr[ENUM_PHASE_MAX];
+    /* A、B、C三相电流寄存器，每相独立配置Modbus RTU寄存器地址和读功能码。 */
+    Inv_RegBlk_t Ix[ENUM_PHASE_MAX];
 
     /* A、B、C三相有功功率寄存器，每相独立配置，数组下标使用ENUM_PHASE_A/B/C。 */
-    Inv_RegBlk_t active_pwr[ENUM_PHASE_MAX];
+    Inv_RegBlk_t Px[ENUM_PHASE_MAX];
 
     /* A、B、C三相无功功率寄存器，每相独立配置，数组下标使用ENUM_PHASE_A/B/C。 */
-    Inv_RegBlk_t reactive_pwr[ENUM_PHASE_MAX];
+    Inv_RegBlk_t Qx[ENUM_PHASE_MAX];
 
     /* A、B、C三相功率因数寄存器，每相独立配置，数组下标使用ENUM_PHASE_A/B/C。 */
-    Inv_RegBlk_t pwr_factor[ENUM_PHASE_MAX];
+    Inv_RegBlk_t PFx[ENUM_PHASE_MAX];
 
 } Inv_ProtoData_t;
 
@@ -141,7 +128,7 @@ typedef char Inv_ProtoParamSizeCheck_t[
 /* 一个固定命令值控制点。适用于开机、关机、复位等“写入固定值触发”的控制。 即使开机和关机共用同一寄存器，也分别配置两个控制点，以兼容某些厂家将 开机和关机定义在不同地址的情况。 */
 typedef struct Inv_FixedCmd
 {
-    /* 控制寄存器的地址、长度、数据类型、字节顺序和小数位。 */
+    /* 控制寄存器的Modbus RTU地址、读写功能码、数据类型、字节顺序和小数位。 */
     Inv_RegBlk_t reg;
 
     /* 执行该控制时写入寄存器的原始值。 */
@@ -188,7 +175,9 @@ typedef char Inv_ProtoCtrlSizeCheck_t[
 /* 一条完整逆变器协议配置，包含数据类、参数类和控制类。 */
 typedef struct Inv_Proto
 {
-    rcd_head head;
+    /* 1表示本条协议有效，0表示本条协议未配置。 */
+    uint8_t valid;
+
     /* 与逆变器档案共用的厂家名称及规约版本。 */
     Inv_MfrInfo_t mfr_info;
 
@@ -201,17 +190,37 @@ typedef struct Inv_Proto
     /* 控制类。 */
     Inv_ProtoCtrl_t ctrl;
 } Inv_Proto_t;
+
+typedef struct Inv_ProtoLib
+{
+    /* AB区校验头，仅描述整个协议库，不属于某一条厂家协议。 */
+    rcd_head head;
+
+    /* 固定100条协议，每条协议内部包含自身的有效标志。 */
+    Inv_Proto_t proto[INVERTER_PROTOCOL_LIBRARY_COUNT];
+} Inv_ProtoLib_t;
 #pragma pack()
 
-/* 厂家信息34字节、数据类105字节、参数类42字节、控制类49字节，共230字节。 */
-#define INV_PROTO_SIZE                              236U
+/* 有效标志1字节、厂家信息34字节、数据类105字节、参数类42字节、控制类49字节，共231字节。 */
+#define INV_PROTO_SIZE                              231U
 typedef char Inv_ProtoSizeCheck_t[
     (sizeof(Inv_Proto_t) == INV_PROTO_SIZE) ? 1 : -1];
 
+/* AB头6字节、100条231字节协议，共6+231×100=23106字节。 */
+#define INV_PROTO_LIB_SIZE                          23106U
+typedef char Inv_ProtoLibSizeCheck_t[
+    (sizeof(Inv_ProtoLib_t) == INV_PROTO_LIB_SIZE) ? 1 : -1];
+
 /* 全局逆变器协议库，数组下标范围为0~99，前4项分别对应阳光、华为、固德威和锦浪。 */
-extern Inv_Proto_t g_inv_proto_lib[INVERTER_PROTOCOL_LIBRARY_COUNT];
+extern Inv_ProtoLib_t g_inv_proto_lib;
 
+/* 按1~100的序号获取协议；有效和无效协议均返回对应指针，越界返回NULL。 */
+const Inv_Proto_t *Inv_Proto_Get(uint16_t proto_number);
 
+/* 打印前count条协议的全部内容；count为0时默认打印10条，最大打印100条。 */
+void Inv_Proto_Print(uint16_t count);
+
+/* 从Flash加载协议库，数据无效或版本不匹配时恢复4条默认协议。 */
 void Inv_Proto_Init(void);
 
 #ifdef __cplusplus

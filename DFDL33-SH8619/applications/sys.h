@@ -29,18 +29,6 @@ extern uint32_t Power_Down_Time;
 
 
 
-//数据类型
-enum    data_type
-{
-    TYPE_NONE,
-    TYPE_I8,
-    TYPE_U8,
-    TYPE_I16,
-    TYPE_U16,
-    TYPE_I32,
-    TYPE_U32,
-    TYPE_FLOAT,
-};
 
 //读写权限
 enum

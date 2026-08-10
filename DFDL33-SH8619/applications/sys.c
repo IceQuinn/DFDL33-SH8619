@@ -17,6 +17,7 @@
 #include <rtdbg.h>
 
 #include "sys.h"
+#include "user_comm.h"
 //#include "user_gpio.h"
 
 #define OS_YEAR     ((((__DATE__ [7] - '0') * 10 + (__DATE__ [8] - '0')) * 10 + (__DATE__ [9] - '0')) * 10 + (__DATE__ [10] - '0'))
@@ -117,7 +118,7 @@ int32_t SetDataFromAddr(uint8_t DataType, const void *PAddr, int32_t val)
     case TYPE_U32:
         *((uint32_t *)PAddr) = val;
         break;
-    case TYPE_FLOAT:
+    case TYPE_FLOAT32:
         *((float *)PAddr) = *((float *)&val);
         break;
     default:
@@ -150,7 +151,7 @@ int32_t GetDataFromAddr(uint8_t DataType, const uint32_t *PAddr)
     case TYPE_U32:
         Val = (int32_t )*((uint32_t *)PAddr);
         break;
-    case TYPE_FLOAT:
+    case TYPE_FLOAT32:
         Val = (int32_t )*((float *)PAddr);
         break;
     default:
@@ -175,7 +176,7 @@ int8_t GetDataByteFromType(uint8_t DataType)
         break;
     case TYPE_I32:
     case TYPE_U32:
-    case TYPE_FLOAT:
+    case TYPE_FLOAT32:
         data_byte = 4;
         break;
     default :
