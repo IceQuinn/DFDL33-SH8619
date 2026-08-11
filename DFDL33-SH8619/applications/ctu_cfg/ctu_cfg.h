@@ -16,6 +16,12 @@
 #include "AB_check.h"
 #include "uart_def.h"
 
+enum {
+    MODBUS_SLAVE = 1,   // Modbus 从机协议
+    DLT645_SLAVE    ,   // DLT645 从机协议
+    MODBUS_MASTER   ,   // MOdbus 主机协议
+};
+
 /* --------------------------------------------------------------------------------------------配置参数 */
 #define CTU_CFG_VER        1       //配置参数版本号
 
@@ -25,7 +31,7 @@ typedef struct GSE8615_CONFIG_V1
 {
     rcd_head hdr;
     /* 通信参数 */
-    uint16_t uart_protocol[UART_NO_MAXS];           //通信协议  0=ModBus协议，1=DLT645协议
+    uint16_t uart_protocol[UART_NO_MAXS];           //通信协议 1=modbus协议,2=dlt645协议
     uint32_t uart_baud[UART_NO_MAXS];               //串口波特率
     uint16_t uart_check[UART_NO_MAXS];              //串口校验位格式
 

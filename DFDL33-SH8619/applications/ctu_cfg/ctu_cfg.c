@@ -50,13 +50,13 @@ void config_para_init(void)
 void set_default_para(void)
 {
     /* 通讯参数 */
-    ctu_cfg.uart_protocol[UART1_NO]     = 0;        //协议,0=modbus协议,1=dlt645协议
-    ctu_cfg.uart_baud[UART1_NO]         = 9600;     //波特率
-    ctu_cfg.uart_check[UART1_NO]        = 0;        //校验位
+    ctu_cfg.uart_protocol[UART1_NO]     = MODBUS_MASTER;//通信协议 1=modbus协议,2=dlt645协议
+    ctu_cfg.uart_baud[UART1_NO]         = 9600;         //波特率
+    ctu_cfg.uart_check[UART1_NO]        = 0;            //校验位
 
-    ctu_cfg.uart_protocol[UART3_NO]     = 0;        //协议,0=modbus协议,1=dlt645协议
-    ctu_cfg.uart_baud[UART3_NO]         = 9600;     //波特率
-    ctu_cfg.uart_check[UART3_NO]        = 0;        //校验位
+    ctu_cfg.uart_protocol[UART3_NO]     = DLT645_SLAVE; //通信协议 1=modbus协议,2=dlt645协议
+    ctu_cfg.uart_baud[UART3_NO]         = 9600;         //波特率
+    ctu_cfg.uart_check[UART3_NO]        = 0;            //校验位
 
 }
 
