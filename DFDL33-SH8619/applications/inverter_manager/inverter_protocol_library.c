@@ -54,6 +54,7 @@ void Inv_Proto_Init(void)
        (g_inv_proto_lib.head.len !=
         (sizeof(g_inv_proto_lib) - sizeof(rcd_head))))
     {
+        rt_kprintf("协议库出错\n");
         Inv_Proto_Default_Init();
     }
 }

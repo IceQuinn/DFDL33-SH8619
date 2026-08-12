@@ -84,6 +84,8 @@ int main(void)
 
     Inv_Proto_Init();             //逆变器协议库初始化
 
+    Inv_Archive_Init();             // 档案校验
+
     user_thread_init();
 
 

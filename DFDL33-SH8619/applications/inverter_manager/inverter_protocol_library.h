@@ -26,7 +26,7 @@ extern "C" {
 /* 使用 0xFFFF 表示某个厂家不支持或未配置该寄存器。 */
 #define INVERTER_PROTOCOL_REGISTER_UNUSED           UINT16_C(0xFFFF)
 
-/* Modbus寄存器的数据解析类型统一使用user_comm.h中的enum data_type；读取的寄存器数量由数据类型和对应厂家的协议处理逻辑确定。 */
+/* Modbus寄存器的数据解析类型统一使用user_comm.h中的enum data_type。 */
 /* 多字节数据排列方式。
  * 字母表示数据从最高有效字节到最低有效字节的正常顺序。例如32位数值的
  * 标准大端顺序为ABCD；CDAB表示两个16位寄存器交换；BADC表示每个寄存器
@@ -53,108 +53,148 @@ typedef struct Inv_RegBlk
     /* Modbus RTU请求报文中直接使用的16位寄存器地址，不保存40001等其他表示形式，也不在使用时执行地址转换。 */
     uint16_t reg_addr;
 
+    /* 连续读取的16位Modbus寄存器个数。 */
+    uint8_t reg_cnt;
+
     /* Modbus RTU读寄存器功能码，例如0x03表示读保持寄存器、0x04表示读输入寄存器；0表示未配置读功能。 */
     uint8_t read_func_code;
 
-    /* 数据类型、字节序和小数位数共同占用一个字节。 */
+    /* 数据类型、字节序、小数位数和预留位共同占用两个字节。 */
     union
     {
-        /* 用于存储、打印和645协议传输的完整原始字节。 */
-        uint8_t raw;
+        /* 用于存储、打印和645协议传输的完整原始值。 */
+        uint16_t raw;
 
         struct
         {
             /* 数据类型占bit0～bit3，使用user_comm.h中的TYPE_*值，取值范围0～15。 */
-            uint8_t data_type : 4;
+            uint16_t data_type : 4;
 
-            /* 字节序占bit4～bit5，使用Inv_ByteOrder_t，取值范围0～3。 */
-            uint8_t byte_order : 2;
+            /* 字节序占bit4～bit7，使用Inv_ByteOrder_t，取值范围0～15。 */
+            uint16_t byte_order : 4;
 
-            /* 小数位数占bit6～bit7，取值范围0～3。 */
-            uint8_t decimal_places : 2;
+            /* 小数位数占bit8～bit11，取值范围0～15。 */
+            uint16_t decimal_places : 4;
+
+            /* bit12～bit15预留，写入协议库时应保持为0。 */
+            uint16_t reserved : 4;
         };
     };
 } Inv_RegBlk_t;
 
-/* 只读寄存器块由地址2字节、读功能码1字节和数据格式1字节组成，共4字节。 */
-#define INV_REG_BLK_SIZE                            4U
+/* 只读寄存器块由地址2字节、寄存器个数1字节、读功能码1字节和数据格式2字节组成，共6字节。 */
+#define INV_REG_BLK_SIZE                            6U
 typedef char Inv_RegBlkSizeCheck_t[
     (sizeof(Inv_RegBlk_t) == INV_REG_BLK_SIZE) ? 1 : -1];
 
-/* 控制类使用的可读写Modbus RTU寄存器描述，并保存执行控制时使用的4字节默认写入值。 */
+/* 控制类使用的普通Modbus RTU写寄存器描述，写入值由调用方提供。 */
 typedef struct Inv_CtrlRegBlk
 {
     /* Modbus RTU请求报文中直接使用的16位寄存器地址，不保存其他地址表示形式。 */
     uint16_t reg_addr;
 
-    /* Modbus RTU读寄存器功能码；0表示该控制点不支持或未配置读取。 */
-    uint8_t read_func_code;
+    /* 连续写入的16位Modbus寄存器个数。 */
+    uint8_t reg_cnt;
 
     /* Modbus RTU写寄存器功能码，例如0x06表示写单个寄存器、0x10表示写多个寄存器；0表示未配置写入。 */
     uint8_t write_func_code;
 
-    /* 数据类型、字节序和小数位数共同占用一个字节。 */
+    /* 数据类型、字节序、小数位数和预留位共同占用两个字节。 */
     union
     {
-        /* 用于存储、打印和645协议传输的完整原始字节。 */
-        uint8_t raw;
+        /* 用于存储、打印和645协议传输的完整原始值。 */
+        uint16_t raw;
 
         struct
         {
             /* 数据类型占bit0～bit3，取值范围0～15。 */
-            uint8_t data_type : 4;
+            uint16_t data_type : 4;
 
-            /* 字节序占bit4～bit5，取值范围0～3。 */
-            uint8_t byte_order : 2;
+            /* 字节序占bit4～bit7，取值范围0～15。 */
+            uint16_t byte_order : 4;
 
-            /* 小数位数占bit6～bit7，取值范围0～3。 */
-            uint8_t decimal_places : 2;
+            /* 小数位数占bit8～bit11，取值范围0～15。 */
+            uint16_t decimal_places : 4;
+
+            /* bit12～bit15预留，写入协议库时应保持为0。 */
+            uint16_t reserved : 4;
         };
     };
 
-    /* 执行控制时使用的默认原始写入值，固定占用4字节；发送前按照data_type和byte_order转换。 */
-    uint32_t write_default_val;
 } Inv_CtrlRegBlk_t;
 
-/* 控制寄存器块由地址2字节、读写功能码2字节、数据格式1字节和默认写入值4字节组成，共9字节。 */
-#define INV_CTRL_REG_BLK_SIZE                       9U
+/* 普通控制寄存器块由地址2字节、寄存器个数1字节、写功能码1字节和数据格式2字节组成，共6字节。 */
+#define INV_CTRL_REG_BLK_SIZE                       6U
 typedef char Inv_CtrlRegBlkSizeCheck_t[
     (sizeof(Inv_CtrlRegBlk_t) == INV_CTRL_REG_BLK_SIZE) ? 1 : -1];
 
-/* 逆变器识别使用的特征数据，描述特征寄存器的读取和解析方式以及期望特征值。 */
+/* 开机、关机固定命令使用的控制寄存器描述，包含协议规定的默认写入值。 */
+typedef struct Inv_CtrlDefaultRegBlk
+{
+    /* 与普通控制寄存器块保持相同的地址、写功能码和数据格式布局。 */
+    uint16_t reg_addr;
+    uint8_t reg_cnt;
+    uint8_t write_func_code;
+
+    union
+    {
+        uint16_t raw;
+
+        struct
+        {
+            uint16_t data_type : 4;
+            uint16_t byte_order : 4;
+            uint16_t decimal_places : 4;
+            uint16_t reserved : 4;
+        };
+    };
+
+    /* 执行固定命令时使用的原始写入值；发送前按照data_type和byte_order转换。 */
+    uint32_t write_default_val;
+} Inv_CtrlDefaultRegBlk_t;
+
+/* 带默认值的控制寄存器块由普通控制字段6字节和默认写入值4字节组成，共10字节。 */
+#define INV_CTRL_DEFAULT_REG_BLK_SIZE               10U
+typedef char Inv_CtrlDefaultRegBlkSizeCheck_t[
+    (sizeof(Inv_CtrlDefaultRegBlk_t) == INV_CTRL_DEFAULT_REG_BLK_SIZE) ? 1 : -1];
+
+/* 逆变器识别使用的特征数据，描述特征寄存器的读取和解析方式。 */
 typedef struct Inv_Feature
 {
     /* Modbus RTU请求报文中直接使用的16位特征寄存器起始地址。 */
     uint16_t reg_addr;
 
     /* 连续读取的16位Modbus寄存器个数。 */
-    uint16_t reg_cnt;
+    uint8_t reg_cnt;
 
-    /* 数据类型、字节序和小数位数共同占用一个字节。 */
+    /* Modbus RTU读寄存器功能码，例如0x03表示读保持寄存器、0x04表示读输入寄存器。 */
+    uint8_t read_func_code;
+
+    /* 数据类型、字节序、小数位数和预留位共同占用两个字节。 */
     union
     {
-        /* 用于存储、打印和645协议传输的完整原始字节。 */
-        uint8_t raw;
+        /* 用于存储、打印和645协议传输的完整原始值。 */
+        uint16_t raw;
 
         struct
         {
             /* 数据类型占bit0～bit3，取值范围0～15。 */
-            uint8_t data_type : 4;
+            uint16_t data_type : 4;
 
-            /* 字节序占bit4～bit5，取值范围0～3。 */
-            uint8_t byte_order : 2;
+            /* 字节序占bit4～bit7，取值范围0～15。 */
+            uint16_t byte_order : 4;
 
-            /* 小数位数占bit6～bit7，取值范围0～3。 */
-            uint8_t decimal_places : 2;
+            /* 小数位数占bit8～bit11，取值范围0～15。 */
+            uint16_t decimal_places : 4;
+
+            /* bit12～bit15预留，写入协议库时应保持为0。 */
+            uint16_t reserved : 4;
         };
     };
-
-    /* 读取结果转换后用于厂家及型号识别的32位特征值。 */
-    uint32_t feature_val;
 } Inv_Feature_t;
 
-/* 特征数据由地址2字节、寄存器个数2字节、数据格式1字节和特征值4字节组成，共9字节。 */
-#define INV_FEATURE_SIZE                            9U
+/* 特征数据由地址2字节、寄存器个数1字节、读功能码1字节和数据格式2字节组成，共6字节。 */
+#define INV_FEATURE_SIZE                            6U
 typedef char Inv_FeatureSizeCheck_t[
     (sizeof(Inv_Feature_t) == INV_FEATURE_SIZE) ? 1 : -1];
 
@@ -168,25 +208,25 @@ typedef struct Inv_ProtoData
     /* A、B、C三相电流寄存器，每相独立配置Modbus RTU寄存器地址和读功能码。 */
     Inv_RegBlk_t Ix[ENUM_PHASE_MAX];
 
-    /* A、B、C三相有功功率寄存器，每相独立配置，数组下标使用ENUM_PHASE_A/B/C。 */
-    Inv_RegBlk_t Px[ENUM_PHASE_MAX];
+    /* A、B、C三相及总有功功率寄存器，数组下标使用ENUM_PA/PB/PC/PT。 */
+    Inv_RegBlk_t Px[ENUM_PMAX];
 
-    /* A、B、C三相无功功率寄存器，每相独立配置，数组下标使用ENUM_PHASE_A/B/C。 */
-    Inv_RegBlk_t Qx[ENUM_PHASE_MAX];
+    /* A、B、C三相及总无功功率寄存器，数组下标使用ENUM_QA/QB/QC/QT。 */
+    Inv_RegBlk_t Qx[ENUM_QMAX];
 
-    /* A、B、C三相功率因数寄存器，每相独立配置，数组下标使用ENUM_PHASE_A/B/C。 */
-    Inv_RegBlk_t PFx[ENUM_PHASE_MAX];
+    /* A、B、C三相及总功率因数寄存器，数组下标使用ENUM_PFA/PFB/PFC/PFT。 */
+    Inv_RegBlk_t PFx[ENUM_PFMAX];
 
 } Inv_ProtoData_t;
 
 
-/* 当前字段布局在1字节对齐下应固定占用60字节：
- * 三相电压、三相电流               3×4×2 = 24字节
- * 三相有功、三相无功、三相功率因数 3×4×3 = 36字节
- * 合计60字节
+/* 当前字段布局在1字节对齐下应固定占用108字节：
+ * 三相电压、三相电流               3×6×2 = 36字节
+ * 三相及总有功、无功、功率因数     4×6×3 = 72字节
+ * 合计108字节
  * 使用C99兼容的负数组长度方式执行编译期检查；后续增删字段却没有同步更新
  * 期望大小时，编译器会直接报错。 */
-#define INV_PROTO_DATA_SIZE                         60U
+#define INV_PROTO_DATA_SIZE                         108U
 typedef char Inv_ProtoDataSizeCheck_t[
     (sizeof(Inv_ProtoData_t) == INV_PROTO_DATA_SIZE) ? 1 : -1];
 
@@ -212,22 +252,22 @@ typedef struct Inv_ProtoParam
     Inv_RegBlk_t pwr_status;
 } Inv_ProtoParam_t;
 
-/* 参数类包含6个只读寄存器块，按1字节对齐后共4×6=24字节。 */
-#define INV_PROTO_PARAM_SIZE                        24U
+/* 参数类包含6个只读寄存器块，按1字节对齐后共6×6=36字节。 */
+#define INV_PROTO_PARAM_SIZE                        36U
 typedef char Inv_ProtoParamSizeCheck_t[
     (sizeof(Inv_ProtoParam_t) == INV_PROTO_PARAM_SIZE) ? 1 : -1];
 
-/* 控制类：允许读取当前值并写入控制命令的寄存器。
+/* 控制类：用于写入控制命令的寄存器。
  * 开机和关机可能共用同一个地址但写入值不同，也可能使用不同寄存器，因此
  * 使用两个独立的固定命令控制点。控制百分比及功率值按各自
  * decimal_places 转换。 */
 typedef struct Inv_ProtoCtrl
 {
     /* 逆变器开机控制寄存器。 */
-    Inv_CtrlRegBlk_t pwr_on;
+    Inv_CtrlDefaultRegBlk_t pwr_on;
 
     /* 逆变器关机控制寄存器。 */
-    Inv_CtrlRegBlk_t pwr_off;
+    Inv_CtrlDefaultRegBlk_t pwr_off;
 
     /* 有功功率数值控制寄存器。 */
     Inv_CtrlRegBlk_t active_pwr_ctrl;
@@ -245,8 +285,8 @@ typedef struct Inv_ProtoCtrl
     Inv_CtrlRegBlk_t reactive_pwr_pct_ctrl;
 } Inv_ProtoCtrl_t;
 
-/* 控制类包含7个控制寄存器块，按1字节对齐后共9×7=63字节。 */
-#define INV_PROTO_CTRL_SIZE                         63U
+/* 控制类包含2个带默认值控制点和5个普通控制点，共10×2+6×5=50字节。 */
+#define INV_PROTO_CTRL_SIZE                         50U
 typedef char Inv_ProtoCtrlSizeCheck_t[
     (sizeof(Inv_ProtoCtrl_t) == INV_PROTO_CTRL_SIZE) ? 1 : -1];
 
@@ -282,13 +322,13 @@ typedef struct Inv_ProtoLib
 } Inv_ProtoLib_t;
 #pragma pack()
 
-/* 有效标志1字节、厂家信息34字节、特征数据9字节、数据类60字节、参数类24字节、控制类63字节，共191字节。 */
-#define INV_PROTO_SIZE                              191U
+/* 有效标志1字节、厂家信息34字节、特征数据6字节、数据类108字节、参数类36字节、控制类50字节，共235字节。 */
+#define INV_PROTO_SIZE                              235U
 typedef char Inv_ProtoSizeCheck_t[
     (sizeof(Inv_Proto_t) == INV_PROTO_SIZE) ? 1 : -1];
 
-/* AB头6字节、100条191字节协议，共6+191×100=19106字节。 */
-#define INV_PROTO_LIB_SIZE                          19106U
+/* AB头6字节、100条235字节协议，共6+235×100=23506字节。 */
+#define INV_PROTO_LIB_SIZE                          23506U
 typedef char Inv_ProtoLibSizeCheck_t[
     (sizeof(Inv_ProtoLib_t) == INV_PROTO_LIB_SIZE) ? 1 : -1];
 

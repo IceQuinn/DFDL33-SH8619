@@ -66,9 +66,10 @@ static const char *inv_proto_byte_order_name(uint8_t data_type,
 /* 使用与只读数据行相同的固定列宽打印数据类或参数类表头。 */
 static void inv_proto_print_read_table_header(const char *section_name)
 {
-    rt_kprintf("\t%-20s %-8s %-8s %-14s %-12s %-7s\n",
+    rt_kprintf("\t%-20s %-8s %-7s %-8s %-14s %-12s %-7s\n",
                section_name,
                "addr",
+               "count",
                "read_fc",
                "type",
                "order",
@@ -78,36 +79,50 @@ static void inv_proto_print_read_table_header(const char *section_name)
 /* 按只读表格中的一行打印数据类或参数类寄存器块。 */
 static void inv_proto_print_reg(const char *name, const Inv_RegBlk_t *reg)
 {
-    rt_kprintf("\t%-20s 0x%04X   0x%02X     %-14s %-12s %-7u\n",
+    rt_kprintf("\t%-20s 0x%04X   %-7u 0x%02X     %-14s %-12s %-7u\n",
                name,
                (unsigned int)reg->reg_addr,
+               (unsigned int)reg->reg_cnt,
                (unsigned int)reg->read_func_code,
                inv_proto_data_type_name(reg->data_type),
                inv_proto_byte_order_name(reg->data_type, reg->byte_order),
                (unsigned int)reg->decimal_places);
 }
 
-/* 使用与控制数据行相同的固定列宽打印控制类表头。 */
+/* 打印普通控制寄存器表头。 */
 static void inv_proto_print_ctrl_table_header(const char *section_name)
 {
-    rt_kprintf("\t%-20s %-8s %-8s %-8s %-14s %-12s %-7s %-10s\n",
+    rt_kprintf("\t%-20s %-8s %-7s %-8s %-14s %-12s %-7s\n",
                section_name,
                "addr",
-               "read_fc",
+               "count",
                "write_fc",
                "type",
                "order",
-               "decimal",
-               "default");
+               "decimal");
 }
 
-/* 按控制表格中的一行打印可读写寄存器块及其4字节默认写入值。 */
+/* 打印不带默认值的普通可读写控制寄存器。 */
 static void inv_proto_print_ctrl_reg(const char *name, const Inv_CtrlRegBlk_t *reg)
 {
-    rt_kprintf("\t%-20s 0x%04X   0x%02X     0x%02X     %-14s %-12s %-7u 0x%08X\n",
+    rt_kprintf("\t%-20s 0x%04X   %-7u 0x%02X     %-14s %-12s %-7u\n",
                name,
                (unsigned int)reg->reg_addr,
-               (unsigned int)reg->read_func_code,
+               (unsigned int)reg->reg_cnt,
+               (unsigned int)reg->write_func_code,
+               inv_proto_data_type_name(reg->data_type),
+               inv_proto_byte_order_name(reg->data_type, reg->byte_order),
+               (unsigned int)reg->decimal_places);
+}
+
+/* 打印开机、关机固定命令及其默认写入值。 */
+static void inv_proto_print_default_ctrl_reg(const char *name,
+                                             const Inv_CtrlDefaultRegBlk_t *reg)
+{
+    rt_kprintf("\t%-20s 0x%04X   %-7u 0x%02X     %-14s %-12s %-7u default=0x%08X\n",
+               name,
+               (unsigned int)reg->reg_addr,
+               (unsigned int)reg->reg_cnt,
                (unsigned int)reg->write_func_code,
                inv_proto_data_type_name(reg->data_type),
                inv_proto_byte_order_name(reg->data_type, reg->byte_order),
@@ -115,26 +130,26 @@ static void inv_proto_print_ctrl_reg(const char *name, const Inv_CtrlRegBlk_t *r
                (unsigned int)reg->write_default_val);
 }
 
-/* 打印特征寄存器地址、数量、解析格式和32位特征值。 */
+/* 打印特征寄存器地址、数量和解析格式。 */
 static void inv_proto_print_feature(const Inv_Feature_t *feature)
 {
-    rt_kprintf("\t%-20s %-8s %-7s %-14s %-12s %-7s %-10s\n",
+    rt_kprintf("\t%-20s %-8s %-7s %-8s %-14s %-12s %-7s\n",
                "[feature]",
                "addr",
                "count",
+               "read_fc",
                "type",
                "order",
-               "decimal",
-               "value");
-    rt_kprintf("\t%-20s 0x%04X   %-7u %-14s %-12s %-7u 0x%08X\n",
+               "decimal");
+    rt_kprintf("\t%-20s 0x%04X   %-7u 0x%02X     %-14s %-12s %-7u\n",
                "feature",
                (unsigned int)feature->reg_addr,
                (unsigned int)feature->reg_cnt,
+               (unsigned int)feature->read_func_code,
                inv_proto_data_type_name(feature->data_type),
                inv_proto_byte_order_name(feature->data_type,
                                           feature->byte_order),
-               (unsigned int)feature->decimal_places,
-               (unsigned int)feature->feature_val);
+               (unsigned int)feature->decimal_places);
 }
 
 /* 将固定32字节厂家名称转换为保证以NUL结束的可打印字符串。 */
@@ -197,17 +212,20 @@ static void inv_proto_print_one(uint16_t proto_number,
     inv_proto_print_reg("Ib", &proto->data.Ix[ENUM_PHASE_B]);
     inv_proto_print_reg("Ic", &proto->data.Ix[ENUM_PHASE_C]);
 
-    inv_proto_print_reg("Pa", &proto->data.Px[ENUM_PHASE_A]);
-    inv_proto_print_reg("Pb", &proto->data.Px[ENUM_PHASE_B]);
-    inv_proto_print_reg("Pc", &proto->data.Px[ENUM_PHASE_C]);
+    inv_proto_print_reg("Pa", &proto->data.Px[ENUM_PA]);
+    inv_proto_print_reg("Pb", &proto->data.Px[ENUM_PB]);
+    inv_proto_print_reg("Pc", &proto->data.Px[ENUM_PC]);
+    inv_proto_print_reg("Pt", &proto->data.Px[ENUM_PT]);
 
-    inv_proto_print_reg("Qa", &proto->data.Qx[ENUM_PHASE_A]);
-    inv_proto_print_reg("Qb", &proto->data.Qx[ENUM_PHASE_B]);
-    inv_proto_print_reg("Qc", &proto->data.Qx[ENUM_PHASE_C]);
+    inv_proto_print_reg("Qa", &proto->data.Qx[ENUM_QA]);
+    inv_proto_print_reg("Qb", &proto->data.Qx[ENUM_QB]);
+    inv_proto_print_reg("Qc", &proto->data.Qx[ENUM_QC]);
+    inv_proto_print_reg("Qt", &proto->data.Qx[ENUM_QT]);
 
-    inv_proto_print_reg("PFa", &proto->data.PFx[ENUM_PHASE_A]);
-    inv_proto_print_reg("PFb", &proto->data.PFx[ENUM_PHASE_B]);
-    inv_proto_print_reg("PFc", &proto->data.PFx[ENUM_PHASE_C]);
+    inv_proto_print_reg("PFa", &proto->data.PFx[ENUM_PFA]);
+    inv_proto_print_reg("PFb", &proto->data.PFx[ENUM_PFB]);
+    inv_proto_print_reg("PFc", &proto->data.PFx[ENUM_PFC]);
+    inv_proto_print_reg("PFt", &proto->data.PFx[ENUM_PFT]);
 
     rt_kprintf("\n");
     inv_proto_print_read_table_header("[parameter]");
@@ -220,8 +238,8 @@ static void inv_proto_print_one(uint16_t proto_number,
 
     rt_kprintf("\n");
     inv_proto_print_ctrl_table_header("[control]");
-    inv_proto_print_ctrl_reg("power_on", &proto->ctrl.pwr_on);
-    inv_proto_print_ctrl_reg("power_off", &proto->ctrl.pwr_off);
+    inv_proto_print_default_ctrl_reg("power_on", &proto->ctrl.pwr_on);
+    inv_proto_print_default_ctrl_reg("power_off", &proto->ctrl.pwr_off);
     inv_proto_print_ctrl_reg("active_pwr_value", &proto->ctrl.active_pwr_ctrl);
     inv_proto_print_ctrl_reg("reactive_pwr_value", &proto->ctrl.reactive_pwr_ctrl);
     inv_proto_print_ctrl_reg("power_factor", &proto->ctrl.pwr_factor_ctrl);

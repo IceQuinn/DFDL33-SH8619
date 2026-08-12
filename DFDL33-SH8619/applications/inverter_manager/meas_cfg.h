@@ -8,7 +8,9 @@ enum{
     ENUM_UA      = 0, ENUM_UB      = 1, ENUM_UC      = 2,                   ENUM_UMAX      = 3,
     ENUM_IA      = 0, ENUM_IB      = 1, ENUM_IC      = 2, ENUM_IN      = 3, ENUM_IMAX      = 4,
     ENUM_PA      = 0, ENUM_PB      = 1, ENUM_PC      = 2, ENUM_PT      = 3, ENUM_PMAX      = 4,
-
+    ENUM_QA      = 0, ENUM_QB      = 1, ENUM_QC      = 2, ENUM_QT      = 3, ENUM_QMAX      = 4,
+    ENUM_SA      = 0, ENUM_SB      = 1, ENUM_SC      = 2, ENUM_ST      = 3, ENUM_SMAX      = 4,
+    ENUM_PFA     = 0, ENUM_PFB     = 1, ENUM_PFC     = 2, ENUM_PFT     = 3, ENUM_PFMAX     = 4,
 };
 
 #endif /* __MEAS_CFG_H__ */
