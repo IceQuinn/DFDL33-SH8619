@@ -85,7 +85,7 @@ static const Inv_Proto_t *cycle_loop_find_protocol(const Inv_Archive_t *archive)
     {
         const Inv_Proto_t *protocol = &g_inv_proto_lib.proto[index];
 
-        if((protocol->valid == INVERTER_PROTOCOL_VALID) &&
+        if((g_inv_proto_lib.valid[index] == INVERTER_PROTOCOL_VALID) &&
            (rt_memcmp(&protocol->mfr_info,
                       &archive->mfr_info,
                       sizeof(archive->mfr_info)) == 0))

@@ -18,7 +18,7 @@ extern "C" {
 /* 逆变器协议库固定提供100条厂家协议配置。 */
 #define INVERTER_PROTOCOL_LIBRARY_COUNT             100U
 #define INVERTER_PROTOCOL_DEFAULT_COUNT             4U
-#define INVERTER_PROTOCOL_LIBRARY_VERSION           7U
+#define INVERTER_PROTOCOL_LIBRARY_VERSION           11U
 #define INVERTER_PROTOCOL_INVALID                   0U
 #define INVERTER_PROTOCOL_VALID                     1U
 
@@ -76,8 +76,9 @@ typedef struct Inv_RegBlk
             /* 小数位数占bit8～bit11，取值范围0～15。 */
             uint16_t decimal_places : 4;
 
-            /* bit12～bit15预留，写入协议库时应保持为0。 */
+            /* bit12～bit15预留。 */
             uint16_t reserved : 4;
+
         };
     };
 } Inv_RegBlk_t;
@@ -116,8 +117,9 @@ typedef struct Inv_CtrlRegBlk
             /* 小数位数占bit8～bit11，取值范围0～15。 */
             uint16_t decimal_places : 4;
 
-            /* bit12～bit15预留，写入协议库时应保持为0。 */
+            /* bit12～bit15预留。 */
             uint16_t reserved : 4;
+
         };
     };
 
@@ -149,12 +151,12 @@ typedef struct Inv_CtrlDefaultRegBlk
         };
     };
 
-    /* 执行固定命令时使用的原始写入值；发送前按照data_type和byte_order转换。 */
-    uint32_t write_default_val;
+    /* 执行固定命令时使用的2字节原始写入值；发送前按照data_type和byte_order转换。 */
+    uint16_t write_default_val;
 } Inv_CtrlDefaultRegBlk_t;
 
-/* 带默认值的控制寄存器块由普通控制字段6字节和默认写入值4字节组成，共10字节。 */
-#define INV_CTRL_DEFAULT_REG_BLK_SIZE               10U
+/* 带默认值的控制寄存器块由普通控制字段6字节和默认写入值2字节组成，共8字节。 */
+#define INV_CTRL_DEFAULT_REG_BLK_SIZE               8U
 typedef char Inv_CtrlDefaultRegBlkSizeCheck_t[
     (sizeof(Inv_CtrlDefaultRegBlk_t) == INV_CTRL_DEFAULT_REG_BLK_SIZE) ? 1 : -1];
 
@@ -187,14 +189,18 @@ typedef struct Inv_Feature
             /* 小数位数占bit8～bit11，取值范围0～15。 */
             uint16_t decimal_places : 4;
 
-            /* bit12～bit15预留，写入协议库时应保持为0。 */
+            /* bit12～bit15预留。 */
             uint16_t reserved : 4;
+
         };
     };
+
+    /* 用于厂家及型号识别的2字节默认特征值。 */
+    uint16_t default_val;
 } Inv_Feature_t;
 
-/* 特征数据由地址2字节、寄存器个数1字节、读功能码1字节和数据格式2字节组成，共6字节。 */
-#define INV_FEATURE_SIZE                            6U
+/* 特征数据由地址2字节、寄存器个数1字节、读功能码1字节、数据格式2字节和默认值2字节组成，共8字节。 */
+#define INV_FEATURE_SIZE                            8U
 typedef char Inv_FeatureSizeCheck_t[
     (sizeof(Inv_Feature_t) == INV_FEATURE_SIZE) ? 1 : -1];
 
@@ -285,17 +291,14 @@ typedef struct Inv_ProtoCtrl
     Inv_CtrlRegBlk_t reactive_pwr_pct_ctrl;
 } Inv_ProtoCtrl_t;
 
-/* 控制类包含2个带默认值控制点和5个普通控制点，共10×2+6×5=50字节。 */
-#define INV_PROTO_CTRL_SIZE                         50U
+/* 控制类包含2个带默认值控制点和5个普通控制点，共8×2+6×5=46字节。 */
+#define INV_PROTO_CTRL_SIZE                         46U
 typedef char Inv_ProtoCtrlSizeCheck_t[
     (sizeof(Inv_ProtoCtrl_t) == INV_PROTO_CTRL_SIZE) ? 1 : -1];
 
 /* 一条完整逆变器协议配置，包含数据类、参数类和控制类。 */
 typedef struct Inv_Proto
 {
-    /* 1表示本条协议有效，0表示本条协议未配置。 */
-    uint8_t valid;
-
     /* 与逆变器档案共用的厂家名称及规约版本。 */
     Inv_MfrInfo_t mfr_info;
 
@@ -317,18 +320,21 @@ typedef struct Inv_ProtoLib
     /* AB区校验头，仅描述整个协议库，不属于某一条厂家协议。 */
     rcd_head head;
 
-    /* 固定100条协议，每条协议内部包含自身的有效标志。 */
+    /* 每条协议对应一个有效标志：1表示有效，0表示未配置。 */
+    uint8_t valid[INVERTER_PROTOCOL_LIBRARY_COUNT];
+
+    /* 固定100条协议配置。 */
     Inv_Proto_t proto[INVERTER_PROTOCOL_LIBRARY_COUNT];
 } Inv_ProtoLib_t;
 #pragma pack()
 
-/* 有效标志1字节、厂家信息34字节、特征数据6字节、数据类108字节、参数类36字节、控制类50字节，共235字节。 */
-#define INV_PROTO_SIZE                              235U
+/* 厂家信息34字节、特征数据8字节、数据类108字节、参数类36字节、控制类46字节，共232字节。 */
+#define INV_PROTO_SIZE                              232U
 typedef char Inv_ProtoSizeCheck_t[
     (sizeof(Inv_Proto_t) == INV_PROTO_SIZE) ? 1 : -1];
 
-/* AB头6字节、100条235字节协议，共6+235×100=23506字节。 */
-#define INV_PROTO_LIB_SIZE                          23506U
+/* AB头6字节、100个有效标志和100条232字节协议，共6+100+232×100=23306字节。 */
+#define INV_PROTO_LIB_SIZE                          23306U
 typedef char Inv_ProtoLibSizeCheck_t[
     (sizeof(Inv_ProtoLib_t) == INV_PROTO_LIB_SIZE) ? 1 : -1];
 

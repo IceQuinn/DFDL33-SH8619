@@ -25,7 +25,7 @@ void Inv_Proto_Default_Init(void)
         rt_memcpy(&g_inv_proto_lib.proto[index],
                   &g_inv_proto_default_lib[index],
                   sizeof(Inv_Proto_t));
-        g_inv_proto_lib.proto[index].valid = INVERTER_PROTOCOL_VALID;
+        g_inv_proto_lib.valid[index] = INVERTER_PROTOCOL_VALID;
     }
 
     AB_save(flash_write,

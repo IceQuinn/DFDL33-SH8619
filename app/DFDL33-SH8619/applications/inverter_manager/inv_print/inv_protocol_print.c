@@ -8,7 +8,6 @@ static const char *inv_proto_data_type_name(uint8_t data_type)
 {
     switch (data_type)
     {
-    case TYPE_NONE:      return "NONE";
     case TYPE_I8:        return "INT8";
     case TYPE_U8:        return "UINT8";
     case TYPE_I16:       return "INT16";
@@ -119,7 +118,7 @@ static void inv_proto_print_ctrl_reg(const char *name, const Inv_CtrlRegBlk_t *r
 static void inv_proto_print_default_ctrl_reg(const char *name,
                                              const Inv_CtrlDefaultRegBlk_t *reg)
 {
-    rt_kprintf("\t%-20s 0x%04X   %-7u 0x%02X     %-14s %-12s %-7u default=0x%08X\n",
+    rt_kprintf("\t%-20s 0x%04X   %-7u 0x%02X     %-14s %-12s %-7u default=0x%04X\n",
                name,
                (unsigned int)reg->reg_addr,
                (unsigned int)reg->reg_cnt,
@@ -133,15 +132,16 @@ static void inv_proto_print_default_ctrl_reg(const char *name,
 /* 打印特征寄存器地址、数量和解析格式。 */
 static void inv_proto_print_feature(const Inv_Feature_t *feature)
 {
-    rt_kprintf("\t%-20s %-8s %-7s %-8s %-14s %-12s %-7s\n",
+    rt_kprintf("\t%-20s %-8s %-7s %-8s %-14s %-12s %-7s %-8s\n",
                "[feature]",
                "addr",
                "count",
                "read_fc",
                "type",
                "order",
-               "decimal");
-    rt_kprintf("\t%-20s 0x%04X   %-7u 0x%02X     %-14s %-12s %-7u\n",
+               "decimal",
+               "default");
+    rt_kprintf("\t%-20s 0x%04X   %-7u 0x%02X     %-14s %-12s %-7u 0x%04X\n",
                "feature",
                (unsigned int)feature->reg_addr,
                (unsigned int)feature->reg_cnt,
@@ -149,7 +149,8 @@ static void inv_proto_print_feature(const Inv_Feature_t *feature)
                inv_proto_data_type_name(feature->data_type),
                inv_proto_byte_order_name(feature->data_type,
                                           feature->byte_order),
-               (unsigned int)feature->decimal_places);
+               (unsigned int)feature->decimal_places,
+               (unsigned int)feature->default_val);
 }
 
 /* 将固定32字节厂家名称转换为保证以NUL结束的可打印字符串。 */
@@ -268,7 +269,7 @@ void Inv_Proto_Print(uint16_t count)
     {
         const Inv_Proto_t *proto = Inv_Proto_Get(proto_number);
 
-        if (proto->valid == INVERTER_PROTOCOL_VALID)
+        if (g_inv_proto_lib.valid[proto_number - 1U] == INVERTER_PROTOCOL_VALID)
         {
             ++valid_number;
             inv_proto_print_one(proto_number, valid_number, proto);
