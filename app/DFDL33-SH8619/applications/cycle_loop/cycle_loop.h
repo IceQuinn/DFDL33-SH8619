@@ -18,7 +18,7 @@ rt_err_t cycle_loop_rx_frame(uint16_t uart_no,
                              const uint8_t *frame,
                              uint16_t frame_len);
 
-/* 线程入口：档案数为0时先扫描三个串口的地址，收到回复的端口再进入协议识别。 */
+/* 线程入口：校验档案并识别空闲端口，全部结束后进入预留的周期抄读阶段。 */
 void cycle_loop_thread_entry(void *parameter);
 
 #ifdef __cplusplus

@@ -17,7 +17,7 @@
 
 #define CYCLE_LOOP_THREAD_POLL_MS          10U
 #define CYCLE_LOOP_RESPONSE_TIMEOUT_TICKS 1000U
-#define CYCLE_LOOP_SCAN_PORT_COUNT          1U
+#define CYCLE_LOOP_SCAN_PORT_COUNT          3U
 #define CYCLE_LOOP_SCAN_ADDR_FIRST          1U
 #define CYCLE_LOOP_SCAN_ADDR_LAST          10U
 #define CYCLE_LOOP_PROBE_REG_ADDR            0U
@@ -58,15 +58,22 @@ typedef struct Cycle_Loop_Uart_Context
     volatile rt_bool_t rx_ready;        /* RT_TRUE表示邮箱中存在待处理响应帧。 */
 } Cycle_Loop_Uart_Context_t;
 
+/* 一项映射同时保存串口管理层编号和档案协议端口号，两套编号不要求数值相同。 */
+typedef struct Cycle_Loop_Port_Map
+{
+    uint16_t uart_no;
+    uint8_t archive_port;
+} Cycle_Loop_Port_Map_t;
+
 /* 三个串口分别使用独立上下文，允许它们同时处于等待响应状态。 */
 static Cycle_Loop_Uart_Context_t g_scan_uarts[CYCLE_LOOP_SCAN_PORT_COUNT];
 
-/* 自动搜索只扫描三个有线串口，不扫描无线端口。 */
-static const uint16_t g_scan_uart_list[CYCLE_LOOP_SCAN_PORT_COUNT] =
+/* 自动搜索使用固定映射表，扫描取串口号，识别成功后再按串口号查询档案端口。 */
+static const Cycle_Loop_Port_Map_t g_scan_port_map[CYCLE_LOOP_SCAN_PORT_COUNT] =
 {
-    UART1_NO,
-    UART3_NO,
-    UART5_NO,
+    {UART1_NO, INV_PORT_RS485_2},       /* UART1连接RS485-II。 */
+    {UART3_NO, INV_PORT_RJ45_1},        /* UART3连接RJ45-I。 */
+    {UART5_NO, INV_PORT_RJ45_2},        /* UART5连接RJ45-II。 */
 };
 
 /* 根据接收帧携带的端口号查找对应上下文，非扫描端口返回RT_NULL。 */
@@ -83,6 +90,29 @@ static Cycle_Loop_Uart_Context_t *cycle_loop_find_uart(uint16_t uart_no)
     }
 
     return RT_NULL;
+}
+
+/* 按串口号查询映射表中的档案端口，未配置的串口或空输出指针返回RT_FALSE。 */
+static rt_bool_t cycle_loop_uart_to_archive_port(uint16_t uart_no,
+                                                 uint8_t *archive_port)
+{
+    uint8_t index;
+
+    if(archive_port == RT_NULL)
+    {
+        return RT_FALSE;
+    }
+
+    for(index = 0U; index < CYCLE_LOOP_SCAN_PORT_COUNT; ++index)
+    {
+        if(g_scan_port_map[index].uart_no == uart_no)
+        {
+            *archive_port = g_scan_port_map[index].archive_port;
+            return RT_TRUE;
+        }
+    }
+
+    return RT_FALSE;
 }
 
 /* 打印一帧完整Modbus RTU报文，行首tick只读取一次，后续字节属于同一日志行。 */
@@ -192,6 +222,44 @@ static rt_bool_t cycle_loop_feature_value_matches(uint16_t actual_value,
 
     return ((actual_scaled >= lower_scaled) &&
             (actual_scaled <= upper_scaled)) ? RT_TRUE : RT_FALSE;
+}
+
+/* 使用匹配协议的厂家信息、当前从站地址和物理接入端口生成并持久化档案。 */
+static rt_bool_t cycle_loop_add_matched_archive(const Cycle_Loop_Uart_Context_t *context)
+{
+    const Inv_Proto_t *protocol;
+    uint8_t archive_port;
+    int8_t archive_index;
+
+    if((context->protocol_index >= INVERTER_PROTOCOL_LIBRARY_COUNT) ||
+       (cycle_loop_uart_to_archive_port(context->uart_no, &archive_port) == RT_FALSE))
+    {
+        rt_kprintf("[%08d] uart[%u] cannot map matched protocol to archive\n",
+                   (int)rt_tick_get(),
+                   (unsigned int)context->uart_no);
+        return RT_FALSE;
+    }
+
+    protocol = &g_inv_proto_lib.proto[context->protocol_index];
+    archive_index = Inv_Archive_Add_Device(context->slave_addr,
+                                           archive_port,
+                                           &protocol->mfr_info);
+    if(archive_index == INVERTER_ARCHIVE_ADD_FAILED)
+    {
+        rt_kprintf("[%08d] uart[%u] addr[%u] archive add failed\n",
+                   (int)rt_tick_get(),
+                   (unsigned int)context->uart_no,
+                   (unsigned int)context->slave_addr);
+        return RT_FALSE;
+    }
+
+    rt_kprintf("[%08d] uart[%u] addr[%u] added to archive slot[%u], port[%u]\n",
+               (int)rt_tick_get(),
+               (unsigned int)context->uart_no,
+               (unsigned int)context->slave_addr,
+               (unsigned int)((uint8_t)archive_index + 1U),
+               (unsigned int)archive_port);
+    return RT_TRUE;
 }
 
 /* 使用固定参数组成探测请求：03功能码、寄存器地址0、读取寄存器数量1。 */
@@ -386,6 +454,8 @@ static void cycle_loop_handle_feature_response(Cycle_Loop_Uart_Context_t *contex
                    (unsigned int)context->slave_addr,
                    (unsigned int)registers[0],
                    (unsigned int)context->feature_default_val);
+        /* 识别成功后立即写入档案并保存Flash，无论保存结果如何都结束本串口搜索。 */
+        cycle_loop_add_matched_archive(context);
         cycle_loop_stop_uart(context);
         return;
     }
@@ -467,18 +537,71 @@ static void cycle_loop_process_uart(Cycle_Loop_Uart_Context_t *context,
     }
 }
 
-/* 三个串口均从固定探测阶段、Modbus地址1开始，协议库此时不会被访问。 */
-static void cycle_loop_init_scan_uarts(void)
+/* 只启动空闲端口的识别状态机，已有有效档案占用的端口保持STOPPED。 */
+static uint8_t cycle_loop_init_scan_uarts(void)
 {
     uint8_t index;
+    uint8_t scan_count = 0U;
 
     rt_memset(g_scan_uarts, 0, sizeof(g_scan_uarts));
     for(index = 0U; index < CYCLE_LOOP_SCAN_PORT_COUNT; ++index)
     {
-        g_scan_uarts[index].uart_no = g_scan_uart_list[index];
+        /* 扫描上下文只保存串口号，写档案时再通过映射函数查询档案端口。 */
+        g_scan_uarts[index].uart_no = g_scan_port_map[index].uart_no;
         g_scan_uarts[index].phase = CYCLE_LOOP_PHASE_PROBE;
         g_scan_uarts[index].slave_addr = CYCLE_LOOP_SCAN_ADDR_FIRST;
-        g_scan_uarts[index].state = CYCLE_LOOP_SCAN_READY;
+
+        if(Inv_Archive_Port_Is_Occupied(g_scan_port_map[index].archive_port) != 0U)
+        {
+            g_scan_uarts[index].state = CYCLE_LOOP_SCAN_STOPPED;
+            rt_kprintf("[%08d] uart[%u] archive port[%u] occupied, discovery skipped\n",
+                       (int)rt_tick_get(),
+                       (unsigned int)g_scan_port_map[index].uart_no,
+                       (unsigned int)g_scan_port_map[index].archive_port);
+        }
+        else
+        {
+            g_scan_uarts[index].state = CYCLE_LOOP_SCAN_READY;
+            ++scan_count;
+            rt_kprintf("[%08d] uart[%u] archive port[%u] free, discovery started\n",
+                       (int)rt_tick_get(),
+                       (unsigned int)g_scan_port_map[index].uart_no,
+                       (unsigned int)g_scan_port_map[index].archive_port);
+        }
+    }
+
+    return scan_count;
+}
+
+/* 所有上下文均停止时，空闲端口识别流程已经全部结束。 */
+static rt_bool_t cycle_loop_all_scan_uarts_stopped(void)
+{
+    uint8_t index;
+
+    for(index = 0U; index < CYCLE_LOOP_SCAN_PORT_COUNT; ++index)
+    {
+        if(g_scan_uarts[index].state != CYCLE_LOOP_SCAN_STOPPED)
+        {
+            return RT_FALSE;
+        }
+    }
+
+    return RT_TRUE;
+}
+
+/* 周期抄读暂未实现，当前只保留明确的流程切换点供后续接入。 */
+static void cycle_loop_enter_periodic_read(void)
+{
+    if(g_inv_archive_lib.count == 0U)
+    {
+        rt_kprintf("[%08d] no valid archive, periodic read skipped\n",
+                   (int)rt_tick_get());
+    }
+    else
+    {
+        rt_kprintf("[%08d] archive count[%u], enter periodic read placeholder\n",
+                   (int)rt_tick_get(),
+                   (unsigned int)g_inv_archive_lib.count);
     }
 }
 
@@ -519,17 +642,20 @@ rt_err_t cycle_loop_rx_frame(uint16_t uart_no,
 void cycle_loop_thread_entry(void *parameter)
 {
     uint8_t index;
+    uint8_t scan_count;
 
     RT_UNUSED(parameter);
 
-    if(g_inv_archive_lib.count != 0U)
+    /* 无论存档count为何值都重新校验有效槽位，防止协议库变化后档案仍被误用。 */
+    Inv_Archive_Validate_Protocols();
+    scan_count = cycle_loop_init_scan_uarts();
+    if(scan_count == 0U)
     {
-        rt_kprintf("[%08d] archive count[%u], discovery is not required\n", rt_tick_get(), g_inv_archive_lib.count);
-        return;                         /* 当前需求不再执行已有档案的周期抄读。 */
+        rt_kprintf("[%08d] no free wired port, discovery is not required\n",
+                   (int)rt_tick_get());
     }
 
-    cycle_loop_init_scan_uarts();
-    while(1)
+    while(cycle_loop_all_scan_uarts_stopped() == RT_FALSE)
     {
         rt_tick_t now = rt_tick_get();
 
@@ -539,6 +665,12 @@ void cycle_loop_thread_entry(void *parameter)
             cycle_loop_process_uart(&g_scan_uarts[index], now);
         }
 
-        rt_thread_mdelay(CYCLE_LOOP_THREAD_POLL_MS);
+        if(cycle_loop_all_scan_uarts_stopped() == RT_FALSE)
+        {
+            rt_thread_mdelay(CYCLE_LOOP_THREAD_POLL_MS);
+        }
     }
+
+    /* 没有空闲端口或所有空闲端口识别结束后，统一切换到周期抄读阶段。 */
+    cycle_loop_enter_periodic_read();
 }

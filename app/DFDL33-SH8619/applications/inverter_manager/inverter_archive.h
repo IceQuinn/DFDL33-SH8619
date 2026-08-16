@@ -22,6 +22,7 @@ extern "C" {
 #define INVERTER_ARCHIVE_LIBRARY_VERSION           1U   // 档案库版本号
 #define INVERTER_ARCHIVE_INVALID                   0U   // 无效档案
 #define INVERTER_ARCHIVE_VALID                     1U   // 有效档案
+#define INVERTER_ARCHIVE_ADD_FAILED                (-1)
 
 
 /* 共享厂家信息。档案和协议库必须直接使用本结构体，禁止各自重复定义厂家 名称及规约版本字段。结构体按1字节对齐，内容与档案线上34字节厂家信息 完全一致：厂家ASCII名称32字节 + 规约版本2字节。 */
@@ -100,6 +101,23 @@ typedef char Inv_ArchiveLibSizeCheck_t[
 
 /* 全局逆变器档案库变量，应用程序可直接按照固定槽位读取或填写档案。 */
 extern Inv_ArchiveLib_t g_inv_archive_lib;
+
+/* 新增或更新一条档案并保存到Flash，成功返回0～11槽位下标，失败返回-1。 */
+int8_t Inv_Archive_Add(const Inv_Archive_t *archive);
+
+/* 根据地址、端口和厂家信息生成档案，成功返回0～11槽位下标，失败返回-1。 */
+int8_t Inv_Archive_Add_Device(uint8_t mb_addr,
+                              uint8_t port,
+                              const Inv_MfrInfo_t *mfr_info);
+
+/* 校验全部有效档案，没有对应有效协议的档案会被置无效并保存。 */
+void Inv_Archive_Validate_Protocols(void);
+
+/* 指定接入端口存在有效档案时返回1，否则返回0。 */
+uint8_t Inv_Archive_Port_Is_Occupied(uint8_t port);
+
+/* 重新统计有效槽位数量，并将当前档案库保存到Flash A/B区。 */
+void Inv_Archive_Save(void);
 
 void Inv_Archive_Init(void);
 
