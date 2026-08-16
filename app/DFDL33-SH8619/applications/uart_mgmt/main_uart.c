@@ -13,6 +13,7 @@
 #include <drv_common.h>
 
 #include "ctu_cfg.h"
+#include "cycle_loop.h"
 
 // 收到最后一个字节后，超过该时间仍没有新数据，串口管理线程就认为当前数据已经组成一帧
 // 实际时间精度受 RT_TICK_PER_SECOND 限制，需要修改帧间隔时只修改 UART_FRAME_TIMEOUT_MS
@@ -75,24 +76,18 @@ char *uart_dev_name[UART_NO_MAXS] = {
 rt_err_t uart_rx_callback(rt_device_t dev, rt_size_t size)
 {
     uint8_t data;
-
     RT_UNUSED(size);
 
-    for(int i = 0; i < UART_NO_MAXS; ++i)
-    {
-        if(dev == uart_dev[i])
-        {
+    for(int i = 0; i < UART_NO_MAXS; ++i) {
+        if(dev == uart_dev[i]) {
             uart_rx_manage *rx = &rx_manage[i];
 
             // 接收回调只负责读取、保存数据和刷新时间，不在中断中判断或解析报文
-            while(rt_device_read(dev, 0, &data, 1) == 1)
-            {
-                if(rx->len < UART_RX_BUF_SIZE)
-                {
+            while(rt_device_read(dev, 0, &data, 1) == 1) {
+                if(rx->len < UART_RX_BUF_SIZE) {
                     rx->rx_buf[rx->len++] = data;
                 }
-                else
-                {
+                else {
                     // 缓冲区满后继续读空驱动缓冲区，同时标记本帧溢出，等待线程统一丢弃
                     rx->overflow = RT_TRUE;
                 }
@@ -135,8 +130,8 @@ static rt_bool_t uart_take_timeout_frame(uart_rx_manage *rx)
     return frame_ready;
 }
 
-// 在线程中分发完整帧，rx_app 由具体协议模块注册，未注册时只完成收帧
-static void uart_dispatch_frame(uint16_t uart_no, rt_device_t *uart)
+// 在线程中把按静默时间截取出的完整帧提交给轮询模块，避免在串口接收中断中解析Modbus
+static void uart_dispatch_frame(uint16_t uart_no)
 {
     uart_rx_manage *rx = &rx_manage[uart_no];
 
@@ -148,15 +143,10 @@ static void uart_dispatch_frame(uint16_t uart_no, rt_device_t *uart)
         rx->frame_overflow = RT_FALSE;
         return;
     }
-
-//    if(uart->rx_app != RT_NULL)
-//    {
-//        uart->rx_app(uart_no,
-//                     rx->frame_buf,
-//                     (uint16_t)rx->frame_len,
-//                     uart->buf_type,
-//                     *uart->uart_protocol);
-//    }
+    /* 轮询模块只在WAIT_RESPONSE状态接收该串口的帧，其他时刻返回忙并丢弃本帧。 */
+    cycle_loop_rx_frame(uart_no,
+                        rx->frame_buf,
+                        (uint16_t)rx->frame_len);
 
     // 本帧处理结束后清除帧状态，frame_buf 的内容无需专门清零
     rx->frame_len = 0;
@@ -260,7 +250,7 @@ void uart_mgmt_thread_entry(void *parameter)
             if((uart_dev[i] != RT_NULL) &&
                (uart_take_timeout_frame(&rx_manage[i]) == RT_TRUE))
             {
-                uart_dispatch_frame((uint16_t)i, &uart_dev[i]);
+                uart_dispatch_frame((uint16_t)i);
             }
         }
 

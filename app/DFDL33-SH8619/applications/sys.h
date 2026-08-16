@@ -90,7 +90,7 @@ int32_t GetDataFromAddr(uint8_t DataType, const uint32_t *PAddr);
 /* 从根据类型返回该类型字节数 */
 int8_t  GetDataByteFromType(uint8_t DataType);
 
-void show_arr(char* name, void* data, int len);
+void show_arr(const char *name, const void *data, uint32_t len);
 
 void Sys_Run_Time_Init(void);
 void Sys_Power_Down_CB(void);

@@ -42,7 +42,7 @@
 
 #define PROJECT_NAME    "DFDL33-SH8619"
 
-const APP_Version g_app_version  = {1, 0, 0, 13};       // 研发内部固件版本（对内版本）
+const APP_Version g_app_version  = {1, 0, 0, 14};       // 研发内部固件版本（对内版本）
 const APP_Version g_show_app_ver = {1, 0, 0, 1};        // 研发发布固件版本（对外版本）
 char PHM_Ver[32] = "PHM V1.0.1.0 2025.07.01";           // 电鸿版本号
 char app_firmware_ver_ascll[32]  = {0};                 //固件版本号以及更新日期
@@ -186,15 +186,16 @@ int8_t GetDataByteFromType(uint8_t DataType)
     return data_byte;
 }
 
-void show_arr(char* name, void* data, int len)
+void show_arr(const char *name, const void *data, uint32_t len)
 {
-    char * ptr = (char *)data;
-    rt_kprintf("%s[%03d] = 0x", name, len);
-    for(int i=0; i<len; i++)
-        rt_kprintf("%02x", ptr[i]);
-    rt_kprintf("\n");
+    const uint8_t *ptr = (const uint8_t *)data;
 
-    return;
+    rt_kprintf("%s[%03u] = 0x", name, (unsigned int)len);
+    for(uint32_t index = 0U; index < len; ++index)
+    {
+        rt_kprintf("%02X", (unsigned int)ptr[index]);
+    }
+    rt_kprintf("\n");
 }
 
 

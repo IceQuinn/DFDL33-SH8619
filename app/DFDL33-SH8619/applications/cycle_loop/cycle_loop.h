@@ -9,8 +9,6 @@
 #include <stdint.h>
 #include <rtthread.h>
 
-#include "inverter_archive.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -598,7 +598,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
             .byte_order = INVERTER_BYTE_ORDER_NORMAL,
             .decimal_places = 2U,
 
-            .default_val = 0xFFFFU
+            .default_val = 5000U
         },
         .data = {
             .Ux = {
