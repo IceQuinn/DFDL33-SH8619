@@ -63,18 +63,38 @@ extern "C"
  *
  */
 
-/* RS485串口 */
+/* RS485-Ⅱ */
 #define BSP_USING_UART1
 #define BSP_UART1_TX_PIN       "PA9"
 #define BSP_UART1_RX_PIN       "PA10"
-
+// 调试串口
 #define BSP_USING_UART2
 #define BSP_UART2_TX_PIN       "PA2"
 #define BSP_UART2_RX_PIN       "PA3"
-
+// RJ45-1-1
 #define BSP_USING_UART3
-#define BSP_UART3_TX_PIN       "PC10"
-#define BSP_UART3_RX_PIN       "PC11"
+#define BSP_UART3_TX_PIN       "PB10"
+#define BSP_UART3_RX_PIN       "PB11"
+// RJ45-1-2
+#define BSP_USING_UART4
+#define BSP_UART4_TX_PIN       "PC10"
+#define BSP_UART4_RX_PIN       "PC11"
+// RJ45-2-1
+#define BSP_USING_UART5
+#define BSP_UART5_TX_PIN       "PC12"
+#define BSP_UART5_RX_PIN       "PD2"
+// RJ45-2-2
+#define BSP_USING_UART6
+#define BSP_UART6_TX_PIN       "PC6"
+#define BSP_UART6_RX_PIN       "PC7"
+// RS485-Ⅰ
+#define BSP_USING_UART7
+#define BSP_UART7_TX_PIN       "PB4"
+#define BSP_UART7_RX_PIN       "PB3"
+// 无线
+#define BSP_USING_UART8
+#define BSP_UART8_TX_PIN       "PC2"
+#define BSP_UART8_RX_PIN       "PC3"
 
 /*-------------------------- UART CONFIG END --------------------------*/
 
@@ -249,6 +269,7 @@ extern "C"
  *                 such as     #define HAL_RTC_MODULE_ENABLED
  *
  */
+#define BSP_USING_RTC
 /*#define BSP_USING_ONCHIP_RTC*/
 
 /*-------------------------- RTC CONFIG END --------------------------*/

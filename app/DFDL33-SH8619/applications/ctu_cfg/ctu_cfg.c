@@ -23,7 +23,7 @@
 // 本地全局变量
 GSE8625_CfgTypeDef_Vlast ctu_cfg;
 
-void config_para_init(void)
+void Ctu_Cfg_Init(void)
 {
     int check_sta = 0;
     check_sta = AB_check(flash_read,       //读接口
@@ -49,14 +49,47 @@ void config_para_init(void)
 
 void set_default_para(void)
 {
-    /* 通讯参数 */
+    // RS485-2
     ctu_cfg.uart_protocol[UART1_NO]     = MODBUS_MASTER;//通信协议 1=modbus协议,2=dlt645协议
     ctu_cfg.uart_baud[UART1_NO]         = 9600;         //波特率
-    ctu_cfg.uart_check[UART1_NO]        = 0;            //校验位
-
-    ctu_cfg.uart_protocol[UART3_NO]     = DLT645_SLAVE; //通信协议 1=modbus协议,2=dlt645协议
+    ctu_cfg.uart_check[UART1_NO]        = 1;            //校验位
+    // RJ45-1-1
+    ctu_cfg.uart_protocol[UART3_NO]     = MODBUS_MASTER; //通信协议 1=modbus协议,2=dlt645协议
     ctu_cfg.uart_baud[UART3_NO]         = 9600;         //波特率
-    ctu_cfg.uart_check[UART3_NO]        = 0;            //校验位
+    ctu_cfg.uart_check[UART3_NO]        = 1;            //校验位
+
+    // RJ45-1-2
+    ctu_cfg.uart_protocol[UART4_NO]     = MODBUS_MASTER; //通信协议 1=modbus协议,2=dlt645协议
+    ctu_cfg.uart_baud[UART4_NO]         = 9600;         //波特率
+    ctu_cfg.uart_check[UART4_NO]        = 1;            //校验位
+
+    // RJ45-2-1
+    ctu_cfg.uart_protocol[UART5_NO]     = MODBUS_MASTER; //通信协议 1=modbus协议,2=dlt645协议
+    ctu_cfg.uart_baud[UART5_NO]         = 9600;         //波特率
+    ctu_cfg.uart_check[UART5_NO]        = 1;            //校验位
+
+    // RJ45-2-2
+    ctu_cfg.uart_protocol[UART6_NO]     = MODBUS_MASTER; //通信协议 1=modbus协议,2=dlt645协议
+    ctu_cfg.uart_baud[UART6_NO]         = 9600;         //波特率
+    ctu_cfg.uart_check[UART6_NO]        = 1;            //校验位
+
+    // RS485-1
+    ctu_cfg.uart_protocol[UART7_NO]     = DLT645_SLAVE; //通信协议 1=modbus协议,2=dlt645协议
+    ctu_cfg.uart_baud[UART7_NO]         = 9600;         //波特率
+    ctu_cfg.uart_check[UART7_NO]        = 3;            //校验位
+
+    // 载波
+    ctu_cfg.uart_protocol[UART8_NO]     = DLT645_SLAVE; //通信协议 1=modbus协议,2=dlt645协议
+    ctu_cfg.uart_baud[UART8_NO]         = 9600;         //波特率
+    ctu_cfg.uart_check[UART8_NO]        = 3;            //校验位
+
+    for(uint8_t i=0; i<6; i++)
+    {
+        ctu_cfg.dlt645_bcd_addr[i]      = i;        //dlt645通信地址
+    }
+
+    ctu_cfg.longitude                   = 1143999;      //经度
+    ctu_cfg.latitude                    = 304456;       //纬度
 
 }
 

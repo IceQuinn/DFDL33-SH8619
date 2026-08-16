@@ -65,9 +65,10 @@ static const char *inv_proto_byte_order_name(uint8_t data_type,
 /* 使用与只读数据行相同的固定列宽打印数据类或参数类表头。 */
 static void inv_proto_print_read_table_header(const char *section_name)
 {
-    rt_kprintf("\t%-20s %-8s %-7s %-8s %-14s %-12s %-7s\n",
+    rt_kprintf("\t%-20s %-8s %-10s %-7s %-8s %-14s %-12s %-7s\n",
                section_name,
-               "addr",
+               "addr_hex",
+               "addr_dec",
                "count",
                "read_fc",
                "type",
@@ -78,8 +79,9 @@ static void inv_proto_print_read_table_header(const char *section_name)
 /* 按只读表格中的一行打印数据类或参数类寄存器块。 */
 static void inv_proto_print_reg(const char *name, const Inv_RegBlk_t *reg)
 {
-    rt_kprintf("\t%-20s 0x%04X   %-7u 0x%02X     %-14s %-12s %-7u\n",
+    rt_kprintf("\t%-20s 0x%04X   %-10u %-7u 0x%02X     %-14s %-12s %-7u\n",
                name,
+               (unsigned int)reg->reg_addr,
                (unsigned int)reg->reg_addr,
                (unsigned int)reg->reg_cnt,
                (unsigned int)reg->read_func_code,
@@ -91,9 +93,10 @@ static void inv_proto_print_reg(const char *name, const Inv_RegBlk_t *reg)
 /* 打印普通控制寄存器表头。 */
 static void inv_proto_print_ctrl_table_header(const char *section_name)
 {
-    rt_kprintf("\t%-20s %-8s %-7s %-8s %-14s %-12s %-7s\n",
+    rt_kprintf("\t%-20s %-8s %-10s %-7s %-8s %-14s %-12s %-7s\n",
                section_name,
-               "addr",
+               "addr_hex",
+               "addr_dec",
                "count",
                "write_fc",
                "type",
@@ -104,8 +107,9 @@ static void inv_proto_print_ctrl_table_header(const char *section_name)
 /* 打印不带默认值的普通可读写控制寄存器。 */
 static void inv_proto_print_ctrl_reg(const char *name, const Inv_CtrlRegBlk_t *reg)
 {
-    rt_kprintf("\t%-20s 0x%04X   %-7u 0x%02X     %-14s %-12s %-7u\n",
+    rt_kprintf("\t%-20s 0x%04X   %-10u %-7u 0x%02X     %-14s %-12s %-7u\n",
                name,
+               (unsigned int)reg->reg_addr,
                (unsigned int)reg->reg_addr,
                (unsigned int)reg->reg_cnt,
                (unsigned int)reg->write_func_code,
@@ -118,31 +122,35 @@ static void inv_proto_print_ctrl_reg(const char *name, const Inv_CtrlRegBlk_t *r
 static void inv_proto_print_default_ctrl_reg(const char *name,
                                              const Inv_CtrlDefaultRegBlk_t *reg)
 {
-    rt_kprintf("\t%-20s 0x%04X   %-7u 0x%02X     %-14s %-12s %-7u default=0x%04X\n",
+    rt_kprintf("\t%-20s 0x%04X   %-10u %-7u 0x%02X     %-14s %-12s %-7u default=0x%04X(%u)\n",
                name,
+               (unsigned int)reg->reg_addr,
                (unsigned int)reg->reg_addr,
                (unsigned int)reg->reg_cnt,
                (unsigned int)reg->write_func_code,
                inv_proto_data_type_name(reg->data_type),
                inv_proto_byte_order_name(reg->data_type, reg->byte_order),
                (unsigned int)reg->decimal_places,
+               (unsigned int)reg->write_default_val,
                (unsigned int)reg->write_default_val);
 }
 
 /* 打印特征寄存器地址、数量和解析格式。 */
 static void inv_proto_print_feature(const Inv_Feature_t *feature)
 {
-    rt_kprintf("\t%-20s %-8s %-7s %-8s %-14s %-12s %-7s %-8s\n",
+    rt_kprintf("\t%-20s %-8s %-10s %-7s %-8s %-14s %-12s %-7s %-16s\n",
                "[feature]",
-               "addr",
+               "addr_hex",
+               "addr_dec",
                "count",
                "read_fc",
                "type",
                "order",
                "decimal",
                "default");
-    rt_kprintf("\t%-20s 0x%04X   %-7u 0x%02X     %-14s %-12s %-7u 0x%04X\n",
+    rt_kprintf("\t%-20s 0x%04X   %-10u %-7u 0x%02X     %-14s %-12s %-7u 0x%04X(%u)\n",
                "feature",
+               (unsigned int)feature->reg_addr,
                (unsigned int)feature->reg_addr,
                (unsigned int)feature->reg_cnt,
                (unsigned int)feature->read_func_code,
@@ -150,6 +158,7 @@ static void inv_proto_print_feature(const Inv_Feature_t *feature)
                inv_proto_byte_order_name(feature->data_type,
                                           feature->byte_order),
                (unsigned int)feature->decimal_places,
+               (unsigned int)feature->default_val,
                (unsigned int)feature->default_val);
 }
 

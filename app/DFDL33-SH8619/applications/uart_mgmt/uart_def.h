@@ -1,15 +1,25 @@
 #ifndef __UART_DEF_H__
 #define __UART_DEF_H__
 
+
+enum CHECK_BIT
+{
+    UART_CHECK_8N1 = 1,
+    UART_CHECK_8O1 = 2,
+    UART_CHECK_8E1 = 3,
+};
+
 /* board.h里面定义了，这里只需要部分串口，所以就再定义一遍 */
-#define USR_USING_UART1         /* 用于DLT645通信或者ModBus通信 */
+#define USR_USING_UART1        // RS485-2
 //#define USR_USING_UART1_CTRL
 
 //#define USR_USING_UART2       /* 用于... */
-#define USR_USING_UART3         /* 用于串口无线 */
-//#define USR_USING_UART4       /* 用于... */
-//#define USR_USING_UART5       /* 用于... */
-//#define USR_USING_UART6         /* 用于DLT645通信或者ModBus通信 */
+#define USR_USING_UART3         // RJ45-1-1
+#define USR_USING_UART4         // RJ45-1-2
+#define USR_USING_UART5         // RJ45-2-1
+#define USR_USING_UART6         // RJ45-2-2
+#define USR_USING_UART7         // RS485-1
+#define USR_USING_UART8         // 载波
 
 enum
 {
@@ -22,50 +32,22 @@ enum
 #if defined(USR_USING_UART3)
     UART3_NO,
 #endif
+#if defined(USR_USING_UART4)
+    UART4_NO,
+#endif
+#if defined(USR_USING_UART5)
+    UART5_NO,
+#endif
 #if defined(USR_USING_UART6)
     UART6_NO,
 #endif
+#if defined(USR_USING_UART7)
+    UART7_NO,
+#endif
+#if defined(USR_USING_UART8)
+    UART8_NO,
+#endif
     UART_NO_MAXS,
 };
-
-enum
-{
-#if defined(USR_USING_UART1)
-    RS485_UART_NO_1   = 1,
-#endif
-#if defined(USR_USING_UART2)
-    RS485_UART_NO   = 2,
-#endif
-#if defined(USR_USING_UART3)
-    WL_UART_NO   = 3,
-#endif
-#if defined(USR_USING_UART6)
-    RS485_UART_NO_2   = 4,
-#endif
-    UART_NO_MAX     ,
-};
-
-#if defined(USR_USING_UART1)
-#define UART1_NAME      "uart1"
-#if defined(USR_USING_UART1_CTRL)
-#define UART1_CTRL_PIN     GET_PIN(A, 8)
-#endif
-#endif
-
-#if defined(USR_USING_UART3)
-#define UART3_NAME      "uart3"
-#if defined(USR_USING_UART3_CTRL)
-#endif
-#endif
-
-#if defined(USR_USING_UART6)
-#define UART6_NAME      "uart6"
-#if defined(USR_USING_UART6_CTRL)
-#endif
-#endif
-
-
-
-
 
 #endif

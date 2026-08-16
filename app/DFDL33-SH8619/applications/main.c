@@ -19,6 +19,7 @@
 #include "inverter_protocol_library.h"
 #include "ctu_cfg.h"
 #include "main_uart.h"
+#include "cycle_loop.h"
 
 
 /* 线程结构体 */
@@ -34,7 +35,7 @@ typedef struct
 
 const user_thread_table_typedef user_thread_table[] = {
     {"uart_mgmt",     uart_mgmt_thread_entry,      RT_NULL,    1024,   17, 15},    /* UART管理线程 */
-        // {"measure",     measurement_entry,      RT_NULL,    1024,   17, 15},    /* 计量线程 */
+    {"measure",     cycle_loop_thread_entry,      RT_NULL,    1024,   17, 15},    /* 计量线程 */
         // {"meas_data",   meas_data_deal,         RT_NULL,    1024,   22, 15},    /* 测量数据线程 */
         // {"record",      Record_Wave_Thread,     RT_NULL,    1024,   6,  15},    /* 录波线程 */
         // {"event",       Event_Deal_Loop,        RT_NULL,    1024,   30, 10},    /* 事件记录线程 */
@@ -78,7 +79,7 @@ int main(void)
 
     flash_init();               //flash_sfud初始化
 
-    config_para_init();
+    Ctu_Cfg_Init();
 
     uart_init();
 

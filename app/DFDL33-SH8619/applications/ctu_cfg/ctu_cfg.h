@@ -35,6 +35,11 @@ typedef struct GSE8615_CONFIG_V1
     uint32_t uart_baud[UART_NO_MAXS];               //串口波特率
     uint16_t uart_check[UART_NO_MAXS];              //串口校验位格式
 
+    uint8_t dlt645_bcd_addr[6];                     //dlt645通信地址
+
+    uint32_t longitude;                             //经度
+    uint32_t latitude;                              //纬度
+
 }GSE8625_CfgTypeDef_Vlast;
 
 #pragma pack()
@@ -42,7 +47,7 @@ typedef struct GSE8615_CONFIG_V1
 extern GSE8625_CfgTypeDef_Vlast ctu_cfg;
 
 
-void config_para_init(void);
+void Ctu_Cfg_Init(void);
 void set_default_para(void);        //设置默认值
 void set_default_data(void);
 void ctu_cfg_save(void);

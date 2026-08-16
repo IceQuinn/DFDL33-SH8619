@@ -41,24 +41,34 @@ typedef struct
     rt_bool_t frame_overflow;               // 截取出的帧是否发生过溢出
 }uart_rx_manage;
 
-typedef struct
-{
-    rt_device_t dev;                    //串口设备
-    char     *uart_name;                //串口名称
-    uint16_t *uart_protocol;
-    uart_rx_app_t rx_app;                 // 报文处理回调函数
-    uint16_t buf_type;                  //数据类型
-    uint16_t ctrl_pin;                  //控制引脚
-    uint32_t *uart_baud;                //波特率
-    uint16_t *uart_check;               //校验格式
-    uint16_t oflag;                     //收发模式
-    uart_rx_manage rx_manage;           //串口接收状态及帧超时管理
-}uart_device;
-
-uart_device uart_dev[UART_NO_MAXS] = {
-        {RT_NULL, UART1_NAME, &ctu_cfg.uart_protocol[UART1_NO], RT_NULL, RS485_UART_NO_1, 0, &ctu_cfg.uart_baud[UART1_NO], &ctu_cfg.uart_check[UART1_NO], RT_DEVICE_FLAG_INT_RX},
-        {RT_NULL, UART3_NAME, &ctu_cfg.uart_protocol[UART3_NO], RT_NULL, WL_UART_NO, 0, &ctu_cfg.uart_baud[UART3_NO], &ctu_cfg.uart_check[UART3_NO], RT_DEVICE_FLAG_INT_RX},
-//        {RT_NULL, UART6_NAME, &ctu_cfg.uart_protocol[UART6_NO], mb_queue_rx_send, RS485_UART_NO_2, 0, &ctu_cfg.uart_baud[UART6_NO], &ctu_cfg.uart_check[UART6_NO], RT_DEVICE_FLAG_DMA_RX | RT_DEVICE_FLAG_DMA_TX}
+// 串口设备
+rt_device_t uart_dev[UART_NO_MAXS] = {RT_NULL};
+uart_rx_manage rx_manage[UART_NO_MAXS] = {0};
+char *uart_dev_name[UART_NO_MAXS] = {
+#if defined(USR_USING_UART1)
+    "uart1",
+#endif
+#if defined(USR_USING_UART2)
+    "uart2",
+#endif
+#if defined(USR_USING_UART3)
+    "uart3",
+#endif
+#if defined(USR_USING_UART4)
+    "uart4",
+#endif
+#if defined(USR_USING_UART5)
+    "uart5",
+#endif
+#if defined(USR_USING_UART6)
+    "uart6",
+#endif
+#if defined(USR_USING_UART7)
+    "uart7",
+#endif
+#if defined(USR_USING_UART8)
+    "uart8",
+#endif
 };
 
 
@@ -68,11 +78,11 @@ rt_err_t uart_rx_callback(rt_device_t dev, rt_size_t size)
 
     RT_UNUSED(size);
 
-    for(int i = 0; i < countof(uart_dev); ++i)
+    for(int i = 0; i < UART_NO_MAXS; ++i)
     {
-        if(dev == uart_dev[i].dev)
+        if(dev == uart_dev[i])
         {
-            uart_rx_manage *rx = &uart_dev[i].rx_manage;
+            uart_rx_manage *rx = &rx_manage[i];
 
             // 接收回调只负责读取、保存数据和刷新时间，不在中断中判断或解析报文
             while(rt_device_read(dev, 0, &data, 1) == 1)
@@ -126,27 +136,27 @@ static rt_bool_t uart_take_timeout_frame(uart_rx_manage *rx)
 }
 
 // 在线程中分发完整帧，rx_app 由具体协议模块注册，未注册时只完成收帧
-static void uart_dispatch_frame(uint16_t uart_no, uart_device *uart)
+static void uart_dispatch_frame(uint16_t uart_no, rt_device_t *uart)
 {
-    uart_rx_manage *rx = &uart->rx_manage;
+    uart_rx_manage *rx = &rx_manage[uart_no];
 
     if(rx->frame_overflow == RT_TRUE)
     {
         // 超长帧已经不完整，继续解析可能产生错误，因此直接丢弃
-        rt_kprintf("%s rx frame overflow, frame dropped\n", uart->uart_name);
+        rt_kprintf("uart%d rx frame overflow, frame dropped\n", uart_no);
         rx->frame_len = 0;
         rx->frame_overflow = RT_FALSE;
         return;
     }
 
-    if(uart->rx_app != RT_NULL)
-    {
-        uart->rx_app(uart_no,
-                     rx->frame_buf,
-                     (uint16_t)rx->frame_len,
-                     uart->buf_type,
-                     *uart->uart_protocol);
-    }
+//    if(uart->rx_app != RT_NULL)
+//    {
+//        uart->rx_app(uart_no,
+//                     rx->frame_buf,
+//                     (uint16_t)rx->frame_len,
+//                     uart->buf_type,
+//                     *uart->uart_protocol);
+//    }
 
     // 本帧处理结束后清除帧状态，frame_buf 的内容无需专门清零
     rx->frame_len = 0;
@@ -161,12 +171,12 @@ rt_size_t uart_mgmt_write(uint16_t uart_no, const void *buffer, rt_size_t size)
         return 0;
     }
 
-    if(uart_dev[uart_no].dev == RT_NULL)
+    if(uart_dev[uart_no] == RT_NULL)
     {
         return 0;
     }
 
-    return rt_device_write(uart_dev[uart_no].dev, 0, buffer, size);
+    return rt_device_write(uart_dev[uart_no], 0, buffer, size);
 }
 
 // 给指定串口注册完整帧处理函数，不同协议可分别绑定到不同串口
@@ -177,7 +187,7 @@ rt_err_t uart_mgmt_set_rx_app(uint16_t uart_no, uart_rx_app_t rx_app)
         return -RT_EINVAL;
     }
 
-    uart_dev[uart_no].rx_app = rx_app;
+//    uart_dev[uart_no].rx_app = rx_app;
     return RT_EOK;
 }
 
@@ -185,19 +195,19 @@ void get_uart_check(uint8_t check_bit, uart_check *p_check)
 {
     switch(check_bit)
     {
-    case 0:
+    case UART_CHECK_8N1:
         p_check->uart_data_bits = DATA_BITS_8;
-        p_check->uart_parity = PARITY_NONE;
+        p_check->uart_parity    = PARITY_NONE;
         p_check->uart_stop_bits = STOP_BITS_1;
         break;
-    case 1:
+    case UART_CHECK_8O1:
         p_check->uart_data_bits = DATA_BITS_9;
-        p_check->uart_parity = PARITY_ODD;
+        p_check->uart_parity    = PARITY_ODD;
         p_check->uart_stop_bits = STOP_BITS_1;
         break;
-    case 2:
+    case UART_CHECK_8E1:
         p_check->uart_data_bits = DATA_BITS_9;
-        p_check->uart_parity = PARITY_EVEN;
+        p_check->uart_parity    = PARITY_EVEN;
         p_check->uart_stop_bits = STOP_BITS_1;
         break;
     default:
@@ -207,18 +217,16 @@ void get_uart_check(uint8_t check_bit, uart_check *p_check)
 
 void uart_init(void)
 {
-    for(int i = 0; i < countof(uart_dev); ++i)
-    {
+    for(int i = 0; i < UART_NO_MAXS; ++i){
         // 将毫秒转换为系统节拍，低节拍系统中转换结果至少取 1 tick
-        uart_dev[i].rx_manage.timeout_tick = rt_tick_from_millisecond(UART_FRAME_TIMEOUT_MS);
-        if(uart_dev[i].rx_manage.timeout_tick == 0)
+        rx_manage[i].timeout_tick = rt_tick_from_millisecond(UART_FRAME_TIMEOUT_MS);
+        if(rx_manage[i].timeout_tick == 0)
         {
-            uart_dev[i].rx_manage.timeout_tick = 1;
+            rx_manage[i].timeout_tick = 1;
         }
 
-        uart_dev[i].dev = rt_device_find(uart_dev[i].uart_name);
-        if(uart_dev[i].dev != RT_NULL)
-        {
+        uart_dev[i] = rt_device_find(uart_dev_name[i]);
+        if(uart_dev[i] != RT_NULL){
             uart_check _uart_check = {0};
             get_uart_check(ctu_cfg.uart_check[i], &_uart_check);
             struct serial_configure config = RT_SERIAL_CONFIG_DEFAULT;  // 初始化配置参数
@@ -229,19 +237,14 @@ void uart_init(void)
             config.parity    = _uart_check.uart_parity;
 
             // step3：通过控制接口配置串口设备
-            rt_device_control(uart_dev[i].dev, RT_DEVICE_CTRL_CONFIG, &config);
+            rt_device_control(uart_dev[i], RT_DEVICE_CTRL_CONFIG, &config);
 
             // step4：以中断接收及轮询发送模式打开串口设备
-            rt_device_open(uart_dev[i].dev, uart_dev[i].oflag);
+            rt_device_open(uart_dev[i], RT_DEVICE_FLAG_INT_RX);
 
-            rt_device_set_rx_indicate(uart_dev[i].dev, uart_rx_callback);
-//            uart_tim_create(uart_dev[i].dev);
+            rt_device_set_rx_indicate(uart_dev[i], uart_rx_callback);
         }
     }
-    rt_pin_mode(GET_PIN(A, 8), PIN_MODE_OUTPUT);
-    rt_pin_write(GET_PIN(A, 8), PIN_HIGH);
-    uint8_t buf[8] = {0x01, 0x03, 0x00, 0x00, 0x00, 0x01, 0x84, 0x0A};
-    rt_device_write(uart_dev[0].dev, 0, buf, sizeof(buf));
 }
 
 
@@ -252,10 +255,10 @@ void uart_mgmt_thread_entry(void *parameter)
     while(1)
     {
         // 轮询各串口的帧间静默时间，完整帧判断和业务分发全部在线程中执行
-        for(int i = 0; i < countof(uart_dev); ++i)
+        for(int i = 0; i < UART_NO_MAXS; ++i)
         {
-            if((uart_dev[i].dev != RT_NULL) &&
-               (uart_take_timeout_frame(&uart_dev[i].rx_manage) == RT_TRUE))
+            if((uart_dev[i] != RT_NULL) &&
+               (uart_take_timeout_frame(&rx_manage[i]) == RT_TRUE))
             {
                 uart_dispatch_frame((uint16_t)i, &uart_dev[i]);
             }

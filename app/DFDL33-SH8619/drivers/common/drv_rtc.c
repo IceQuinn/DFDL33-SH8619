@@ -212,16 +212,18 @@ static rt_err_t _rtc_init(void)
     return RT_EOK;
 }
 
-static rt_err_t _rtc_get_secs(time_t *args)
+static rt_err_t _rtc_get_secs(void *arg)
 {
+    time_t *args = arg;
     *(rt_uint32_t *)args = get_rtc_timestamp();
     LOG_D("RTC: get rtc_time %x\n", *(rt_uint32_t *)args);
 
     return RT_EOK;
 }
 
-static rt_err_t _rtc_set_secs(time_t *args)
+static rt_err_t _rtc_set_secs(void *arg)
 {
+    time_t *args = arg;
     rt_err_t result = RT_EOK;
 
     if (set_rtc_time_stamp(*(rt_uint32_t *)args))
@@ -331,9 +333,10 @@ void Alarm_IRQHandler(void)
 }
 #endif
 
-static rt_err_t _rtc_get_alarm(struct rt_rtc_wkalarm *alarm)
+static rt_err_t _rtc_get_alarm(void *arg)
 {
 #ifdef RT_USING_ALARM
+    struct rt_rtc_wkalarm *alarm = arg;
     *alarm = rtc_device.wkalarm;
     LOG_D("GET_ALARM %d:%d:%d",rtc_device.wkalarm.tm_hour,
         rtc_device.wkalarm.tm_min,rtc_device.wkalarm.tm_sec);
@@ -343,10 +346,11 @@ static rt_err_t _rtc_get_alarm(struct rt_rtc_wkalarm *alarm)
 #endif
 }
 
-static rt_err_t _rtc_set_alarm(struct rt_rtc_wkalarm *alarm)
+static rt_err_t _rtc_set_alarm(void *arg)
 {
 #ifdef RT_USING_ALARM
     LOG_D("RT_DEVICE_CTRL_RTC_SET_ALARM");
+    struct rt_rtc_wkalarm *alarm = arg;
     if (alarm != RT_NULL)
     {
         rtc_device.wkalarm.enable = alarm->enable;
@@ -371,8 +375,9 @@ static rt_err_t _rtc_set_alarm(struct rt_rtc_wkalarm *alarm)
 #endif
 }
 
-static rt_err_t _rtc_get_timeval(struct timeval *tv)
+static rt_err_t _rtc_get_timeval(void *arg)
 {
+    struct timeval *tv = arg;
     tv->tv_sec = get_rtc_timestamp();
 
     return RT_EOK;
