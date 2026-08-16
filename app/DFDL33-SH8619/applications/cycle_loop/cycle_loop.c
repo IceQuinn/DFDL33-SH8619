@@ -25,23 +25,20 @@
 #define CYCLE_LOOP_RX_FRAME_SIZE            MODBUS_RTU_ADU_MAX
 
 /* 搜索分为固定探测和协议识别两个阶段，只有固定探测收到回复后才进入协议识别。 */
-typedef enum Cycle_Loop_Scan_Phase
-{
+typedef enum Cycle_Loop_Scan_Phase {
     CYCLE_LOOP_PHASE_PROBE = 0,         /* 使用03功能码、寄存器地址0、数量1搜索从站地址。 */
     CYCLE_LOOP_PHASE_FEATURE            /* 使用有效协议中的feature配置识别设备协议。 */
 } Cycle_Loop_Scan_Phase_t;
 
 /* 每个串口独立运行状态机，等待某个串口响应时仍可继续推进另外两个串口。 */
-typedef enum Cycle_Loop_Scan_State
-{
+typedef enum Cycle_Loop_Scan_State {
     CYCLE_LOOP_SCAN_READY = 0,          /* 当前串口可以组成并发送下一帧请求。 */
     CYCLE_LOOP_SCAN_WAIT_RESPONSE,      /* 请求已经完整写入串口，等待接收帧或者1秒超时。 */
     CYCLE_LOOP_SCAN_STOPPED             /* 地址或协议扫描结束，不再发送该串口请求。 */
 } Cycle_Loop_Scan_State_t;
 
 /* 单个串口的扫描上下文，三个实例分别保存扫描游标、超时节拍和接收邮箱。 */
-typedef struct Cycle_Loop_Uart_Context
-{
+typedef struct Cycle_Loop_Uart_Context {
     uint16_t uart_no;                   /* 串口管理层使用的通道下标，例如UART1_NO。 */
     Cycle_Loop_Scan_Phase_t phase;      /* 当前处于固定探测阶段还是协议识别阶段。 */
     Cycle_Loop_Scan_State_t state;      /* 当前串口状态机状态。 */
@@ -59,8 +56,7 @@ typedef struct Cycle_Loop_Uart_Context
 } Cycle_Loop_Uart_Context_t;
 
 /* 一项映射同时保存串口管理层编号和档案协议端口号，两套编号不要求数值相同。 */
-typedef struct Cycle_Loop_Port_Map
-{
+typedef struct Cycle_Loop_Port_Map {
     uint16_t uart_no;
     uint8_t archive_port;
 } Cycle_Loop_Port_Map_t;
@@ -69,8 +65,7 @@ typedef struct Cycle_Loop_Port_Map
 static Cycle_Loop_Uart_Context_t g_scan_uarts[CYCLE_LOOP_SCAN_PORT_COUNT];
 
 /* 自动搜索使用固定映射表，扫描取串口号，识别成功后再按串口号查询档案端口。 */
-static const Cycle_Loop_Port_Map_t g_scan_port_map[CYCLE_LOOP_SCAN_PORT_COUNT] =
-{
+static const Cycle_Loop_Port_Map_t g_scan_port_map[CYCLE_LOOP_SCAN_PORT_COUNT] = {
     {UART1_NO, INV_PORT_RS485_2},       /* UART1连接RS485-II。 */
     {UART3_NO, INV_PORT_RJ45_1},        /* UART3连接RJ45-I。 */
     {UART5_NO, INV_PORT_RJ45_2},        /* UART5连接RJ45-II。 */
@@ -81,10 +76,10 @@ static Cycle_Loop_Uart_Context_t *cycle_loop_find_uart(uint16_t uart_no)
 {
     uint8_t index;
 
-    for(index = 0U; index < CYCLE_LOOP_SCAN_PORT_COUNT; ++index)
-    {
-        if(g_scan_uarts[index].uart_no == uart_no)
-        {
+    /* 遍历三个扫描上下文，查找串口编号相同的上下文。 */
+    for(index = 0U; index < CYCLE_LOOP_SCAN_PORT_COUNT; ++index) {
+        /* 串口编号匹配时立即返回对应上下文。 */
+        if(g_scan_uarts[index].uart_no == uart_no) {
             return &g_scan_uarts[index];
         }
     }
@@ -98,15 +93,15 @@ static rt_bool_t cycle_loop_uart_to_archive_port(uint16_t uart_no,
 {
     uint8_t index;
 
-    if(archive_port == RT_NULL)
-    {
+    /* 输出指针为空时无法返回映射后的档案端口。 */
+    if(archive_port == RT_NULL) {
         return RT_FALSE;
     }
 
-    for(index = 0U; index < CYCLE_LOOP_SCAN_PORT_COUNT; ++index)
-    {
-        if(g_scan_port_map[index].uart_no == uart_no)
-        {
+    /* 遍历固定映射表，查找串口编号对应的档案端口。 */
+    for(index = 0U; index < CYCLE_LOOP_SCAN_PORT_COUNT; ++index) {
+        /* 找到串口编号后写入档案端口并结束查询。 */
+        if(g_scan_port_map[index].uart_no == uart_no) {
             *archive_port = g_scan_port_map[index].archive_port;
             return RT_TRUE;
         }
@@ -121,12 +116,10 @@ static void cycle_loop_print_frame(const Cycle_Loop_Uart_Context_t *context,
                                    const uint8_t *frame,
                                    uint16_t frame_len)
 {
-    rt_kprintf("[%08d] uart[%u] %s addr[%u] ",
-               (int)rt_tick_get(),
-               (unsigned int)context->uart_no,
-               request_type,
-               (unsigned int)context->slave_addr);
-    show_arr("request", frame, frame_len);
+    char frame_name[64];
+
+    rt_snprintf(frame_name, sizeof(frame_name), "uart[%d] %s addr[%d] request", context->uart_no, request_type, context->slave_addr);
+    show_arr(frame_name, frame, frame_len);
 }
 
 /* 解析完成后打印原始响应和解析结果，校验失败时也保留完整报文用于定位问题。 */
@@ -136,13 +129,10 @@ static void cycle_loop_print_response(const Cycle_Loop_Uart_Context_t *context,
                                       const uint8_t *frame,
                                       uint16_t frame_len)
 {
-    rt_kprintf("[%08d] uart[%u] %s addr[%u] parse[%u] ",
-               (int)rt_tick_get(),
-               (unsigned int)context->uart_no,
-               response_type,
-               (unsigned int)context->slave_addr,
-               (unsigned int)parse_result);
-    show_arr("response", frame, frame_len);
+    char frame_name[80];
+
+    rt_snprintf(frame_name, sizeof(frame_name), "uart[%d] %s addr[%d] parse[%d] response", context->uart_no, response_type, context->slave_addr, parse_result);
+    show_arr(frame_name, frame, frame_len);
 }
 
 /* 停止指定串口的搜索并清空该串口尚未处理的旧响应。 */
@@ -150,9 +140,7 @@ static void cycle_loop_stop_uart(Cycle_Loop_Uart_Context_t *context)
 {
     context->state = CYCLE_LOOP_SCAN_STOPPED;
     context->rx_ready = RT_FALSE;
-    rt_kprintf("[%08d] uart[%u] discovery stopped\n",
-               (int)rt_tick_get(),
-               (unsigned int)context->uart_no);
+    rt_kprintf("[%08d] uart[%d] discovery stopped\n", rt_tick_get(), context->uart_no);
 }
 
 /* 只有完整报文写入串口后才进入等待状态，避免发送失败也被误判成接收超时。 */
@@ -172,15 +160,10 @@ static rt_bool_t cycle_loop_send_frame(Cycle_Loop_Uart_Context_t *context,
 
     cycle_loop_print_frame(context, request_type, frame, frame_len);
     written_size = uart_mgmt_write(context->uart_no, frame, frame_len);
-    if(written_size != frame_len)
-    {
-        /* 部分写入同样属于失败，因为残缺的Modbus RTU帧不可能得到有效响应。 */
-        rt_kprintf("[%08d] uart[%u] %s request write failed, expected[%u], actual[%u]\n",
-                   (int)rt_tick_get(),
-                   (unsigned int)context->uart_no,
-                   request_type,
-                   (unsigned int)frame_len,
-                   (unsigned int)written_size);
+
+    /* 实际写入长度与报文长度不一致时，当前串口发送失败。 */
+    if(written_size != frame_len) {
+        rt_kprintf("[%08d] uart[%d] %s request write failed, expected[%d], actual[%d]\n", rt_tick_get(), context->uart_no, request_type, frame_len, written_size);
         cycle_loop_stop_uart(context);  /* 串口不可用时停止本端口，另外两个端口继续运行。 */
         return RT_FALSE;
     }
@@ -192,14 +175,14 @@ static rt_bool_t cycle_loop_send_frame(Cycle_Loop_Uart_Context_t *context,
 /* 固定探测超时后增加Modbus地址，地址10仍超时则停止该串口。 */
 static void cycle_loop_advance_probe_addr(Cycle_Loop_Uart_Context_t *context)
 {
-    if(context->slave_addr < CYCLE_LOOP_SCAN_ADDR_LAST)
-    {
+    /* 当前地址没有达到10时切换到下一个Modbus地址继续探测。 */
+    if(context->slave_addr < CYCLE_LOOP_SCAN_ADDR_LAST) {
         ++context->slave_addr;
         /* READY使下一次10ms调度立即按新地址重新组帧，不在本次超时处理中直接发送。 */
         context->state = CYCLE_LOOP_SCAN_READY;
     }
-    else
-    {
+    /* 地址10仍未收到响应时结束当前串口的探测。 */
+    else {
         cycle_loop_stop_uart(context);
     }
 }
@@ -231,12 +214,10 @@ static rt_bool_t cycle_loop_add_matched_archive(const Cycle_Loop_Uart_Context_t 
     uint8_t archive_port;
     int8_t archive_index;
 
+    /* 协议下标越界或串口无法映射到档案端口时不能生成档案。 */
     if((context->protocol_index >= INVERTER_PROTOCOL_LIBRARY_COUNT) ||
-       (cycle_loop_uart_to_archive_port(context->uart_no, &archive_port) == RT_FALSE))
-    {
-        rt_kprintf("[%08d] uart[%u] cannot map matched protocol to archive\n",
-                   (int)rt_tick_get(),
-                   (unsigned int)context->uart_no);
+       (cycle_loop_uart_to_archive_port(context->uart_no, &archive_port) == RT_FALSE)) {
+        rt_kprintf("[%08d] uart[%d] cannot map matched protocol to archive\n", rt_tick_get(), context->uart_no);
         return RT_FALSE;
     }
 
@@ -244,21 +225,14 @@ static rt_bool_t cycle_loop_add_matched_archive(const Cycle_Loop_Uart_Context_t 
     archive_index = Inv_Archive_Add_Device(context->slave_addr,
                                            archive_port,
                                            &protocol->mfr_info);
-    if(archive_index == INVERTER_ARCHIVE_ADD_FAILED)
-    {
-        rt_kprintf("[%08d] uart[%u] addr[%u] archive add failed\n",
-                   (int)rt_tick_get(),
-                   (unsigned int)context->uart_no,
-                   (unsigned int)context->slave_addr);
+
+    /* 档案库已满或档案参数无效时报告新增失败。 */
+    if(archive_index == INVERTER_ARCHIVE_ADD_FAILED) {
+        rt_kprintf("[%08d] uart[%d] addr[%d] archive add failed\n", rt_tick_get(), context->uart_no, context->slave_addr);
         return RT_FALSE;
     }
 
-    rt_kprintf("[%08d] uart[%u] addr[%u] added to archive slot[%u], port[%u]\n",
-               (int)rt_tick_get(),
-               (unsigned int)context->uart_no,
-               (unsigned int)context->slave_addr,
-               (unsigned int)((uint8_t)archive_index + 1U),
-               (unsigned int)archive_port);
+    rt_kprintf("[%08d] uart[%d] addr[%d] added to archive slot[%d], port[%d]\n", rt_tick_get(), context->uart_no, context->slave_addr, archive_index + 1, archive_port);
     return RT_TRUE;
 }
 
@@ -268,18 +242,15 @@ static void cycle_loop_send_probe_request(Cycle_Loop_Uart_Context_t *context)
     uint8_t frame[MODBUS_READ_REQUEST_LEN];
     uint16_t frame_len = 0U;
 
+    /* 固定探测请求组帧失败时停止当前串口，避免持续重复使用错误参数。 */
     if(modbus_m_read_request(context->slave_addr,
                              MODBUS_FUNC_READ_HOLDING,
                              CYCLE_LOOP_PROBE_REG_ADDR,
                              CYCLE_LOOP_PROBE_REG_COUNT,
                              frame,
                              sizeof(frame),
-                             &frame_len) != RT_EOK)
-    {
-        rt_kprintf("[%08d] uart[%u] addr[%u] probe request build failed\n",
-                   (int)rt_tick_get(),
-                   (unsigned int)context->uart_no,
-                   (unsigned int)context->slave_addr);
+                             &frame_len) != RT_EOK) {
+        rt_kprintf("[%08d] uart[%d] addr[%d] probe request build failed\n", rt_tick_get(), context->uart_no, context->slave_addr);
         cycle_loop_stop_uart(context);
         return;
     }
@@ -290,16 +261,16 @@ static void cycle_loop_send_probe_request(Cycle_Loop_Uart_Context_t *context)
 /* 选择下一条有效协议，根据其特征寄存器组成报文并发送。 */
 static void cycle_loop_send_feature_request(Cycle_Loop_Uart_Context_t *context)
 {
-    while(context->protocol_index < INVERTER_PROTOCOL_LIBRARY_COUNT)
-    {
+    /* 从当前协议下标开始查找下一条可以组成特征请求的有效协议。 */
+    while(context->protocol_index < INVERTER_PROTOCOL_LIBRARY_COUNT) {
         const Inv_Proto_t *protocol;
         Inv_Feature_t feature;
         uint8_t frame[MODBUS_READ_REQUEST_LEN];
         uint16_t frame_len = 0U;
 
+        /* 无效协议不组帧，直接移动到下一条协议。 */
         if(g_inv_proto_lib.valid[context->protocol_index] !=
-           INVERTER_PROTOCOL_VALID)
-        {
+           INVERTER_PROTOCOL_VALID) {
             ++context->protocol_index;  /* 无效协议不组帧，直接查找下一条协议。 */
             continue;
         }
@@ -312,18 +283,15 @@ static void cycle_loop_send_feature_request(Cycle_Loop_Uart_Context_t *context)
         context->feature_reg_cnt = feature.reg_cnt;
         context->feature_func_code = feature.read_func_code;
 
+        /* 特征寄存器配置无效时跳过当前协议，继续检查下一条协议。 */
         if(modbus_m_read_request(context->slave_addr,
                                  context->feature_func_code,
                                  context->feature_reg_addr,
                                  context->feature_reg_cnt,
                                  frame,
                                  sizeof(frame),
-                                 &frame_len) != RT_EOK)
-        {
-            rt_kprintf("[%08d] uart[%u] protocol[%u] feature register is invalid\n",
-                       (int)rt_tick_get(),
-                       (unsigned int)context->uart_no,
-                       (unsigned int)context->protocol_index);
+                                 &frame_len) != RT_EOK) {
+            rt_kprintf("[%08d] uart[%d] protocol[%d] feature register is invalid\n", rt_tick_get(), context->uart_no, context->protocol_index);
             ++context->protocol_index;
             continue;
         }
@@ -372,30 +340,18 @@ static void cycle_loop_handle_probe_response(Cycle_Loop_Uart_Context_t *context,
                                     &exception_code);
     cycle_loop_print_response(context, "probe", result, frame, frame_len);
 
-    if(result == MODBUS_M_PARSE_OK)
-    {
-        rt_kprintf("[%08d] uart[%u] addr[%u] probe response received\n",
-                   (int)rt_tick_get(),
-                   (unsigned int)context->uart_no,
-                   (unsigned int)context->slave_addr);
+    /* 正常响应通过全部校验时，确认当前Modbus地址存在设备。 */
+    if(result == MODBUS_M_PARSE_OK) {
+        rt_kprintf("[%08d] uart[%d] addr[%d] probe response received\n", rt_tick_get(), context->uart_no, context->slave_addr);
     }
+    /* CRC、地址及异常帧长度均正确的非法数据地址响应同样证明设备在线。 */
     else if((result == MODBUS_M_PARSE_EXCEPTION) &&
-            (exception_code == MODBUS_EXCEPTION_ILLEGAL_DATA_ADDRESS))
-    {
-        /* 非法数据地址说明从站已收到请求并返回合法异常帧，因此仍认为地址探测成功。 */
-        rt_kprintf("[%08d] uart[%u] addr[%u] probe exception[0x%02X], device online\n",
-                   (int)rt_tick_get(),
-                   (unsigned int)context->uart_no,
-                   (unsigned int)context->slave_addr,
-                   (unsigned int)exception_code);
+            (exception_code == MODBUS_EXCEPTION_ILLEGAL_DATA_ADDRESS)) {
+        rt_kprintf("[%08d] uart[%d] addr[%d] probe exception[%d], device online\n", rt_tick_get(), context->uart_no, context->slave_addr, exception_code);
     }
-    else
-    {
-        rt_kprintf("[%08d] uart[%u] ignored probe response, parse result[%u], exception[0x%02X]\n",
-                   (int)rt_tick_get(),
-                   (unsigned int)context->uart_no,
-                   (unsigned int)result,
-                   (unsigned int)exception_code);
+    /* 其他解析结果不能证明当前地址通信成功，立即切换下一地址。 */
+    else {
+        rt_kprintf("[%08d] uart[%d] ignored probe response, parse result[%d], exception[%d]\n", rt_tick_get(), context->uart_no, result, exception_code);
         /* 已收到一帧说明本次等待已经结束，解析失败按探测失败处理并立即尝试下一地址。 */
         cycle_loop_advance_probe_addr(context);
         return;
@@ -431,41 +387,26 @@ static void cycle_loop_handle_feature_response(Cycle_Loop_Uart_Context_t *contex
                                     &exception_code);
     cycle_loop_print_response(context, "feature", result, frame, frame_len);
 
-    if(result != MODBUS_M_PARSE_OK)
-    {
-        rt_kprintf("[%08d] uart[%u] ignored feature response, parse result[%u], exception[0x%02X]\n",
-                   (int)rt_tick_get(),
-                   (unsigned int)context->uart_no,
-                   (unsigned int)result,
-                   (unsigned int)exception_code);
+    /* 特征响应解析失败时不再等待超时，直接切换下一条有效协议。 */
+    if(result != MODBUS_M_PARSE_OK) {
+        rt_kprintf("[%08d] uart[%d] ignored feature response, parse result[%d], exception[%d]\n", rt_tick_get(), context->uart_no, result, exception_code);
         /* 已收到一帧后不再等待当前协议超时，解析失败直接查询下一条有效协议。 */
         cycle_loop_advance_protocol(context);
         return;
     }
 
+    /* 至少解析出一个寄存器并且首个值位于默认值正负10%范围时，协议匹配成功。 */
     if((register_count > 0U) &&
        (cycle_loop_feature_value_matches(registers[0],
-                                         context->feature_default_val) == RT_TRUE))
-    {
-        rt_kprintf("[%08d] uart[%u] found protocol[%u] addr[%u], feature[0x%04X], default[0x%04X]\n",
-                   (int)rt_tick_get(),
-                   (unsigned int)context->uart_no,
-                   (unsigned int)context->protocol_index,
-                   (unsigned int)context->slave_addr,
-                   (unsigned int)registers[0],
-                   (unsigned int)context->feature_default_val);
+                                         context->feature_default_val) == RT_TRUE)) {
+        rt_kprintf("[%08d] uart[%d] found protocol[%d] addr[%d], feature[%d], default[%d]\n", rt_tick_get(), context->uart_no, context->protocol_index, context->slave_addr, registers[0], context->feature_default_val);
         /* 识别成功后立即写入档案并保存Flash，无论保存结果如何都结束本串口搜索。 */
         cycle_loop_add_matched_archive(context);
         cycle_loop_stop_uart(context);
         return;
     }
 
-    rt_kprintf("[%08d] uart[%u] protocol[%u] feature[0x%04X] outside default[0x%04X] +/-10%%\n",
-               (int)rt_tick_get(),
-               (unsigned int)context->uart_no,
-               (unsigned int)context->protocol_index,
-               (unsigned int)((register_count > 0U) ? registers[0] : 0U),
-               (unsigned int)context->feature_default_val);
+    rt_kprintf("[%08d] uart[%d] protocol[%d] feature[%d] outside default[%d] +/-10%%\n", rt_tick_get(), context->uart_no, context->protocol_index, (register_count > 0U) ? registers[0] : 0U, context->feature_default_val);
     cycle_loop_advance_protocol(context); /* 合法响应但特征不匹配时立即测试下一条协议。 */
 }
 
@@ -475,12 +416,12 @@ static void cycle_loop_handle_response(Cycle_Loop_Uart_Context_t *context)
     uint8_t frame[CYCLE_LOOP_RX_FRAME_SIZE];
     uint16_t frame_len = cycle_loop_take_rx_frame(context, frame);
 
-    if(context->phase == CYCLE_LOOP_PHASE_PROBE)
-    {
+    /* 固定探测阶段使用固定03功能码响应解析逻辑。 */
+    if(context->phase == CYCLE_LOOP_PHASE_PROBE) {
         cycle_loop_handle_probe_response(context, frame, frame_len);
     }
-    else
-    {
+    /* 特征识别阶段使用当前协议的特征响应解析逻辑。 */
+    else {
         cycle_loop_handle_feature_response(context, frame, frame_len);
     }
 }
@@ -489,43 +430,36 @@ static void cycle_loop_handle_response(Cycle_Loop_Uart_Context_t *context)
 static void cycle_loop_process_uart(Cycle_Loop_Uart_Context_t *context,
                                     rt_tick_t now)
 {
-    switch(context->state)
-    {
+    /* 根据当前状态只推进状态机的一步，避免单个串口长时间占用线程。 */
+    switch(context->state) {
     case CYCLE_LOOP_SCAN_READY:
-        if(context->phase == CYCLE_LOOP_PHASE_PROBE)
-        {
+        /* 固定探测阶段发送地址探测请求。 */
+        if(context->phase == CYCLE_LOOP_PHASE_PROBE) {
             cycle_loop_send_probe_request(context);
         }
-        else
-        {
+        /* 特征识别阶段发送当前有效协议的特征寄存器请求。 */
+        else {
             cycle_loop_send_feature_request(context);
         }
         break;
 
     case CYCLE_LOOP_SCAN_WAIT_RESPONSE:
-        if(context->rx_ready == RT_TRUE)
-        {
+        /* 已收到完整报文时立即解析，不再计算本次请求是否超时。 */
+        if(context->rx_ready == RT_TRUE) {
             /* 收到任意完整帧即结束本次超时等待，解析结果负责决定下一地址或下一协议。 */
             cycle_loop_handle_response(context);
         }
         /* 使用无符号tick差值可兼容rt_tick_get()计数自然回绕。 */
         else if((rt_tick_t)(now - context->request_tick) >=
-                CYCLE_LOOP_RESPONSE_TIMEOUT_TICKS)
-        {
-            if(context->phase == CYCLE_LOOP_PHASE_PROBE)
-            {
-                rt_kprintf("[%08d] uart[%u] addr[%u] probe response timeout\n",
-                           (int)rt_tick_get(),
-                           (unsigned int)context->uart_no,
-                           (unsigned int)context->slave_addr);
+                CYCLE_LOOP_RESPONSE_TIMEOUT_TICKS) {
+            /* 固定探测超时后增加Modbus地址，地址10超时后停止端口。 */
+            if(context->phase == CYCLE_LOOP_PHASE_PROBE) {
+                rt_kprintf("[%08d] uart[%d] addr[%d] probe response timeout\n", rt_tick_get(), context->uart_no, context->slave_addr);
                 cycle_loop_advance_probe_addr(context);
             }
-            else
-            {
-                rt_kprintf("[%08d] uart[%u] protocol[%u] feature response timeout\n",
-                           (int)rt_tick_get(),
-                           (unsigned int)context->uart_no,
-                           (unsigned int)context->protocol_index);
+            /* 特征识别超时后保留设备地址，只切换到下一条有效协议。 */
+            else {
+                rt_kprintf("[%08d] uart[%d] protocol[%d] feature response timeout\n", rt_tick_get(), context->uart_no, context->protocol_index);
                 cycle_loop_advance_protocol(context);
             }
         }
@@ -544,29 +478,24 @@ static uint8_t cycle_loop_init_scan_uarts(void)
     uint8_t scan_count = 0U;
 
     rt_memset(g_scan_uarts, 0, sizeof(g_scan_uarts));
-    for(index = 0U; index < CYCLE_LOOP_SCAN_PORT_COUNT; ++index)
-    {
+
+    /* 三个物理串口分别判断对应档案端口是否空闲。 */
+    for(index = 0U; index < CYCLE_LOOP_SCAN_PORT_COUNT; ++index) {
         /* 扫描上下文只保存串口号，写档案时再通过映射函数查询档案端口。 */
         g_scan_uarts[index].uart_no = g_scan_port_map[index].uart_no;
         g_scan_uarts[index].phase = CYCLE_LOOP_PHASE_PROBE;
         g_scan_uarts[index].slave_addr = CYCLE_LOOP_SCAN_ADDR_FIRST;
 
-        if(Inv_Archive_Port_Is_Occupied(g_scan_port_map[index].archive_port) != 0U)
-        {
+        /* 端口已有有效档案时跳过自动识别，避免干扰已建档设备。 */
+        if(Inv_Archive_Port_Is_Occupied(g_scan_port_map[index].archive_port) != 0U) {
             g_scan_uarts[index].state = CYCLE_LOOP_SCAN_STOPPED;
-            rt_kprintf("[%08d] uart[%u] archive port[%u] occupied, discovery skipped\n",
-                       (int)rt_tick_get(),
-                       (unsigned int)g_scan_port_map[index].uart_no,
-                       (unsigned int)g_scan_port_map[index].archive_port);
+            rt_kprintf("[%08d] uart[%d] archive port[%d] occupied, discovery skipped\n", rt_tick_get(), g_scan_port_map[index].uart_no, g_scan_port_map[index].archive_port);
         }
-        else
-        {
+        /* 端口没有有效档案时启动独立的自动识别状态机。 */
+        else {
             g_scan_uarts[index].state = CYCLE_LOOP_SCAN_READY;
             ++scan_count;
-            rt_kprintf("[%08d] uart[%u] archive port[%u] free, discovery started\n",
-                       (int)rt_tick_get(),
-                       (unsigned int)g_scan_port_map[index].uart_no,
-                       (unsigned int)g_scan_port_map[index].archive_port);
+            rt_kprintf("[%08d] uart[%d] archive port[%d] free, discovery started\n", rt_tick_get(), g_scan_port_map[index].uart_no, g_scan_port_map[index].archive_port);
         }
     }
 
@@ -578,10 +507,10 @@ static rt_bool_t cycle_loop_all_scan_uarts_stopped(void)
 {
     uint8_t index;
 
-    for(index = 0U; index < CYCLE_LOOP_SCAN_PORT_COUNT; ++index)
-    {
-        if(g_scan_uarts[index].state != CYCLE_LOOP_SCAN_STOPPED)
-        {
+    /* 只要任意一个串口没有停止，自动识别流程就仍需继续运行。 */
+    for(index = 0U; index < CYCLE_LOOP_SCAN_PORT_COUNT; ++index) {
+        /* 当前串口仍在发送或等待响应时返回未全部停止。 */
+        if(g_scan_uarts[index].state != CYCLE_LOOP_SCAN_STOPPED) {
             return RT_FALSE;
         }
     }
@@ -592,16 +521,13 @@ static rt_bool_t cycle_loop_all_scan_uarts_stopped(void)
 /* 周期抄读暂未实现，当前只保留明确的流程切换点供后续接入。 */
 static void cycle_loop_enter_periodic_read(void)
 {
-    if(g_inv_archive_lib.count == 0U)
-    {
-        rt_kprintf("[%08d] no valid archive, periodic read skipped\n",
-                   (int)rt_tick_get());
+    /* 没有有效档案时不进入周期抄读。 */
+    if(g_inv_archive_lib.count == 0U) {
+        rt_kprintf("[%08d] no valid archive, periodic read skipped\n", rt_tick_get());
     }
-    else
-    {
-        rt_kprintf("[%08d] archive count[%u], enter periodic read placeholder\n",
-                   (int)rt_tick_get(),
-                   (unsigned int)g_inv_archive_lib.count);
+    /* 存在有效档案时进入预留的周期抄读切换点。 */
+    else {
+        rt_kprintf("[%08d] archive count[%d], enter periodic read placeholder\n", rt_tick_get(), g_inv_archive_lib.count);
     }
 }
 
@@ -612,22 +538,24 @@ rt_err_t cycle_loop_rx_frame(uint16_t uart_no,
     Cycle_Loop_Uart_Context_t *context;
     rt_base_t level;
 
+    /* 报文指针为空、长度为0或超过接收邮箱容量时拒绝接收。 */
     if((frame == RT_NULL) || (frame_len == 0U) ||
-       (frame_len > CYCLE_LOOP_RX_FRAME_SIZE))
-    {
+       (frame_len > CYCLE_LOOP_RX_FRAME_SIZE)) {
         return -RT_EINVAL;
     }
 
     context = cycle_loop_find_uart(uart_no);
+
+    /* 非扫描串口或当前没有等待响应时，不允许向状态机提交报文。 */
     if((context == RT_NULL) ||
-       (context->state != CYCLE_LOOP_SCAN_WAIT_RESPONSE))
-    {
+       (context->state != CYCLE_LOOP_SCAN_WAIT_RESPONSE)) {
         return -RT_EBUSY;               /* 非扫描端口或非等待状态不接收响应。 */
     }
 
     level = rt_hw_interrupt_disable();
-    if(context->rx_ready == RT_TRUE)
-    {
+
+    /* 上一帧尚未处理时禁止覆盖单帧邮箱。 */
+    if(context->rx_ready == RT_TRUE) {
         rt_hw_interrupt_enable(level);
         return -RT_EBUSY;               /* 旧响应未处理时禁止覆盖单帧邮箱。 */
     }
@@ -649,24 +577,23 @@ void cycle_loop_thread_entry(void *parameter)
     /* 无论存档count为何值都重新校验有效槽位，防止协议库变化后档案仍被误用。 */
     Inv_Archive_Validate_Protocols();
     scan_count = cycle_loop_init_scan_uarts();
-    if(scan_count == 0U)
-    {
-        rt_kprintf("[%08d] no free wired port, discovery is not required\n",
-                   (int)rt_tick_get());
+
+    /* 三个有线端口均被有效档案占用时不需要启动自动识别。 */
+    if(scan_count == 0U) {
+        rt_kprintf("[%08d] no free wired port, discovery is not required\n", rt_tick_get());
     }
 
-    while(cycle_loop_all_scan_uarts_stopped() == RT_FALSE)
-    {
+    /* 任意串口仍在识别时持续轮询三个独立状态机。 */
+    while(cycle_loop_all_scan_uarts_stopped() == RT_FALSE) {
         rt_tick_t now = rt_tick_get();
 
         /* 顺序推进三个独立状态机，不会等待前一个串口超时后才处理下一个串口。 */
-        for(index = 0U; index < CYCLE_LOOP_SCAN_PORT_COUNT; ++index)
-        {
+        for(index = 0U; index < CYCLE_LOOP_SCAN_PORT_COUNT; ++index) {
             cycle_loop_process_uart(&g_scan_uarts[index], now);
         }
 
-        if(cycle_loop_all_scan_uarts_stopped() == RT_FALSE)
-        {
+        /* 仍有端口运行时延时10ms，避免轮询线程持续占满CPU。 */
+        if(cycle_loop_all_scan_uarts_stopped() == RT_FALSE) {
             rt_thread_mdelay(CYCLE_LOOP_THREAD_POLL_MS);
         }
     }

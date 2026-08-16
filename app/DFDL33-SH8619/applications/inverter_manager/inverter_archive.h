@@ -11,6 +11,9 @@
 extern "C" {
 #endif
 
+/* 协议结构体在inverter_protocol_library.h中定义，这里只声明运行时指针类型。 */
+struct Inv_Proto;
+
 #define INVERTER_ARCHIVE_MAX_COUNT          12U
 #define INVERTER_ARCHIVE_BRAND_WIRE_SIZE    32U
 #define INVERTER_ARCHIVE_PROTOCOL_VERSION_SIZE  2U
@@ -19,7 +22,7 @@ extern "C" {
 #define INVERTER_ARCHIVE_ADDRESS_UNUSED     0xFFU
 #define INVERTER_ARCHIVE_PROTOCOL_UNKNOWN_BYTE  0xFFU
 
-#define INVERTER_ARCHIVE_LIBRARY_VERSION           1U   // 档案库版本号
+#define INVERTER_ARCHIVE_LIBRARY_VERSION           2U   // 档案库版本号
 #define INVERTER_ARCHIVE_INVALID                   0U   // 无效档案
 #define INVERTER_ARCHIVE_VALID                     1U   // 有效档案
 #define INVERTER_ARCHIVE_ADD_FAILED                (-1)
@@ -70,14 +73,6 @@ typedef struct Inv_Archive
 typedef char Inv_ArchiveSizeCheck_t[
     (sizeof(Inv_Archive_t) == INV_ARCHIVE_SIZE) ? 1 : -1];
 
-/* 单个档案库槽位：valid为1表示archive有效，valid为0表示空槽。 */
-typedef struct Inv_ArchiveSlot
-{
-    uint8_t valid;
-    Inv_Archive_t archive;
-} Inv_ArchiveSlot_t;
-
-
 /* 逆变器档案库，固定提供12个槽位，槽位下标0~11对应档案编号1~12。 */
 typedef struct Inv_ArchiveLib
 {
@@ -87,20 +82,23 @@ typedef struct Inv_ArchiveLib
     /* 当前有效档案数量，范围0~12。 */
     uint8_t count;
 
-    /* 固定档案槽位，不因删除中间档案而移动其他槽位。 */
-    Inv_ArchiveSlot_t slots[INVERTER_ARCHIVE_MAX_COUNT];
+    /* 每条档案对应一个有效标志：1表示有效，0表示空槽或无效。 */
+    uint8_t valid[INVERTER_ARCHIVE_MAX_COUNT];
+
+    /* 固定档案数组，不因删除中间档案而移动其他档案。 */
+    Inv_Archive_t archives[INVERTER_ARCHIVE_MAX_COUNT];
 } Inv_ArchiveLib_t;
 #pragma pack()
 
-#define INV_ARCHIVE_SLOT_SIZE               37U
 #define INV_ARCHIVE_LIB_SIZE                451U
-typedef char Inv_ArchiveSlotSizeCheck_t[
-    (sizeof(Inv_ArchiveSlot_t) == INV_ARCHIVE_SLOT_SIZE) ? 1 : -1];
 typedef char Inv_ArchiveLibSizeCheck_t[
     (sizeof(Inv_ArchiveLib_t) == INV_ARCHIVE_LIB_SIZE) ? 1 : -1];
 
-/* 全局逆变器档案库变量，应用程序可直接按照固定槽位读取或填写档案。 */
+/* 同一下标的valid[index]与archives[index]共同描述一个固定档案槽位。 */
 extern Inv_ArchiveLib_t g_inv_archive_lib;
+
+/* 运行时协议指针表与档案槽位一一对应，指针不写入Flash。 */
+extern const struct Inv_Proto *g_inv_archive_proto[INVERTER_ARCHIVE_MAX_COUNT];
 
 /* 新增或更新一条档案并保存到Flash，成功返回0～11槽位下标，失败返回-1。 */
 int8_t Inv_Archive_Add(const Inv_Archive_t *archive);
@@ -112,6 +110,9 @@ int8_t Inv_Archive_Add_Device(uint8_t mb_addr,
 
 /* 校验全部有效档案，没有对应有效协议的档案会被置无效并保存。 */
 void Inv_Archive_Validate_Protocols(void);
+
+/* 按0～11档案槽位获取对应协议，槽位无效、未匹配或越界时返回NULL。 */
+const struct Inv_Proto *Inv_Archive_Get_Protocol(uint8_t archive_index);
 
 /* 指定接入端口存在有效档案时返回1，否则返回0。 */
 uint8_t Inv_Archive_Port_Is_Occupied(uint8_t port);

@@ -16,6 +16,7 @@
 extern "C" {
 #endif
 
+/* 打印档案库统计信息及全部固定档案槽位。 */
 void Inv_Archive_Print(void);
 
 #ifdef __cplusplus

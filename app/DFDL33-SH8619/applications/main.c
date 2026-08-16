@@ -22,16 +22,15 @@
 #include "cycle_loop.h"
 
 
-/* 线程结构体 */
-typedef struct
-{
+/* 应用线程创建参数表。 */
+typedef struct User_Thread_Table {
     char        *name;                                  /**< the name of thread */
     void        (*entry)(void *parameter);              /**entry the entry function of thread*/
     void        *parameter;                             /**parameter the parameter of thread enter function*/
-    rt_uint32_t stack_size;                             /**stack_size the size of thread stack*/
-    rt_uint8_t  priority;                               /**priority the priority of thread*/
-    rt_uint32_t tick;                                   /**tick the time slice if there are same priority thread*/
-}user_thread_table_typedef;
+    uint32_t stack_size;                                /**stack_size the size of thread stack*/
+    uint8_t priority;                                   /**priority the priority of thread*/
+    uint32_t tick;                                      /**tick the time slice if there are same priority thread*/
+} user_thread_table_typedef;
 
 const user_thread_table_typedef user_thread_table[] = {
     {"uart_mgmt",     uart_mgmt_thread_entry,      RT_NULL,    1024,   17, 15},    /* UART管理线程 */
@@ -49,46 +48,43 @@ const user_thread_table_typedef user_thread_table[] = {
         // {"645_sl",      dlt645_deal_thread_entry, NULL,     2048,   20, 15},    /* 645解析线程 */
 };
 
+/* 按线程参数表依次创建并启动全部应用线程。 */
 void user_thread_init(void)
 {
     rt_thread_t tid1 = RT_NULL;
-    for(uint16_t i=0; i<countof(user_thread_table); i++)
-    {
-        tid1 = rt_thread_create(user_thread_table[i].name,
-                user_thread_table[i].entry,
-                user_thread_table[i].parameter,
-                user_thread_table[i].stack_size,
-                user_thread_table[i].priority,
-                user_thread_table[i].tick);
-        if (tid1 != RT_NULL)
-        {
+    uint16_t index;
+
+    /* 遍历线程表，每次创建并启动一个应用线程。 */
+    for(index = 0U; index < countof(user_thread_table); ++index) {
+        tid1 = rt_thread_create(user_thread_table[index].name,
+                                user_thread_table[index].entry,
+                                user_thread_table[index].parameter,
+                                user_thread_table[index].stack_size,
+                                user_thread_table[index].priority,
+                                user_thread_table[index].tick);
+
+        /* 线程对象创建成功时立即启动线程。 */
+        if(tid1 != RT_NULL) {
             rt_thread_startup(tid1);
         }
-        else
-        {
-            LOG_E("%s thread create fail", user_thread_table[i].name);
+        /* 线程对象创建失败时记录线程名称，后续线程仍继续创建。 */
+        else {
+            LOG_E("%s thread create fail", user_thread_table[index].name);
         }
     }
 }
 
+/* 应用入口按照依赖顺序初始化基础模块、协议档案和业务线程。 */
 int main(void)
 {
-    Sys_Run_Time_Init();        //记录上电时间
+    Sys_Run_Time_Init();        /* 记录上电时间。 */
+    show_ctu_msg();             /* 打印装置信息。 */
+    flash_init();               /* 初始化外部Flash。 */
+    Ctu_Cfg_Init();             /* 装载装置配置。 */
+    uart_init();                /* 初始化串口后才能启动通信线程。 */
+    Inv_Proto_Init();           /* 协议库必须先于档案库初始化。 */
+    Inv_Archive_Init();         /* 装载档案并建立运行时协议指针。 */
 
-    show_ctu_msg();             //打印装置信息
-
-    flash_init();               //flash_sfud初始化
-
-    Ctu_Cfg_Init();
-
-    uart_init();
-
-    Inv_Proto_Init();             //逆变器协议库初始化
-
-    Inv_Archive_Init();             // 档案校验
-
-    user_thread_init();
-
-
+    user_thread_init();         /* 基础资源就绪后创建应用线程。 */
     return RT_EOK;
 }

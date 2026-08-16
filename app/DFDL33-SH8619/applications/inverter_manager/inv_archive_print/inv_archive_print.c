@@ -13,90 +13,107 @@
 
 #include <rtthread.h>
 
-static void inv_archive_copy_mfr_name(
-    char output[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U],
-    const char input[INVERTER_ARCHIVE_BRAND_WIRE_SIZE])
+/* 将档案中的固定32字节厂家名称转换为以'\0'结束的可打印字符串。 */
+static void inv_archive_copy_mfr_name(char output[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U],
+                                      const char input[INVERTER_ARCHIVE_BRAND_WIRE_SIZE])
 {
     uint8_t index;
 
-    for (index = 0U; index < INVERTER_ARCHIVE_BRAND_WIRE_SIZE; ++index)
-    {
+    /* 逐字节复制厂家名称，遇到结束符或Flash空白值时停止。 */
+    for(index = 0U; index < INVERTER_ARCHIVE_BRAND_WIRE_SIZE; ++index) {
         uint8_t character = (uint8_t)input[index];
 
-        if ((character == 0U) || (character == 0xFFU))
-        {
+        /* 字符串结束符和Flash擦除值0xFF都表示厂家名称结束。 */
+        if((character == 0U) || (character == 0xFFU)) {
             break;
         }
 
-        output[index] = ((character >= 0x20U) && (character <= 0x7EU))
-                            ? (char)character
-                            : '?';
+        /* 可打印ASCII字符原样保存，其他字符替换为问号。 */
+        if((character >= 0x20U) && (character <= 0x7EU)) {
+            output[index] = (char)character;
+        }
+        else {
+            output[index] = '?';
+        }
     }
+
     output[index] = '\0';
 }
 
+/* 将档案端口编号转换为便于日志查看的端口名称。 */
 static const char *inv_archive_port_name(uint8_t port)
 {
-    switch (port)
-    {
-    case INV_PORT_RJ45_1:    return "RJ45-I";
-    case INV_PORT_RJ45_2:    return "RJ45-II";
-    case INV_PORT_RS485_2:   return "RS485-II";
-    case INV_PORT_WIRELESS:  return "WIRELESS";
-    default:                 return "UNKNOWN";
+    /* 每个有效端口返回固定名称，未知端口统一返回UNKNOWN。 */
+    switch(port) {
+    case INV_PORT_RJ45_1:
+        return "RJ45-I";
+
+    case INV_PORT_RJ45_2:
+        return "RJ45-II";
+
+    case INV_PORT_RS485_2:
+        return "RS485-II";
+
+    case INV_PORT_WIRELESS:
+        return "WIRELESS";
+
+    default:
+        return "UNKNOWN";
     }
 }
 
+/* 打印档案库统计信息及全部固定档案槽位。 */
 void Inv_Archive_Print(void)
 {
     uint8_t index;
     uint8_t valid_count = 0U;
 
-    for (index = 0U; index < INVERTER_ARCHIVE_MAX_COUNT; ++index)
-    {
-        if (g_inv_archive_lib.slots[index].valid == INVERTER_ARCHIVE_VALID)
-        {
+    /* 打印前重新统计有效槽位，便于对比档案库中保存的count。 */
+    for(index = 0U; index < INVERTER_ARCHIVE_MAX_COUNT; ++index) {
+        /* 当前槽位有效时累计实际有效数量。 */
+        if(g_inv_archive_lib.valid[index] == INVERTER_ARCHIVE_VALID) {
             ++valid_count;
         }
     }
 
-    rt_kprintf("\nArchive library: valid count=%u, stored count=%u, capacity=%u\n",
-               (unsigned int)valid_count,
-               (unsigned int)g_inv_archive_lib.count,
-               (unsigned int)INVERTER_ARCHIVE_MAX_COUNT);
-    rt_kprintf("%-5s %-11s %-15s %-32s %-13s %-18s\n",
-               "No.", "Valid", "Modbus address", "Manufacturer",
-               "Protocol ver", "Access port");
+    rt_kprintf("[%08d] Archive library: valid count=%d, stored count=%d, capacity=%d\n", rt_tick_get(), valid_count, g_inv_archive_lib.count, INVERTER_ARCHIVE_MAX_COUNT);
+    rt_kprintf("[%08d] %-5s %-11s %-15s %-32s %-13s %-18s\n", rt_tick_get(), "No.", "Valid", "Modbus address", "Manufacturer", "Protocol ver", "Access port");
 
-    for (index = 0U; index < INVERTER_ARCHIVE_MAX_COUNT; ++index)
-    {
-        const Inv_ArchiveSlot_t *slot = &g_inv_archive_lib.slots[index];
+    /* 逐槽位打印档案内容，无效槽位也保留输出以便检查Flash数据。 */
+    for(index = 0U; index < INVERTER_ARCHIVE_MAX_COUNT; ++index) {
+        const Inv_Archive_t *archive = &g_inv_archive_lib.archives[index];
+        const char *manufacturer_text;
+        const char *valid_text;
+        uint8_t valid = g_inv_archive_lib.valid[index];
         char manufacturer[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U];
         char modbus_address[16];
 
-        inv_archive_copy_mfr_name(manufacturer, slot->archive.mfr_info.name);
-        rt_snprintf(modbus_address,
-                    sizeof(modbus_address),
-                    "0x%02X(%-3u)",
-                    (unsigned int)slot->archive.mb_addr,
-                    (unsigned int)slot->archive.mb_addr);
-        rt_kprintf("%-5u %-7s(%u)  %-15s %-32s 0x%02X%02X        %u(%s)\n",
-                   (unsigned int)(index + 1U),
-                   slot->valid == INVERTER_ARCHIVE_VALID ? "VALID" : "INVALID",
-                   (unsigned int)slot->valid,
-                   modbus_address,
-                   manufacturer[0] != '\0' ? manufacturer : "(empty)",
-                   (unsigned int)slot->archive.mfr_info.proto_ver[0],
-                   (unsigned int)slot->archive.mfr_info.proto_ver[1],
-                   (unsigned int)slot->archive.port,
-                   inv_archive_port_name(slot->archive.port));
+        inv_archive_copy_mfr_name(manufacturer, archive->mfr_info.name);
+        rt_snprintf(modbus_address, sizeof(modbus_address), "%d", archive->mb_addr);
+
+        /* 厂家名称为空时使用固定文本，避免表格中该字段完全空白。 */
+        if(manufacturer[0] == '\0') {
+            manufacturer_text = "(empty)";
+        }
+        else {
+            manufacturer_text = manufacturer;
+        }
+
+        /* 有效标志转换为文本，同时保留后面的数值便于排查异常标志。 */
+        if(valid == INVERTER_ARCHIVE_VALID) {
+            valid_text = "VALID";
+        }
+        else {
+            valid_text = "INVALID";
+        }
+
+        rt_kprintf("[%08d] %-5d %-7s(%d)  %-15s %-32s %d.%d          %d(%s)\n", rt_tick_get(), index + 1, valid_text, valid, modbus_address, manufacturer_text, archive->mfr_info.proto_ver[0], archive->mfr_info.proto_ver[1], archive->port, inv_archive_port_name(archive->port));
     }
 
-    rt_kprintf("Printed %u archive slots, valid count=%u\n",
-               (unsigned int)INVERTER_ARCHIVE_MAX_COUNT,
-               (unsigned int)valid_count);
+    rt_kprintf("[%08d] Printed %d archive slots, valid count=%d\n", rt_tick_get(), INVERTER_ARCHIVE_MAX_COUNT, valid_count);
 }
 
+/* FinSH命令入口，调用统一档案打印接口。 */
 static int inv_archive_print(void)
 {
     Inv_Archive_Print();
