@@ -14,6 +14,7 @@
 
 #include "ctu_cfg.h"
 #include "cycle_loop.h"
+#include "inv_data.h"
 
 /* 最后一个字节之后连续10ms没有新数据时，将当前串口数据截取为一帧。 */
 #define UART_RX_BUF_SIZE          256U
@@ -132,6 +133,7 @@ static rt_bool_t uart_take_timeout_frame(uart_rx_manage *rx)
 static void uart_dispatch_frame(uint16_t uart_no)
 {
     uart_rx_manage *rx = &rx_manage[uart_no];
+    rt_err_t result;
 
     /* 超长帧内容已经不完整，继续解析可能产生错误，因此直接丢弃。 */
     if(rx->frame_overflow == RT_TRUE) {
@@ -141,8 +143,14 @@ static void uart_dispatch_frame(uint16_t uart_no)
         return;
     }
 
-    /* 轮询模块只在WAIT_RESPONSE状态接收该串口帧，其他状态返回忙并丢弃本帧。 */
-    cycle_loop_rx_frame(uart_no, rx->frame_buf, (uint16_t)rx->frame_len);
+    /* 自动识别阶段优先接收报文，识别状态机没有等待响应时再交给周期抄读。 */
+    result = cycle_loop_rx_frame(uart_no, rx->frame_buf, (uint16_t)rx->frame_len);
+
+    /* 自动识别没有接收本帧时，尝试提交给周期抄读端口的独立接收邮箱。 */
+    if(result != RT_EOK) {
+        Inv_Data_Rx_Frame(uart_no, rx->frame_buf, (uint16_t)rx->frame_len);
+    }
+
     rx->frame_len = 0U;                 /* 本帧提交后释放frame_buf供下一帧使用。 */
     rx->frame_overflow = RT_FALSE;
 }

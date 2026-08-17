@@ -10,6 +10,7 @@
 
 #include "inverter_archive.h"
 #include "inverter_protocol_library.h"
+#include "inv_data.h"
 #include "modbus_master.h"
 #include "uart_def.h"
 #include "main_uart.h"
@@ -518,16 +519,17 @@ static rt_bool_t cycle_loop_all_scan_uarts_stopped(void)
     return RT_TRUE;
 }
 
-/* 周期抄读暂未实现，当前只保留明确的流程切换点供后续接入。 */
+/* 自动识别结束后，有效档案进入三个端口并行推进的周期抄读主循环。 */
 static void cycle_loop_enter_periodic_read(void)
 {
     /* 没有有效档案时不进入周期抄读。 */
     if(g_inv_archive_lib.count == 0U) {
         rt_kprintf("[%08d] no valid archive, periodic read skipped\n", rt_tick_get());
     }
-    /* 存在有效档案时进入预留的周期抄读切换点。 */
+    /* 存在有效档案时进入周期抄读，后续由该循环持续推进三个端口状态机。 */
     else {
-        rt_kprintf("[%08d] archive count[%d], enter periodic read placeholder\n", rt_tick_get(), g_inv_archive_lib.count);
+        rt_kprintf("[%08d] archive count[%d], periodic read started\n", rt_tick_get(), g_inv_archive_lib.count);
+        Inv_Data_Poll_Loop();
     }
 }
 
@@ -598,6 +600,6 @@ void cycle_loop_thread_entry(void *parameter)
         }
     }
 
-    /* 没有空闲端口或所有空闲端口识别结束后，统一切换到周期抄读阶段。 */
+    /* 没有空闲端口或所有空闲端口识别结束后，统一进入周期抄读主循环。 */
     cycle_loop_enter_periodic_read();
 }

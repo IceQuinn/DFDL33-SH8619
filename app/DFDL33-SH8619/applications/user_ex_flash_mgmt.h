@@ -26,5 +26,12 @@
 #define ARCH_LIB_ADDR_A                     (25     * EXTFLASH_PAGE_SIZE)
 #define ARCH_LIB_ADDR_B                     (26     * EXTFLASH_PAGE_SIZE)
 
+//--------------------------------------------------------------------------------事件记录区--------------------------------
+// 自检事项
+#define FLASH_SELF_CHECK_EVENT_A_ADDR   (144    * EXTFLASH_PAGE_SIZE)   // 4个扇区
+#define FLASH_SELF_CHECK_EVENT_B_ADDR   (148    * EXTFLASH_PAGE_SIZE)   // 4个扇区
+// 操作事项
+#define FLASH_OPERATE_EVENT_A_ADDR      (152    * EXTFLASH_PAGE_SIZE)   // 4个扇区
+#define FLASH_OPERATE_EVENT_B_ADDR      (156    * EXTFLASH_PAGE_SIZE)   // 4个扇区
 
 #endif /* APPLICATIONS_USER_EX_FLASH_MGMT_H_ */

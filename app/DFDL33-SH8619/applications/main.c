@@ -20,6 +20,7 @@
 #include "ctu_cfg.h"
 #include "main_uart.h"
 #include "cycle_loop.h"
+#include "event_deal.h"
 
 
 /* 应用线程创建参数表。 */
@@ -37,7 +38,7 @@ const user_thread_table_typedef user_thread_table[] = {
     {"measure",     cycle_loop_thread_entry,      RT_NULL,    4096,   17, 15},    /* 计量线程 */
         // {"meas_data",   meas_data_deal,         RT_NULL,    1024,   22, 15},    /* 测量数据线程 */
         // {"record",      Record_Wave_Thread,     RT_NULL,    1024,   6,  15},    /* 录波线程 */
-        // {"event",       Event_Deal_Loop,        RT_NULL,    1024,   30, 10},    /* 事件记录线程 */
+    {"event",       Event_Deal_Loop,        RT_NULL,    1024,   30, 10},    /* 事件记录线程 */
         // {"btn",         btn_thread_entry,       RT_NULL,    768,    9,  10},    /* 按键线程 */
         // {"ui",          ui_loop,                RT_NULL,    2048,   26, 10},    /* 显示线程 */
         // {"relay",       relay_thread_entry,     RT_NULL,    768,    8,  10},    /* 保护+交流量计算线程 */
@@ -84,7 +85,7 @@ int main(void)
     uart_init();                /* 初始化串口后才能启动通信线程。 */
     Inv_Proto_Init();           /* 协议库必须先于档案库初始化。 */
     Inv_Archive_Init();         /* 装载档案并建立运行时协议指针。 */
-
+    Event_Init();               /* 事件初始化 */
     user_thread_init();         /* 基础资源就绪后创建应用线程。 */
     return RT_EOK;
 }

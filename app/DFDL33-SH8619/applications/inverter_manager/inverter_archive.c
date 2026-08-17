@@ -186,14 +186,10 @@ const struct Inv_Proto *Inv_Archive_Get_Protocol(uint8_t archive_index)
 /* 查询指定端口是否已被任意一个有效档案占用。 */
 uint8_t Inv_Archive_Port_Is_Occupied(uint8_t port)
 {
-    uint8_t archive_index;
-
     /* 遍历全部固定槽位，查找端口号相同的有效档案。 */
-    for(archive_index = 0U; archive_index < INVERTER_ARCHIVE_MAX_COUNT; ++archive_index) {
-        const Inv_Archive_t *archive = &g_inv_archive_lib.archives[archive_index];
-
+    for(uint8_t i = 0; i < INVERTER_ARCHIVE_MAX_COUNT; ++i) {
         /* 档案有效并且端口号相同时，说明该端口已经被占用。 */
-        if((g_inv_archive_lib.valid[archive_index] == INVERTER_ARCHIVE_VALID) && (archive->port == port)) {
+        if((g_inv_archive_lib.valid[i] == INVERTER_ARCHIVE_VALID) && (g_inv_archive_lib.archives[i].port == port)) {
             return 1U;
         }
     }

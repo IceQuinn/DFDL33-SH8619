@@ -11,7 +11,9 @@
 #define APPLICATIONS_CYCLE_LOOP_INV_DATA_H_
 
 #include <stdint.h>
+#include <rtthread.h>
 
+#include "inverter_archive.h"
 #include "meas_cfg.h"
 
 #ifdef __cplusplus
@@ -42,6 +44,9 @@ typedef struct Inv_RealtimeString
 
     /* 最近一次成功更新时rt_tick_get()返回的tick。 */
     uint32_t update_tick;
+
+    /* value中不包含字符串结束符的有效字节数量。 */
+    uint8_t length;
 
     /* 1表示value和update_tick有效，0表示尚未读取成功或本协议未配置设备编号。 */
     uint8_t valid;
@@ -87,6 +92,21 @@ typedef struct Inv_Data
     Inv_RealtimeParam_t param;  /* 周期或初始化抄读的参数类实时数据。 */
     Inv_RealtimeCtrl_t ctrl;    /* 最近一次控制类实时数据。 */
 } Inv_Data_t;
+
+/* 实时数据只保存在RAM中，下标与g_inv_archive_lib中的档案槽位一一对应。 */
+extern Inv_Data_t g_inv_data[INVERTER_ARCHIVE_MAX_COUNT];
+
+/* 初始化三个端口的独立周期抄读状态机，并清空全部档案实时数据。 */
+void Inv_Data_Init(void);
+
+/* 周期抄读主循环，三个有效端口的发送、接收和超时状态分别推进。 */
+void Inv_Data_Poll_Loop(void);
+
+/* 串口管理层调用本接口提交周期抄读阶段收到的一帧完整响应。 */
+rt_err_t Inv_Data_Rx_Frame(uint16_t uart_no, const uint8_t *frame, uint16_t frame_len);
+
+/* 按0～11档案槽位获取实时数据，槽位无效或越界时返回RT_NULL。 */
+Inv_Data_t *Inv_Data_Get(uint8_t archive_index);
 
 #ifdef __cplusplus
 }
