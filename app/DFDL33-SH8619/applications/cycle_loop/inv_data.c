@@ -25,6 +25,7 @@
 #define INV_DATA_POLL_TICKS               10U
 #define INV_DATA_RX_FRAME_SIZE            MODBUS_RTU_ADU_MAX
 #define INV_DATA_NUMERIC_BYTE_MAX          8U
+#define INV_DATA_PHASE_COMBINE_MAX         3U
 
 /* 每个端口的抄读状态独立变化，等待某一路响应时其他端口仍可继续发送或解析。 */
 typedef enum Inv_Data_Port_State {
@@ -55,7 +56,11 @@ typedef struct Inv_Data_Port_Context {
     uint8_t active_archive_index;            /* 当前已发送请求所属的档案槽位下标。 */
     uint8_t slave_addr;                      /* 当前已发送请求使用的Modbus从站地址。 */
     Inv_Data_Port_State_t state;             /* 当前端口处于可发送、等待响应或空闲状态。 */
-    Inv_Data_Point_Config_t active_point;    /* 当前已发送请求对应的数据点完整配置。 */
+    Inv_Data_Point_Config_t active_point;    /* 当前已发送请求中第一个数据点的完整配置。 */
+    Inv_Data_Point_Config_t combined_points[INV_DATA_PHASE_COMBINE_MAX - 1U]; /* 连续读取时追加的三相电压或三相电流数据点。 */
+    uint8_t active_point_index;              /* 当前请求中第一个数据点在协议数据点表中的下标。 */
+    uint8_t active_point_count;              /* 当前请求合并的数据点数量，普通请求固定为1。 */
+    uint16_t active_reg_count;               /* 当前请求包含的寄存器总数，用于组帧及校验响应长度。 */
     rt_tick_t request_tick;                  /* 当前请求完整写入串口时记录的系统tick。 */
     rt_tick_t idle_tick;                     /* 当前逆变器完成全部抄读并进入空闲时的系统tick。 */
     rt_bool_t idle_after_active;             /* RT_TRUE表示当前数据点完成后需要进入1秒空闲。 */
@@ -353,6 +358,9 @@ static rt_bool_t inv_data_find_next_point(Inv_Data_Port_Context_t *context)
         context->active_archive_index = archive_index;
         context->slave_addr = archive->mb_addr;
         context->active_point = point;
+        context->active_point_index = point_index;
+        context->active_point_count = 1U;
+        context->active_reg_count = point.reg_count;
         context->idle_after_active = archive_last_point;
         return RT_TRUE;
     }
@@ -360,17 +368,100 @@ static rt_bool_t inv_data_find_next_point(Inv_Data_Port_Context_t *context)
     return RT_FALSE;
 }
 
-/* 当前请求失败或超时时仅清除目标有效标志，保留旧值供故障分析。 */
-static void inv_data_invalidate_active_point(Inv_Data_Port_Context_t *context)
+/* 按合并下标取得当前请求中的数据点配置，下标0对应第一个数据点。 */
+static Inv_Data_Point_Config_t *inv_data_get_active_point(Inv_Data_Port_Context_t *context, uint8_t point_index)
 {
-    /* 数值型目标存在时清除数值有效标志。 */
-    if(context->active_point.number_target != RT_NULL) {
-        context->active_point.number_target->valid = 0U;
+    /* 第一个数据点继续使用原有active_point成员，减少普通数据点读取逻辑的改动。 */
+    if(point_index == 0U) {
+        return &context->active_point;
     }
 
-    /* 字符串目标存在时清除字符串有效标志。 */
-    if(context->active_point.string_target != RT_NULL) {
-        context->active_point.string_target->valid = 0U;
+    return &context->combined_points[point_index - 1U];
+}
+
+/* 将地址连续且功能码相同的三相电压或三相电流合并到当前Modbus读请求。 */
+static void inv_data_combine_phase_points(Inv_Data_Port_Context_t *context)
+{
+    Inv_Data_Point_Config_t next_point;
+    Inv_Data_Point_Config_t *previous_point;
+    uint8_t group_last_index;
+    uint8_t next_point_index;
+
+    /* 数据点0～2是三相电压，数据点3～5是三相电流，其他类型不进行合并。 */
+    if(context->active_point_index < ENUM_PHASE_MAX) {
+        group_last_index = ENUM_PHASE_MAX - 1U;
+    }
+    else if(context->active_point_index < (ENUM_PHASE_MAX * 2U)) {
+        group_last_index = ENUM_PHASE_MAX * 2U - 1U;
+    }
+    else {
+        return;
+    }
+
+    /* 最多合并同一组中的三个数据点，遇到地址不连续或配置不同立即停止。 */
+    while(context->active_point_count < INV_DATA_PHASE_COMBINE_MAX) {
+        next_point_index = context->active_point_index + context->active_point_count;
+
+        /* 当前点已经是本组三相数据最后一点时没有后续数据可以合并。 */
+        if(next_point_index > group_last_index) {
+            break;
+        }
+
+        /* 游标不在同一档案的紧邻下一点时不能越过其他数据点进行合并。 */
+        if((context->archive_index != context->active_archive_index) ||
+           (context->point_index != next_point_index)) {
+            break;
+        }
+
+        /* 后一个三相数据点未配置有效寄存器时保留给正常游标逻辑处理。 */
+        if((inv_data_get_point(context->active_archive_index, next_point_index, &next_point) == RT_FALSE) ||
+           (inv_data_point_is_readable(&next_point) == RT_FALSE)) {
+            break;
+        }
+
+        previous_point = inv_data_get_active_point(context, context->active_point_count - 1U);
+
+        /* 只有功能码相同并且后一个起始地址紧跟前一个寄存器结束地址时才能合并。 */
+        if((next_point.function_code != context->active_point.function_code) ||
+           (next_point.reg_addr != (previous_point->reg_addr + previous_point->reg_count))) {
+            break;
+        }
+
+        /* 合并后的寄存器总数不能超过Modbus单次读寄存器数量上限。 */
+        if((context->active_reg_count + next_point.reg_count) > MODBUS_READ_REG_MAX) {
+            break;
+        }
+
+        context->combined_points[context->active_point_count - 1U] = next_point;
+        ++context->active_point_count;
+        context->active_reg_count += next_point.reg_count;
+        inv_data_advance_cursor(context); /* 后一个数据点已并入当前请求，游标同步移动到再下一点。 */
+    }
+
+    /* 实际合并成功时打印批量读取范围，普通单点读取不增加额外日志。 */
+    if(context->active_point_count > 1U) {
+        rt_kprintf("[%08d] uart[%d] archive[%d] phase points combined, first[%s], points[%d], registers[%d]\n", rt_tick_get(), context->uart_no, context->active_archive_index + 1, context->active_point.name, context->active_point_count, context->active_reg_count);
+    }
+}
+
+/* 当前请求失败或超时时清除请求内全部目标有效标志，保留旧值供故障分析。 */
+static void inv_data_invalidate_active_point(Inv_Data_Port_Context_t *context)
+{
+    uint8_t point_index;
+
+    /* 合并请求中的任意一点不能独立确认有效，因此失败时统一清除有效标志。 */
+    for(point_index = 0U; point_index < context->active_point_count; ++point_index) {
+        Inv_Data_Point_Config_t *point = inv_data_get_active_point(context, point_index);
+
+        /* 数值型目标存在时清除数值有效标志。 */
+        if(point->number_target != RT_NULL) {
+            point->number_target->valid = 0U;
+        }
+
+        /* 字符串目标存在时清除字符串有效标志。 */
+        if(point->string_target != RT_NULL) {
+            point->string_target->valid = 0U;
+        }
     }
 }
 
@@ -664,26 +755,48 @@ static rt_bool_t inv_data_store_string(const Inv_Data_Point_Config_t *point,
     return RT_TRUE;
 }
 
-/* 将正常Modbus响应解析后的寄存器数据写入当前档案实时数据。 */
-static rt_bool_t inv_data_store_active_value(Inv_Data_Port_Context_t *context,
-                                             const uint16_t *registers)
+/* 将一个数据点对应的寄存器数据写入当前档案实时数据。 */
+static rt_bool_t inv_data_store_point_value(const Inv_Data_Point_Config_t *point,
+                                            const uint16_t *registers)
 {
     int32_t value;
 
     /* 字符串目标存在时按设备编号规则保存。 */
-    if(context->active_point.string_target != RT_NULL) {
-        return inv_data_store_string(&context->active_point, registers);
+    if(point->string_target != RT_NULL) {
+        return inv_data_store_string(point, registers);
     }
 
     /* 数值目标为空或数值解析失败时不能更新实时数据。 */
-    if((context->active_point.number_target == RT_NULL) ||
-       (inv_data_decode_number(&context->active_point, registers, &value) == RT_FALSE)) {
+    if((point->number_target == RT_NULL) ||
+       (inv_data_decode_number(point, registers, &value) == RT_FALSE)) {
         return RT_FALSE;
     }
 
-    context->active_point.number_target->value = value;
-    context->active_point.number_target->update_tick = rt_tick_get();
-    context->active_point.number_target->valid = 1U;
+    point->number_target->value = value;
+    point->number_target->update_tick = rt_tick_get();
+    point->number_target->valid = 1U;
+    return RT_TRUE;
+}
+
+/* 按各数据点寄存器数量拆分合并响应，并分别写入对应的实时数据。 */
+static rt_bool_t inv_data_store_active_values(Inv_Data_Port_Context_t *context,
+                                              const uint16_t *registers)
+{
+    uint16_t register_offset = 0U;
+    uint8_t point_index;
+
+    /* 普通请求循环一次，三相连续请求最多循环三次。 */
+    for(point_index = 0U; point_index < context->active_point_count; ++point_index) {
+        Inv_Data_Point_Config_t *point = inv_data_get_active_point(context, point_index);
+
+        /* 任意数据点转换失败时整批响应按失败处理，防止部分数据被误认为本轮有效。 */
+        if(inv_data_store_point_value(point, &registers[register_offset]) == RT_FALSE) {
+            return RT_FALSE;
+        }
+
+        register_offset += point->reg_count;
+    }
+
     return RT_TRUE;
 }
 
@@ -700,11 +813,13 @@ static void inv_data_send_next_request(Inv_Data_Port_Context_t *context)
         return;
     }
 
+    inv_data_combine_phase_points(context); /* 仅尝试合并地址连续的三相电压或三相电流数据点。 */
+
     /* 当前寄存器配置无法组成合法Modbus请求时将该数据点置为无效。 */
     if(modbus_m_read_request(context->slave_addr,
                              context->active_point.function_code,
                              context->active_point.reg_addr,
-                             context->active_point.reg_count,
+                             context->active_reg_count,
                              frame,
                              sizeof(frame),
                              &frame_len) != RT_EOK) {
@@ -714,7 +829,7 @@ static void inv_data_send_next_request(Inv_Data_Port_Context_t *context)
         return;
     }
 
-    rt_snprintf(frame_name, sizeof(frame_name), "uart[%d] archive[%d] addr[%d] point[%s] request", context->uart_no, context->active_archive_index + 1, context->slave_addr, context->active_point.name);
+    rt_snprintf(frame_name, sizeof(frame_name), "uart[%d] archive[%d] addr[%d] point[%s] points[%d] request", context->uart_no, context->active_archive_index + 1, context->slave_addr, context->active_point.name, context->active_point_count);
     show_arr(frame_name, frame, frame_len);
     written_size = uart_mgmt_write(context->uart_no, frame, frame_len);
 
@@ -758,21 +873,21 @@ static void inv_data_handle_response(Inv_Data_Port_Context_t *context)
     frame_len = inv_data_take_rx_frame(context, frame);
     result = modbus_m_read_response(context->slave_addr,
                                     context->active_point.function_code,
-                                    context->active_point.reg_count,
+                                    context->active_reg_count,
                                     frame,
                                     frame_len,
                                     registers,
                                     MODBUS_READ_REG_MAX,
                                     &register_count,
                                     &exception_code);
-    rt_snprintf(frame_name, sizeof(frame_name), "uart[%d] archive[%d] point[%s] parse[%d] response", context->uart_no, context->active_archive_index + 1, context->active_point.name, result);
+    rt_snprintf(frame_name, sizeof(frame_name), "uart[%d] archive[%d] point[%s] points[%d] parse[%d] response", context->uart_no, context->active_archive_index + 1, context->active_point.name, context->active_point_count, result);
     show_arr(frame_name, frame, frame_len);
 
     /* 报文解析成功并且实时数据转换成功时打印本次保存结果。 */
     if((result == MODBUS_M_PARSE_OK) &&
-       (register_count == context->active_point.reg_count) &&
-       (inv_data_store_active_value(context, registers) == RT_TRUE)) {
-        rt_kprintf("[%08d] uart[%d] archive[%d] point[%s] realtime data updated\n", rt_tick_get(), context->uart_no, context->active_archive_index + 1, context->active_point.name);
+       (register_count == context->active_reg_count) &&
+       (inv_data_store_active_values(context, registers) == RT_TRUE)) {
+        rt_kprintf("[%08d] uart[%d] archive[%d] point[%s] points[%d] realtime data updated\n", rt_tick_get(), context->uart_no, context->active_archive_index + 1, context->active_point.name, context->active_point_count);
     }
     /* 收到报文但解析或数据转换失败时，本次请求立即结束，不再继续计算超时。 */
     else {
