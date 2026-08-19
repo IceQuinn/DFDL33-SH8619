@@ -51,7 +51,7 @@ void Inv_Proto_Init(void)
     if((check_sta == 1) ||
        (g_inv_proto_lib.head.ver != INVERTER_PROTOCOL_LIBRARY_VERSION) ||
        (g_inv_proto_lib.head.len != (sizeof(g_inv_proto_lib) - sizeof(rcd_head)))) {
-        rt_kprintf("[%08d] 协议库出错\n", rt_tick_get());
+        rt_kprintf("[%08d] protocol library check failed, loading defaults\n", rt_tick_get());
         Inv_Proto_Default_Init();
     }
 }

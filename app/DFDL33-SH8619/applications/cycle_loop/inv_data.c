@@ -20,8 +20,8 @@
 
 #define INV_DATA_PORT_COUNT                3U
 #define INV_DATA_POINT_COUNT              31U
-#define INV_DATA_RESPONSE_TIMEOUT_TICKS  5000U
-#define INV_DATA_DEVICE_IDLE_TICKS       10*1000U
+#define INV_DATA_RESPONSE_TIMEOUT_TICKS  1000U
+#define INV_DATA_DEVICE_IDLE_TICKS      10000U
 #define INV_DATA_POLL_TICKS               10U
 #define INV_DATA_RX_FRAME_SIZE            MODBUS_RTU_ADU_MAX
 #define INV_DATA_NUMERIC_BYTE_MAX          8U
@@ -31,7 +31,7 @@
 typedef enum Inv_Data_Port_State {
     INV_DATA_PORT_READY = 0,          /* 当前端口可以查找并发送下一项寄存器请求。 */
     INV_DATA_PORT_WAIT_RESPONSE,      /* 当前端口已经发送请求，正在等待响应或超时。 */
-    INV_DATA_PORT_DEVICE_IDLE         /* 当前端口完成一台逆变器抄读，正在空闲1秒。 */
+    INV_DATA_PORT_DEVICE_IDLE         /* 当前端口完成一台逆变器抄读，正在空闲10秒。 */
 } Inv_Data_Port_State_t;
 
 /* 当前待抄读点的统一描述，数据类、参数类和控制类最终都转换为该格式。 */
@@ -63,7 +63,7 @@ typedef struct Inv_Data_Port_Context {
     uint16_t active_reg_count;               /* 当前请求包含的寄存器总数，用于组帧及校验响应长度。 */
     rt_tick_t request_tick;                  /* 当前请求完整写入串口时记录的系统tick。 */
     rt_tick_t idle_tick;                     /* 当前逆变器完成全部抄读并进入空闲时的系统tick。 */
-    rt_bool_t idle_after_active;             /* RT_TRUE表示当前数据点完成后需要进入1秒空闲。 */
+    rt_bool_t idle_after_active;             /* RT_TRUE表示当前数据点完成后需要进入10秒空闲。 */
     uint8_t rx_frame[INV_DATA_RX_FRAME_SIZE]; /* 当前端口接收到的完整Modbus响应报文。 */
     uint16_t rx_frame_len;                   /* rx_frame缓冲区中的有效响应报文长度。 */
     volatile rt_bool_t rx_ready;             /* RT_TRUE表示接收邮箱中存在待解析响应。 */
@@ -313,13 +313,13 @@ static void inv_data_advance_cursor(Inv_Data_Port_Context_t *context)
     }
 }
 
-/* 当前端口完成一台逆变器后进入独立的1秒空闲状态。 */
+/* 当前端口完成一台逆变器后进入独立的10秒空闲状态。 */
 static void inv_data_start_device_idle(Inv_Data_Port_Context_t *context, uint8_t archive_index)
 {
     context->idle_tick = rt_tick_get();
     context->idle_after_active = RT_FALSE;
     context->state = INV_DATA_PORT_DEVICE_IDLE;
-    rt_kprintf("[%08d] uart[%d] archive[%d] read complete, idle 1s\n", rt_tick_get(), context->uart_no, archive_index + 1);
+    rt_kprintf("[%08d] uart[%d] archive[%d] all data read, wait 10s before next device\n", rt_tick_get(), context->uart_no, archive_index + 1);
 }
 
 /* 从当前游标开始查找本端口下一项有效且已配置的寄存器。 */
@@ -346,7 +346,7 @@ static rt_bool_t inv_data_find_next_point(Inv_Data_Port_Context_t *context)
         /* 无法取得协议数据点或寄存器未配置时直接检查下一点。 */
         if((inv_data_get_point(archive_index, point_index, &point) == RT_FALSE) ||
            (inv_data_point_is_readable(&point) == RT_FALSE)) {
-            /* 当前点是该逆变器最后一项时，即使未配置寄存器也需要进入1秒空闲。 */
+            /* 当前点是该逆变器最后一项时，即使未配置寄存器也需要进入10秒空闲。 */
             if(archive_last_point == RT_TRUE) {
                 inv_data_start_device_idle(context, archive_index);
                 return RT_FALSE;
@@ -440,7 +440,7 @@ static void inv_data_combine_phase_points(Inv_Data_Port_Context_t *context)
 
     /* 实际合并成功时打印批量读取范围，普通单点读取不增加额外日志。 */
     if(context->active_point_count > 1U) {
-        rt_kprintf("[%08d] uart[%d] archive[%d] phase points combined, first[%s], points[%d], registers[%d]\n", rt_tick_get(), context->uart_no, context->active_archive_index + 1, context->active_point.name, context->active_point_count, context->active_reg_count);
+        rt_kprintf("[%08d] uart[%d] archive[%d] combined read starts at[%s], values[%d], registers[%d]\n", rt_tick_get(), context->uart_no, context->active_archive_index + 1, context->active_point.name, context->active_point_count, context->active_reg_count);
     }
 }
 
@@ -465,10 +465,10 @@ static void inv_data_invalidate_active_point(Inv_Data_Port_Context_t *context)
     }
 }
 
-/* 当前已发送数据点结束后，根据档案边界进入下一数据点或1秒空闲。 */
+/* 当前已发送数据点结束后，根据档案边界进入下一数据点或10秒空闲。 */
 static void inv_data_finish_active_point(Inv_Data_Port_Context_t *context)
 {
-    /* 当前点是该逆变器最后一项时，完成后进入该端口独立的1秒空闲。 */
+    /* 当前点是该逆变器最后一项时，完成后进入该端口独立的10秒空闲。 */
     if(context->idle_after_active == RT_TRUE) {
         inv_data_start_device_idle(context, context->active_archive_index);
     }
@@ -823,19 +823,19 @@ static void inv_data_send_next_request(Inv_Data_Port_Context_t *context)
                              frame,
                              sizeof(frame),
                              &frame_len) != RT_EOK) {
-        rt_kprintf("[%08d] uart[%d] archive[%d] point[%s] request build failed\n", rt_tick_get(), context->uart_no, context->active_archive_index + 1, context->active_point.name);
+        rt_kprintf("[%08d] uart[%d] archive[%d] could not build request for data[%s]\n", rt_tick_get(), context->uart_no, context->active_archive_index + 1, context->active_point.name);
         inv_data_invalidate_active_point(context);
         inv_data_finish_active_point(context);
         return;
     }
 
-    rt_snprintf(frame_name, sizeof(frame_name), "uart[%d] archive[%d] addr[%d] point[%s] points[%d] request", context->uart_no, context->active_archive_index + 1, context->slave_addr, context->active_point.name, context->active_point_count);
+    rt_snprintf(frame_name, sizeof(frame_name), "uart[%d] archive[%d] addr[%d] data[%s] values[%d] request", context->uart_no, context->active_archive_index + 1, context->slave_addr, context->active_point.name, context->active_point_count);
     show_arr(frame_name, frame, frame_len);
     written_size = uart_mgmt_write(context->uart_no, frame, frame_len);
 
     /* 请求没有完整写入串口时不启动响应超时，下一次调度继续读取后续数据点。 */
     if(written_size != frame_len) {
-        rt_kprintf("[%08d] uart[%d] archive[%d] point[%s] write failed, expected[%d], actual[%d]\n", rt_tick_get(), context->uart_no, context->active_archive_index + 1, context->active_point.name, frame_len, written_size);
+        rt_kprintf("[%08d] uart[%d] archive[%d] could not send full data[%s] request, expected[%d], sent[%d]\n", rt_tick_get(), context->uart_no, context->active_archive_index + 1, context->active_point.name, frame_len, written_size);
         inv_data_invalidate_active_point(context);
         inv_data_finish_active_point(context);
         return;
@@ -880,18 +880,18 @@ static void inv_data_handle_response(Inv_Data_Port_Context_t *context)
                                     MODBUS_READ_REG_MAX,
                                     &register_count,
                                     &exception_code);
-    rt_snprintf(frame_name, sizeof(frame_name), "uart[%d] archive[%d] point[%s] points[%d] parse[%d] response", context->uart_no, context->active_archive_index + 1, context->active_point.name, context->active_point_count, result);
+    rt_snprintf(frame_name, sizeof(frame_name), "uart[%d] archive[%d] data[%s] values[%d] reply[%s]", context->uart_no, context->active_archive_index + 1, context->active_point.name, context->active_point_count, modbus_m_parse_result_text(result));
     show_arr(frame_name, frame, frame_len);
 
     /* 报文解析成功并且实时数据转换成功时打印本次保存结果。 */
     if((result == MODBUS_M_PARSE_OK) &&
        (register_count == context->active_reg_count) &&
        (inv_data_store_active_values(context, registers) == RT_TRUE)) {
-        rt_kprintf("[%08d] uart[%d] archive[%d] point[%s] points[%d] realtime data updated\n", rt_tick_get(), context->uart_no, context->active_archive_index + 1, context->active_point.name, context->active_point_count);
+        rt_kprintf("[%08d] uart[%d] archive[%d] saved data[%s], values[%d]\n", rt_tick_get(), context->uart_no, context->active_archive_index + 1, context->active_point.name, context->active_point_count);
     }
     /* 收到报文但解析或数据转换失败时，本次请求立即结束，不再继续计算超时。 */
     else {
-        rt_kprintf("[%08d] uart[%d] archive[%d] point[%s] response invalid, parse[%d], exception[%d]\n", rt_tick_get(), context->uart_no, context->active_archive_index + 1, context->active_point.name, result, exception_code);
+        rt_kprintf("[%08d] uart[%d] archive[%d] data[%s] reply rejected: %s, exception[%d]\n", rt_tick_get(), context->uart_no, context->active_archive_index + 1, context->active_point.name, modbus_m_parse_result_text(result), exception_code);
         inv_data_invalidate_active_point(context);
     }
 
@@ -901,12 +901,12 @@ static void inv_data_handle_response(Inv_Data_Port_Context_t *context)
 /* 每次调度只推进一个端口状态机的一步，三个端口之间不会互相等待。 */
 static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t now)
 {
-    /* 设备空闲状态达到1秒后恢复READY，下一次调度开始读取下一台逆变器。 */
+    /* 设备空闲状态达到10秒后恢复READY，下一次调度开始读取下一台逆变器。 */
     if(context->state == INV_DATA_PORT_DEVICE_IDLE) {
-        /* 当前端口的独立空闲计时达到1秒时结束空闲状态。 */
+        /* 当前端口的独立空闲计时达到10秒时结束空闲状态。 */
         if((rt_tick_t)(now - context->idle_tick) >= INV_DATA_DEVICE_IDLE_TICKS) {
             context->state = INV_DATA_PORT_READY;
-            rt_kprintf("[%08d] uart[%d] device idle complete, continue periodic read\n", rt_tick_get(), context->uart_no);
+            rt_kprintf("[%08d] uart[%d] 10s wait finished, continue reading\n", rt_tick_get(), context->uart_no);
         }
 
         return;
@@ -926,7 +926,7 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
 
     /* 只有没有收到报文并且等待达到1秒时，才将当前数据点判定为超时。 */
     if((rt_tick_t)(now - context->request_tick) >= INV_DATA_RESPONSE_TIMEOUT_TICKS) {
-        rt_kprintf("[%08d] uart[%d] archive[%d] addr[%d] point[%s] response timeout\n", rt_tick_get(), context->uart_no, context->active_archive_index + 1, context->slave_addr, context->active_point.name);
+        rt_kprintf("[%08d] uart[%d] archive[%d] addr[%d] data[%s] no reply within 1s\n", rt_tick_get(), context->uart_no, context->active_archive_index + 1, context->slave_addr, context->active_point.name);
         inv_data_invalidate_active_point(context);
         inv_data_finish_active_point(context);
     }

@@ -9,6 +9,37 @@
  */
 #include "modbus_master.h"
 
+/* 将解析结果转换为便于通信日志直接打印的简短英文说明。 */
+const char *modbus_m_parse_result_text(modbus_m_parse_result result)
+{
+    /* 每种解析结果返回固定文本，未知值统一返回unknown result。 */
+    switch(result) {
+    case MODBUS_M_PARSE_OK:
+        return "reply OK";
+
+    case MODBUS_M_PARSE_INVALID_ARGUMENT:
+        return "invalid argument";
+
+    case MODBUS_M_PARSE_CRC_ERROR:
+        return "CRC error";
+
+    case MODBUS_M_PARSE_ADDRESS_ERROR:
+        return "wrong slave address";
+
+    case MODBUS_M_PARSE_FUNCTION_ERROR:
+        return "wrong function code";
+
+    case MODBUS_M_PARSE_LENGTH_ERROR:
+        return "wrong frame length";
+
+    case MODBUS_M_PARSE_EXCEPTION:
+        return "device exception";
+
+    default:
+        return "unknown result";
+    }
+}
+
 /* 计算Modbus RTU CRC16，组帧时先放CRC低字节，再放CRC高字节。 */
 uint16_t modbus_m_crc16(const uint8_t *data, uint16_t len)
 {
@@ -61,6 +92,7 @@ rt_err_t modbus_m_read_request(uint8_t slave_addr,
     if((slave_addr < MODBUS_SLAVE_ADDR_MIN) || (slave_addr > MODBUS_SLAVE_ADDR_MAX) ||
        ((function_code != MODBUS_FUNC_READ_HOLDING) && (function_code != MODBUS_FUNC_READ_INPUT)) ||
        (register_count == 0U) || (register_count > MODBUS_READ_REG_MAX) ||
+       (((uint32_t)start_addr + register_count) > 0x10000U) ||
        (frame == RT_NULL) || (frame_len == RT_NULL) || (frame_size < MODBUS_READ_REQUEST_LEN)) {
         return -RT_EINVAL;
     }

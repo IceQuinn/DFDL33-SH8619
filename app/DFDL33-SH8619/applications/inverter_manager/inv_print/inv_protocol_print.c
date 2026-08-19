@@ -118,33 +118,6 @@ static void inv_proto_print_feature(const Inv_Feature_t *feature)
     rt_kprintf("[%08d] %-20s %-10d %-7d %-8d %-14s %-12s %-7d %-10d\n", rt_tick_get(), "feature", feature->reg_addr, feature->reg_cnt, feature->read_func_code, inv_proto_data_type_name(feature->data_type), inv_proto_byte_order_name(feature->data_type, feature->byte_order), feature->decimal_places, feature->default_val);
 }
 
-/* 将固定32字节厂家名称转换为保证以'\0'结束的可打印字符串。 */
-static void inv_proto_copy_mfr_name(char output[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U],
-                                    const char input[INVERTER_ARCHIVE_BRAND_WIRE_SIZE])
-{
-    uint8_t index;
-
-    /* 逐字节复制厂家名称，遇到结束符或Flash空白值时停止。 */
-    for(index = 0U; index < INVERTER_ARCHIVE_BRAND_WIRE_SIZE; ++index) {
-        uint8_t character = (uint8_t)input[index];
-
-        /* 字符串结束符和Flash擦除值0xFF都表示厂家名称结束。 */
-        if((character == 0U) || (character == 0xFFU)) {
-            break;
-        }
-
-        /* 可打印ASCII字符原样保存，其他字符替换为问号。 */
-        if((character >= 0x20U) && (character <= 0x7EU)) {
-            output[index] = (char)character;
-        }
-        else {
-            output[index] = '?';
-        }
-    }
-
-    output[index] = '\0';
-}
-
 /* 按1～100协议序号获取协议对象，序号越界时返回RT_NULL。 */
 const Inv_Proto_t *Inv_Proto_Get(uint16_t proto_number)
 {
@@ -162,7 +135,7 @@ static void inv_proto_print_one(uint16_t proto_number, uint16_t valid_number, co
     const char *manufacturer_text;
     char manufacturer[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U];
 
-    inv_proto_copy_mfr_name(manufacturer, proto->mfr_info.name);
+    Inv_Archive_Copy_Mfr_Name(manufacturer, proto->mfr_info.name);
 
     /* 厂家名称为空时使用固定文本，避免日志字段为空。 */
     if(manufacturer[0] == '\0') {
@@ -252,7 +225,10 @@ void Inv_Proto_Print(uint16_t count)
 /* MSH命令入口，无参数打印10条，有参数时打印指定数量的协议。 */
 static int inv_proto_print(int argc, char **argv)
 {
+    char *end_ptr;
     int32_t count = 10;
+    int32_t max_count = INVERTER_PROTOCOL_LIBRARY_COUNT;
+    int64_t parsed_count;
 
     /* 参数多于一个时打印正确用法并结束命令。 */
     if(argc > 2) {
@@ -262,13 +238,16 @@ static int inv_proto_print(int argc, char **argv)
 
     /* 提供数量参数时将字符串转换为整数并检查范围。 */
     if(argc == 2) {
-        count = atoi(argv[1]);
+        parsed_count = strtol(argv[1], &end_ptr, 10);
 
-        /* 打印数量必须位于1～100范围内。 */
-        if((count < 1) || (count > INVERTER_PROTOCOL_LIBRARY_COUNT)) {
+        /* 参数必须是完整十进制数字，并且打印数量必须位于1～100范围内。 */
+        if((end_ptr == argv[1]) || (*end_ptr != '\0') ||
+           (parsed_count < 1) || (parsed_count > max_count)) {
             rt_kprintf("[%08d] invalid count, expected 1-100\n", rt_tick_get());
             return -1;
         }
+
+        count = (int32_t)parsed_count;
     }
 
     Inv_Proto_Print((uint16_t)count);

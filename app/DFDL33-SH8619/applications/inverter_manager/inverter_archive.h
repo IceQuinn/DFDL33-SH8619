@@ -100,6 +100,10 @@ extern Inv_ArchiveLib_t g_inv_archive_lib;
 /* 运行时协议指针表与档案槽位一一对应，指针不写入Flash。 */
 extern const struct Inv_Proto *g_inv_archive_proto[INVERTER_ARCHIVE_MAX_COUNT];
 
+/* 将固定32字节厂家名称转换为以'\0'结束的可打印字符串。 */
+void Inv_Archive_Copy_Mfr_Name(char output[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U],
+                               const char input[INVERTER_ARCHIVE_BRAND_WIRE_SIZE]);
+
 /* 新增或更新一条档案并保存到Flash，成功返回0～11槽位下标，失败返回-1。 */
 int8_t Inv_Archive_Add(const Inv_Archive_t *archive);
 

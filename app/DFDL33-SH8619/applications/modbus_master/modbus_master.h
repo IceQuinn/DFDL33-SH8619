@@ -36,6 +36,9 @@ typedef enum Modbus_M_Parse_Result {
     MODBUS_M_PARSE_EXCEPTION            /* 从站返回Modbus异常响应，具体异常码写入exception_code。 */
 } modbus_m_parse_result;
 
+/* 将解析结果转换为便于通信日志直接打印的简短英文说明。 */
+const char *modbus_m_parse_result_text(modbus_m_parse_result result);
+
 /* 计算Modbus RTU CRC16。 */
 uint16_t modbus_m_crc16(const uint8_t *data, uint16_t len);
 

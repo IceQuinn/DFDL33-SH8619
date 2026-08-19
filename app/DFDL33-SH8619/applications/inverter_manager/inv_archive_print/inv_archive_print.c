@@ -13,33 +13,6 @@
 
 #include <rtthread.h>
 
-/* 将档案中的固定32字节厂家名称转换为以'\0'结束的可打印字符串。 */
-static void inv_archive_copy_mfr_name(char output[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U],
-                                      const char input[INVERTER_ARCHIVE_BRAND_WIRE_SIZE])
-{
-    uint8_t index;
-
-    /* 逐字节复制厂家名称，遇到结束符或Flash空白值时停止。 */
-    for(index = 0U; index < INVERTER_ARCHIVE_BRAND_WIRE_SIZE; ++index) {
-        uint8_t character = (uint8_t)input[index];
-
-        /* 字符串结束符和Flash擦除值0xFF都表示厂家名称结束。 */
-        if((character == 0U) || (character == 0xFFU)) {
-            break;
-        }
-
-        /* 可打印ASCII字符原样保存，其他字符替换为问号。 */
-        if((character >= 0x20U) && (character <= 0x7EU)) {
-            output[index] = (char)character;
-        }
-        else {
-            output[index] = '?';
-        }
-    }
-
-    output[index] = '\0';
-}
-
 /* 将档案端口编号转换为便于日志查看的端口名称。 */
 static const char *inv_archive_port_name(uint8_t port)
 {
@@ -88,7 +61,7 @@ void Inv_Archive_Print(void)
         char manufacturer[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U];
         char modbus_address[16];
 
-        inv_archive_copy_mfr_name(manufacturer, archive->mfr_info.name);
+        Inv_Archive_Copy_Mfr_Name(manufacturer, archive->mfr_info.name);
         rt_snprintf(modbus_address, sizeof(modbus_address), "%d", archive->mb_addr);
 
         /* 厂家名称为空时使用固定文本，避免表格中该字段完全空白。 */

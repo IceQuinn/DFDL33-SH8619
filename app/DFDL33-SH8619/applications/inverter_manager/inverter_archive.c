@@ -12,6 +12,33 @@ Inv_ArchiveLib_t g_inv_archive_lib;
 /* 协议指针只在RAM中使用，不能随档案库写入Flash。 */
 const struct Inv_Proto *g_inv_archive_proto[INVERTER_ARCHIVE_MAX_COUNT];
 
+/* 将固定32字节厂家名称转换为以'\0'结束的可打印字符串。 */
+void Inv_Archive_Copy_Mfr_Name(char output[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U],
+                               const char input[INVERTER_ARCHIVE_BRAND_WIRE_SIZE])
+{
+    uint8_t index;
+
+    /* 逐字节复制厂家名称，遇到结束符或Flash空白值时停止。 */
+    for(index = 0U; index < INVERTER_ARCHIVE_BRAND_WIRE_SIZE; ++index) {
+        uint8_t character = (uint8_t)input[index];
+
+        /* 字符串结束符和Flash擦除值0xFF都表示厂家名称结束。 */
+        if((character == 0U) || (character == 0xFFU)) {
+            break;
+        }
+
+        /* 可打印ASCII字符原样保存，其他字符替换为问号。 */
+        if((character >= 0x20U) && (character <= 0x7EU)) {
+            output[index] = (char)character;
+        }
+        else {
+            output[index] = '?';
+        }
+    }
+
+    output[index] = '\0';
+}
+
 /* 按槽位有效标志重新统计档案数，避免增量修改导致count与槽位状态不一致。 */
 static void inv_archive_refresh_count(void)
 {
@@ -148,7 +175,7 @@ void Inv_Archive_Validate_Protocols(void)
 
         /* 有效档案找不到协议时，将该档案置为无效并清除协议指针。 */
         if(protocol == RT_NULL) {
-            rt_kprintf("[%08d] archive slot[%d] addr[%d] port[%d] invalid, protocol not found\n", rt_tick_get(), i + 1, archive->mb_addr, archive->port);
+            rt_kprintf("[%08d] archive[%d] addr[%d] port[%d] disabled: matching protocol not found\n", rt_tick_get(), i + 1, archive->mb_addr, archive->port);
             g_inv_archive_lib.valid[i] = INVERTER_ARCHIVE_INVALID;
             g_inv_archive_proto[i] = RT_NULL;
             archive_changed = 1U;
@@ -224,7 +251,7 @@ void Inv_Archive_Init(void)
     if((check_sta == 1) ||
        (g_inv_archive_lib.head.ver != INVERTER_ARCHIVE_LIBRARY_VERSION) ||
        (g_inv_archive_lib.head.len != (sizeof(g_inv_archive_lib) - sizeof(rcd_head)))) {
-        rt_kprintf("[%08d] 逆变器档案库出错\n", rt_tick_get());
+        rt_kprintf("[%08d] archive library check failed, loading defaults\n", rt_tick_get());
         Inv_Archive_Default_Init();
     }
 

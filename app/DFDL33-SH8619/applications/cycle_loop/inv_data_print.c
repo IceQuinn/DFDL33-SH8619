@@ -18,33 +18,6 @@ static const char *g_inv_data_print_p_name[ENUM_PMAX] = {"Pa", "Pb", "Pc", "Pt"}
 static const char *g_inv_data_print_q_name[ENUM_QMAX] = {"Qa", "Qb", "Qc", "Qt"};
 static const char *g_inv_data_print_pf_name[ENUM_PFMAX] = {"PFa", "PFb", "PFc", "PFt"};
 
-/* 将档案中的固定32字节厂家名称转换为以'\0'结束的可打印字符串。 */
-static void inv_data_print_copy_mfr_name(char output[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U],
-                                         const char input[INVERTER_ARCHIVE_BRAND_WIRE_SIZE])
-{
-    uint8_t index;
-
-    /* 逐字节复制厂家名称，遇到结束符或Flash空白值时停止。 */
-    for(index = 0U; index < INVERTER_ARCHIVE_BRAND_WIRE_SIZE; ++index) {
-        uint8_t character = (uint8_t)input[index];
-
-        /* 字符串结束符和Flash擦除值0xFF都表示厂家名称结束。 */
-        if((character == 0U) || (character == 0xFFU)) {
-            break;
-        }
-
-        /* 可打印ASCII字符原样保存，其他字符替换为问号。 */
-        if((character >= 0x20U) && (character <= 0x7EU)) {
-            output[index] = (char)character;
-        }
-        else {
-            output[index] = '?';
-        }
-    }
-
-    output[index] = '\0';
-}
-
 /* 打印一个数值型实时数据项，无效数据明确打印INVALID。 */
 static void inv_data_print_value(uint8_t archive_number,
                                  const char *data_class,
@@ -153,7 +126,7 @@ static void inv_data_print_archive_index(uint8_t archive_index)
         return;
     }
 
-    inv_data_print_copy_mfr_name(manufacturer, archive.mfr_info.name);
+    Inv_Archive_Copy_Mfr_Name(manufacturer, archive.mfr_info.name);
     rt_kprintf("[%08d] archive[%d] VALID addr[%d] port[%d] manufacturer[%s] protocol[%d.%d]\n", rt_tick_get(), archive_number, archive.mb_addr, archive.port, manufacturer, archive.mfr_info.proto_ver[0], archive.mfr_info.proto_ver[1]);
     inv_data_print_data_class(archive_number, &data.data);
     inv_data_print_param_class(archive_number, &data.param);
@@ -186,7 +159,10 @@ void Inv_Data_Print_Archive(uint8_t archive_number)
 /* MSH命令入口，无参数打印全部档案，提供参数时打印指定档案。 */
 static int inv_data_print(int argc, char **argv)
 {
+    char *end_ptr;
     int32_t archive_number;
+    int32_t max_archive_number = INVERTER_ARCHIVE_MAX_COUNT;
+    int64_t parsed_archive_number;
 
     /* 未提供参数时打印全部12个档案槽位。 */
     if(argc == 1) {
@@ -200,14 +176,16 @@ static int inv_data_print(int argc, char **argv)
         return -1;
     }
 
-    archive_number = atoi(argv[1]);
+    parsed_archive_number = strtol(argv[1], &end_ptr, 10);
 
-    /* 参数转换后必须位于1～12档案编号范围内。 */
-    if((archive_number < 1) || (archive_number > INVERTER_ARCHIVE_MAX_COUNT)) {
-        rt_kprintf("[%08d] archive number[%d] invalid, expected 1-12\n", rt_tick_get(), archive_number);
+    /* 参数必须是完整十进制数字，并且位于1～12档案编号范围内。 */
+    if((end_ptr == argv[1]) || (*end_ptr != '\0') ||
+       (parsed_archive_number < 1) || (parsed_archive_number > max_archive_number)) {
+        rt_kprintf("[%08d] archive number[%s] is invalid, expected 1-12\n", rt_tick_get(), argv[1]);
         return -1;
     }
 
+    archive_number = (int32_t)parsed_archive_number;
     Inv_Data_Print_Archive((uint8_t)archive_number);
     return 0;
 }
