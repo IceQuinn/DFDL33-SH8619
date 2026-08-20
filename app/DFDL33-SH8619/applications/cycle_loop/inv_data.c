@@ -40,7 +40,7 @@ typedef struct Inv_Data_Point_Config {
     uint16_t reg_count;                      /* 本次请求连续读取的16位寄存器数量。 */
     uint8_t function_code;                   /* 读取寄存器使用的Modbus功能码0x03或0x04。 */
     uint8_t data_type;                       /* 寄存器数据解析类型，使用TYPE_*定义。 */
-    uint8_t byte_order;                      /* 多字节数据排列方式，使用Inv_ByteOrder_t定义。 */
+    uint8_t byte_order;                      /* 多字节数据排列方式，使用Type_Byte_t定义。 */
     uint8_t decimal_places;                  /* 实时值采用定点整数保存时保留的小数位数。 */
     Inv_RealtimeValue_t *number_target;      /* 数值型数据解析成功后的实时数据存储地址。 */
     Inv_RealtimeString_t *string_target;     /* 设备编号等字符串数据解析成功后的存储地址。 */
@@ -513,7 +513,7 @@ static uint16_t inv_data_registers_to_bytes(const uint16_t *registers,
     }
 
     /* BADC表示每个16位寄存器内部交换两个字节。 */
-    if(byte_order == INVERTER_BYTE_ORDER_BADC) {
+    if(byte_order == Type_Byte_BADC) {
         /* 每次处理一个16位寄存器对应的两个字节。 */
         for(index = 0U; index + 1U < byte_count; index += 2U) {
             output[index] = source[index + 1U];
@@ -521,21 +521,21 @@ static uint16_t inv_data_registers_to_bytes(const uint16_t *registers,
         }
     }
     /* DCBA表示整个数据的全部字节完全反序。 */
-    else if(byte_order == INVERTER_BYTE_ORDER_DCBA) {
+    else if(byte_order == Type_Byte_DCBA) {
         /* 从源数据末尾开始逐字节复制到输出缓冲区。 */
         for(index = 0U; index < byte_count; ++index) {
             output[index] = source[byte_count - 1U - index];
         }
     }
-    /* SWAP表示交换16位寄存器顺序，单寄存器时交换寄存器内部字节。 */
-    else if(byte_order == INVERTER_BYTE_ORDER_SWAP) {
-        /* 只有一个寄存器时，SWAP表示交换寄存器内部高低字节。 */
+    /* CDAB表示交换16位寄存器顺序，单寄存器时交换寄存器内部字节。 */
+    else if(byte_order == Type_Byte_CDAB) {
+        /* 只有一个寄存器时，CDAB表示交换寄存器内部高低字节。 */
         if(byte_count == 2U) {
             output[0] = source[1];
             output[1] = source[0];
         }
         else {
-            /* 多个寄存器时，SWAP保持寄存器内部字节不变并反转寄存器顺序。 */
+            /* 多个寄存器时，CDAB保持寄存器内部字节不变并反转寄存器顺序。 */
             for(index = 0U; index + 1U < byte_count; index += 2U) {
                 uint16_t source_index = byte_count - 2U - index;
                 output[index] = source[source_index];

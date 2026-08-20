@@ -18,7 +18,7 @@ extern "C" {
 /* 逆变器协议库固定提供100条厂家协议配置。 */
 #define INVERTER_PROTOCOL_LIBRARY_COUNT             100
 #define INVERTER_PROTOCOL_DEFAULT_COUNT             4
-#define INVERTER_PROTOCOL_LIBRARY_VERSION           11
+#define INVERTER_PROTOCOL_LIBRARY_VERSION           12
 #define INVERTER_PROTOCOL_INVALID                   0
 #define INVERTER_PROTOCOL_VALID                     1
 
@@ -31,20 +31,20 @@ extern "C" {
  * 字母表示数据从最高有效字节到最低有效字节的正常顺序。例如32位数值的
  * 标准大端顺序为ABCD；CDAB表示两个16位寄存器交换；BADC表示每个寄存器
  * 内的两个字节交换；DCBA表示所有字节完全反序。 */
-typedef enum Inv_ByteOrder
+typedef enum Type_Byte
 {
     /* 16位数据表示AB，32位数据表示ABCD。 */
-    INVERTER_BYTE_ORDER_NORMAL = 0,
+    Type_Byte_ABCD = 0,
 
     /* 16位数据表示BA，32位数据表示CDAB。 */
-    INVERTER_BYTE_ORDER_SWAP = 1,
+    Type_Byte_CDAB = 1,
 
     /* 仅用于32位数据，表示BADC。 */
-    INVERTER_BYTE_ORDER_BADC = 2,
+    Type_Byte_BADC = 2,
 
     /* 仅用于32位数据，表示DCBA。 */
-    INVERTER_BYTE_ORDER_DCBA = 3
-} Inv_ByteOrder_t;
+    Type_Byte_DCBA = 3
+} Type_Byte_t;
 
 /* 数据类和参数类使用的只读Modbus RTU寄存器描述，不保存实时数据。 */
 #pragma pack(1)
@@ -59,28 +59,17 @@ typedef struct Inv_RegBlk
     /* Modbus RTU读寄存器功能码，例如0x03表示读保持寄存器、0x04表示读输入寄存器；0表示未配置读功能。 */
     uint8_t read_func_code;
 
-    /* 数据类型、字节序、小数位数和预留位共同占用两个字节。 */
-    union
-    {
-        /* 用于存储、打印和645协议传输的完整原始值。 */
-        uint16_t raw;
+    /* 数据类型占bit0～bit3，使用user_comm.h中的TYPE_*值，取值范围0～15。 */
+    uint16_t data_type : 4;
 
-        struct
-        {
-            /* 数据类型占bit0～bit3，使用user_comm.h中的TYPE_*值，取值范围0～15。 */
-            uint16_t data_type : 4;
+    /* 字节序占bit4～bit7，使用Type_Byte_t，取值范围0～15。 */
+    uint16_t byte_order : 4;
 
-            /* 字节序占bit4～bit7，使用Inv_ByteOrder_t，取值范围0～15。 */
-            uint16_t byte_order : 4;
+    /* 小数位数占bit8～bit11，取值范围0～15。 */
+    uint16_t decimal_places : 4;
 
-            /* 小数位数占bit8～bit11，取值范围0～15。 */
-            uint16_t decimal_places : 4;
-
-            /* bit12～bit15预留。 */
-            uint16_t reserved : 4;
-
-        };
-    };
+    /* bit12～bit15预留。 */
+    uint16_t reserved : 4;
 } Inv_RegBlk_t;
 
 /* 只读寄存器块由地址2字节、寄存器个数1字节、读功能码1字节和数据格式2字节组成，共6字节。 */
@@ -100,28 +89,17 @@ typedef struct Inv_CtrlRegBlk
     /* Modbus RTU写寄存器功能码，例如0x06表示写单个寄存器、0x10表示写多个寄存器；0表示未配置写入。 */
     uint8_t write_func_code;
 
-    /* 数据类型、字节序、小数位数和预留位共同占用两个字节。 */
-    union
-    {
-        /* 用于存储、打印和645协议传输的完整原始值。 */
-        uint16_t raw;
+    /* 数据类型占bit0～bit3，取值范围0～15。 */
+    uint16_t data_type : 4;
 
-        struct
-        {
-            /* 数据类型占bit0～bit3，取值范围0～15。 */
-            uint16_t data_type : 4;
+    /* 字节序占bit4～bit7，取值范围0～15。 */
+    uint16_t byte_order : 4;
 
-            /* 字节序占bit4～bit7，取值范围0～15。 */
-            uint16_t byte_order : 4;
+    /* 小数位数占bit8～bit11，取值范围0～15。 */
+    uint16_t decimal_places : 4;
 
-            /* 小数位数占bit8～bit11，取值范围0～15。 */
-            uint16_t decimal_places : 4;
-
-            /* bit12～bit15预留。 */
-            uint16_t reserved : 4;
-
-        };
-    };
+    /* bit12～bit15预留。 */
+    uint16_t reserved : 4;
 
 } Inv_CtrlRegBlk_t;
 
@@ -138,18 +116,10 @@ typedef struct Inv_CtrlDefaultRegBlk
     uint8_t reg_cnt;
     uint8_t write_func_code;
 
-    union
-    {
-        uint16_t raw;
-
-        struct
-        {
-            uint16_t data_type : 4;
-            uint16_t byte_order : 4;
-            uint16_t decimal_places : 4;
-            uint16_t reserved : 4;
-        };
-    };
+    uint16_t data_type : 4;
+    uint16_t byte_order : 4;
+    uint16_t decimal_places : 4;
+    uint16_t reserved : 4;
 
     /* 执行固定命令时使用的2字节原始写入值；发送前按照data_type和byte_order转换。 */
     uint16_t write_default_val;
@@ -172,28 +142,17 @@ typedef struct Inv_Feature
     /* Modbus RTU读寄存器功能码，例如0x03表示读保持寄存器、0x04表示读输入寄存器。 */
     uint8_t read_func_code;
 
-    /* 数据类型、字节序、小数位数和预留位共同占用两个字节。 */
-    union
-    {
-        /* 用于存储、打印和645协议传输的完整原始值。 */
-        uint16_t raw;
+    /* 数据类型占bit0～bit3，取值范围0～15。 */
+    uint16_t data_type : 4;
 
-        struct
-        {
-            /* 数据类型占bit0～bit3，取值范围0～15。 */
-            uint16_t data_type : 4;
+    /* 字节序占bit4～bit7，取值范围0～15。 */
+    uint16_t byte_order : 4;
 
-            /* 字节序占bit4～bit7，取值范围0～15。 */
-            uint16_t byte_order : 4;
+    /* 小数位数占bit8～bit11，取值范围0～15。 */
+    uint16_t decimal_places : 4;
 
-            /* 小数位数占bit8～bit11，取值范围0～15。 */
-            uint16_t decimal_places : 4;
-
-            /* bit12～bit15预留。 */
-            uint16_t reserved : 4;
-
-        };
-    };
+    /* bit12～bit15预留。 */
+    uint16_t reserved : 4;
 
     /* 用于厂家及型号识别的2字节默认特征值。 */
     uint16_t default_val;

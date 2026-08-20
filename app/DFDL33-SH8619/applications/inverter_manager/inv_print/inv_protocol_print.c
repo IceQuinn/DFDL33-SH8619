@@ -44,7 +44,7 @@ static const char *inv_proto_byte_order_name(uint8_t data_type, uint8_t byte_ord
 {
     /* 每种字节序分别判断16位、32位或通用名称。 */
     switch(byte_order) {
-    case INVERTER_BYTE_ORDER_NORMAL:
+    case Type_Byte_ABCD:
         /* 16位整数的正常字节序为AB。 */
         if((data_type == TYPE_I16) || (data_type == TYPE_U16)) {
             return "AB";
@@ -55,9 +55,9 @@ static const char *inv_proto_byte_order_name(uint8_t data_type, uint8_t byte_ord
             return "ABCD";
         }
 
-        return "NORMAL";
+        return "ABCD";
 
-    case INVERTER_BYTE_ORDER_SWAP:
+    case Type_Byte_CDAB:
         /* 16位整数交换字节后为BA。 */
         if((data_type == TYPE_I16) || (data_type == TYPE_U16)) {
             return "BA";
@@ -68,12 +68,12 @@ static const char *inv_proto_byte_order_name(uint8_t data_type, uint8_t byte_ord
             return "CDAB";
         }
 
-        return "SWAP";
+        return "CDAB";
 
-    case INVERTER_BYTE_ORDER_BADC:
+    case Type_Byte_BADC:
         return "BADC";
 
-    case INVERTER_BYTE_ORDER_DCBA:
+    case Type_Byte_DCBA:
         return "DCBA";
 
     default:

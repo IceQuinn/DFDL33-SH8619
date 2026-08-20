@@ -9,22 +9,271 @@
  */
 #include "inverter_protocol_library.h"
 
-// typedef enum Enum_Inv_Mfr_Id
-// {
-//     INV_MFR_SUNGROW_1 = 0,
-//     INV_MFR_HUAWEI_1,
-//     INV_MFR_GOODWE_1,
-//     INV_MFR_JINWANG_1,
-// }Enum_Inv_Mfr_Id_t;
+typedef enum Enum_Inv_Mfr_Id
+{
+    INV_MFR_SUNGROW_1 = 0,
+    INV_MFR_HUAWEI_1,
+    INV_MFR_GOODWE_1,
+    INV_MFR_JINWANG_1,
+}Enum_Inv_Mfr_Id_t;
+// ----------------------------------------------------厂家信息
+typedef struct Inv_Mfr_Id{
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_MfrInfo_t mfr_info;
+}Inv_Mfr_Id_t;
+// ----------------------------------------------------厂家特征数据
+typedef struct Inv_Feature_Id{
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_Feature_t feature;
+}Inv_Feature_Id_t;
+// ----------------------------------------------------厂家数据类
+typedef struct Inv_ProtoData_Ua_Id{ // A相电压
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t Ua;
+}Inv_ProtoData_Ua_Id_t;
+typedef struct Inv_ProtoData_Ub_Id{ // B相电压
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t Ub;
+}Inv_ProtoData_Ub_Id_t;
+typedef struct Inv_ProtoData_Uc_Id{ // C相电压
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t Uc;
+}Inv_ProtoData_Uc_Id_t;
+typedef struct Inv_ProtoData_Ia_Id{ // A相电流
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t Ia;
+}Inv_ProtoData_Ia_Id_t;
+typedef struct Inv_ProtoData_Ib_Id{ // B相电流
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t Ib;
+}Inv_ProtoData_Ib_Id_t;
+typedef struct Inv_ProtoData_Ic_Id{ // C相电流
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t Ic;
+}Inv_ProtoData_Ic_Id_t;
+typedef struct Inv_ProtoData_Pa_Id{ // A相有功功率
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t Pa;
+}Inv_ProtoData_Pa_Id_t;
+typedef struct Inv_ProtoData_Pb_Id{ // B相有功功率
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t Pb;
+}Inv_ProtoData_Pb_Id_t;
+typedef struct Inv_ProtoData_Pc_Id{ // C相有功功率
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t Pc;
+}Inv_ProtoData_Pc_Id_t;
+typedef struct Inv_ProtoData_Pt_Id{ // 总有功功率
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t Pt;
+}Inv_ProtoData_Pt_Id_t;
 
-// typedef Inv_Mfr{
-//     Enum_Inv_Mfr_Id_t mfr_id;
-//     Inv_MfrInfo_t mfr_info;
-// }Inv_Mfr_t;
+typedef struct Inv_ProtoData_Qa_Id{ // A相无功功率
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t Qa;
+}Inv_ProtoData_Qa_Id_t;
+typedef struct Inv_ProtoData_Qb_Id{ // B相无功功率
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t Qb;
+}Inv_ProtoData_Qb_Id_t;
+typedef struct Inv_ProtoData_Qc_Id{ // C相无功功率
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t Qc;
+}Inv_ProtoData_Qc_Id_t;
+typedef struct Inv_ProtoData_Qt_Id{ // 总无功功率
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t Qt;
+}Inv_ProtoData_Qt_Id_t;
+typedef struct Inv_ProtoData_PFa_Id{ // A相功率因数
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t PFA;
+}Inv_ProtoData_PFa_Id_t;
+typedef struct Inv_ProtoData_PFb_Id{ // B相功率因数
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t PFb;
+}Inv_ProtoData_PFb_Id_t;
+typedef struct Inv_ProtoData_PFc_Id{ // C相功率因数
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t PFc;
+}Inv_ProtoData_PFc_Id_t;
+typedef struct Inv_ProtoData_PFt_Id{ // 总功率因数
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t PFt;
+}Inv_ProtoData_PFt_Id_t;
+// ----------------------------------------------------厂家参数
+typedef struct Inv_dev_no_Id{   // 设备编号或序列号
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t dev_no;
+}Inv_dev_no_Id_t;
+typedef struct Inv_pv_rated_active_pwr_Id{ // PV额定有功功率
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t pv_rated_active_pwr;
+}Inv_pv_rated_active_pwr_Id_t;
+typedef struct Inv_pv_rated_reactive_pwr_Id{ // PV额定无功功率
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t pv_rated_reactive_pwr;
+}Inv_pv_rated_reactive_pwr_Id_t;
+typedef struct Inv_set_volt_Id{ // 逆变器设定电压
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t set_volt;
+}Inv_set_volt_Id_t;
+typedef struct Inv_output_type_Id{ // 输出类型
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t output_type;
+}Inv_output_type_Id_t;
+typedef struct Inv_pwr_status_Id{ // 开关机状态
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_RegBlk_t pwr_status;
+}Inv_pwr_status_Id_t;
+// ----------------------------------------------------厂家控制类
+typedef struct Inv_pwr_on_Id{ // 逆变器开机控制寄存器
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_CtrlDefaultRegBlk_t pwr_on;
+}Inv_pwr_on_Id_t;
+typedef struct Inv_pwr_off_Id{ // 逆变器关机控制寄存器
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_CtrlDefaultRegBlk_t pwr_off;
+}Inv_pwr_off_Id_t;
+typedef struct Inv_active_pwr_ctrl_Id{ // 有功功率数值控制寄存器
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_CtrlRegBlk_t active_pwr_ctrl;
+}Inv_active_pwr_ctrl_Id_t;
+typedef struct Inv_reactive_pwr_ctrl_Id{ // 无功功率数值控制寄存器
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_CtrlRegBlk_t reactive_pwr_ctrl;
+}Inv_reactive_pwr_ctrl_Id_t;
+typedef struct Inv_pwr_factor_ctrl_Id{ // 功率因数控制寄存器
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_CtrlRegBlk_t pwr_factor_ctrl;
+}Inv_pwr_factor_ctrl_Id_t;
+typedef struct Inv_active_pwr_pct_ctrl_Id{ // 有功功率百分比控制寄存器
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_CtrlRegBlk_t active_pwr_pct_ctrl;
+}Inv_active_pwr_pct_ctrl_Id_t;
+typedef struct Inv_reactive_pwr_pct_ctrl_Id{ // 无功功率百分比控制寄存器
+    Enum_Inv_Mfr_Id_t mfr_id;
+    Inv_CtrlRegBlk_t reactive_pwr_pct_ctrl;
+}Inv_reactive_pwr_pct_ctrl_Id_t;
 
-// Inv_Mfr_t g_inv_mfr[] = {
-//     {INV_MFR_SUNGROW_1, {0, 0}},
-// }
+// ---------------------------------------------------------------------------------------------------厂家信息
+Inv_Mfr_Id_t g_inv_mfr[] = {    // 厂家信息
+    {INV_MFR_SUNGROW_1, {"SUNGROW", 0x0100}},
+    {INV_MFR_HUAWEI_1,  {"HUAWEI",  0x0100}},
+    {INV_MFR_GOODWE_1,  {"GOODWE",  0x0100}},
+    {INV_MFR_JINWANG_1, {"JINWANG", 0x0100}},
+};
+// ---------------------------------------------------------------------------------------------------厂家特征数据
+Inv_Feature_Id_t g_inv_feature[] = {    // 厂家特征数据
+    //逆变器ID,     寄存器地址，寄存器个数，读功能码，数据类型, 字节序, 小数位数, 预留，默认值
+    {INV_MFR_SUNGROW_1, {5036, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0, 5000}},
+    {INV_MFR_HUAWEI_1,  {5036, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0, 5000}},
+    {INV_MFR_GOODWE_1,  {5036, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0, 5000}},
+    {INV_MFR_JINWANG_1, {5036, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0, 5000}},
+};
+// ---------------------------------------------------------------------------------------------------数据类
+Inv_ProtoData_Ua_Id_t g_inv_Ua[] = {    // A相电压寄存器
+    {INV_MFR_SUNGROW_1, {5018, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+    {INV_MFR_HUAWEI_1,  {5018, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+
+};
+Inv_ProtoData_Ub_Id_t g_inv_Ub[] = {    // B相电压寄存器
+    {INV_MFR_SUNGROW_1, {5019, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+    {INV_MFR_HUAWEI_1,  {5019, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+
+};
+Inv_ProtoData_Uc_Id_t g_inv_Uc[] = {    // C相电压寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+    {INV_MFR_HUAWEI_1,  {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+
+};
+Inv_ProtoData_Ia_Id_t g_inv_Ia[] = {    // A相电流寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+
+};
+Inv_ProtoData_Ib_Id_t g_inv_Ib[] = {    // B相电流寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+
+};
+Inv_ProtoData_Ic_Id_t g_inv_Ic[] = {    // C相电流寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+
+};
+
+Inv_ProtoData_Pa_Id_t g_inv_Pa[] = {    // A相功率寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+
+};
+Inv_ProtoData_Pb_Id_t g_inv_Pb[] = {    // B相功率寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+
+};
+Inv_ProtoData_Pc_Id_t g_inv_Pc[] = {    // C相功率寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+
+};
+Inv_ProtoData_Pt_Id_t g_inv_Pt[] = {    // 总功率寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+
+};
+
+Inv_ProtoData_Qa_Id_t g_inv_Qa[] = {    // A相无功功率寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+
+};
+Inv_ProtoData_Qb_Id_t g_inv_Qb[] = {    // B相无功功率寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+
+};
+Inv_ProtoData_Qc_Id_t g_inv_Qc[] = {    // C相无功功率寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+
+};
+Inv_ProtoData_Qt_Id_t g_inv_Qt[] = {    // 总无功功率寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+
+};
+// ---------------------------------------------------------------------------------------------------参数类数据
+Inv_dev_no_Id_t g_inv_dev_no[] = {    // 设备编号或序列号
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+};
+Inv_pv_rated_active_pwr_Id_t g_inv_pv_rated_active_pwr[] = {    // PV额定有功功率
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+};
+Inv_pv_rated_reactive_pwr_Id_t g_inv_pv_rated_reactive_pwr[] = {    // PV额定无功功率
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+};
+Inv_set_volt_Id_t g_inv_set_volt[] = {    // 逆变器设定电压
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+};
+Inv_output_type_Id_t g_inv_output_type[] = {    // 逆变器输出类型
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+};
+Inv_pwr_status_Id_t g_inv_pwr_status[] = {    // 开关机状态
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+};
+// ---------------------------------------------------------------------------------------------------控制类数据
+Inv_pwr_on_Id_t g_inv_pwr_on[] = {    // 逆变器开机控制寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0, 0x00}},
+};
+Inv_pwr_off_Id_t g_inv_pwr_off[] = {    // 逆变器关机控制寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0, 0x01}},
+};
+Inv_active_pwr_ctrl_Id_t g_inv_active_pwr_ctrl[] = {    // 逆变器有功功率控制寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+};
+Inv_reactive_pwr_ctrl_Id_t g_inv_reactive_pwr_ctrl[] = {    // 逆变器无功功率控制寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+};
+Inv_pwr_factor_ctrl_Id_t g_inv_pwr_factor_ctrl[] = {    // 逆变器功率因数控制寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+};
+Inv_active_pwr_pct_ctrl_Id_t g_inv_active_pwr_pct_ctrl[] = {    // 有功功率百分比控制寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+};
+Inv_reactive_pwr_pct_ctrl_Id_t g_inv_reactive_pwr_pct_ctrl[] = {    // 无功功率百分比控制寄存器
+    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+};
+
 
 
 
@@ -40,7 +289,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
             .reg_cnt = 1,
             .read_func_code = 0x04,
             .data_type = TYPE_U16,
-            .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+            .byte_order = Type_Byte_ABCD,
             .decimal_places = 1,
 
             .default_val = 5000
@@ -52,7 +301,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x04,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 },
                 {   // B相电压寄存器
@@ -60,7 +309,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x04,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 },
                 {   // C相电压寄存器
@@ -68,7 +317,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x04,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 }
             },
@@ -78,7 +327,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x04,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 },
                 {   // B相电流寄存器
@@ -86,7 +335,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x04,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 },
                 {   // C相电流寄存器
@@ -94,7 +343,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x04,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 }
             },
@@ -104,7 +353,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // B相有功功率寄存器
@@ -112,7 +361,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // C相有功功率寄存器
@@ -120,7 +369,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // 总有功功率寄存器
@@ -128,7 +377,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 2,
                     .read_func_code = 0x04,
                     .data_type = TYPE_I32,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 }
             },
@@ -138,7 +387,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // B相无功功率寄存器
@@ -146,7 +395,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // C相无功功率寄存器
@@ -154,7 +403,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // 总无功功率寄存器
@@ -162,7 +411,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 2,
                     .read_func_code = 0x04,
                     .data_type = TYPE_I32,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 }
             },
@@ -172,7 +421,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // B相功率因数寄存器
@@ -180,7 +429,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // C相功率因数寄存器
@@ -188,7 +437,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // 总功率因数寄存器
@@ -196,7 +445,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x04,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 }
             },
@@ -207,7 +456,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .read_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .pv_rated_active_pwr = {    // PV额定有功功率寄存器
@@ -215,7 +464,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 1,
                 .read_func_code = 0x04,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .pv_rated_reactive_pwr = {    // PV额定无功功率寄存器
@@ -223,7 +472,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 1,
                 .read_func_code = 0x04,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .set_volt = {    // 设置电压寄存器
@@ -231,7 +480,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .read_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .output_type = {    // 输出类型寄存器
@@ -239,7 +488,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .read_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .pwr_status = {    // 开关机状态寄存器
@@ -247,7 +496,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .read_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
         },
@@ -257,7 +506,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 1,
                 .write_func_code = 0x06,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0,
 
                 .write_default_val = 0xCF
@@ -267,7 +516,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 1,
                 .write_func_code = 0x06,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0,
 
                 .write_default_val = 0xCE
@@ -277,7 +526,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .write_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .reactive_pwr_ctrl = {    // 无功功率数值控制寄存器
@@ -285,7 +534,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .write_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .pwr_factor_ctrl = {    // 功率因数控制寄存器
@@ -293,7 +542,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 1,
                 .write_func_code = 0x06,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 3
             },
             .active_pwr_pct_ctrl = {    // 有功功率百分比控制寄存器
@@ -301,7 +550,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 1,
                 .write_func_code = 0x06,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 1
             },
             .reactive_pwr_pct_ctrl = {    // 无功功率百分比控制寄存器
@@ -309,7 +558,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 1,
                 .write_func_code = 0x06,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 1
             },
         },
@@ -325,7 +574,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
             .reg_cnt = 1,
             .read_func_code = 0x03,
             .data_type = TYPE_U16,
-            .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+            .byte_order = Type_Byte_ABCD,
             .decimal_places = 0,
 
             .default_val = 2,
@@ -337,7 +586,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x03,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 },
                 {   // B相电压寄存器
@@ -345,7 +594,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x03,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 },
                 {   // C相电压寄存器
@@ -353,7 +602,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x03,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 }
             },
@@ -363,7 +612,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 2,
                     .read_func_code = 0x03,
                     .data_type = TYPE_I32,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 3
                 },
                 {   // B相电流寄存器
@@ -371,7 +620,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 2,
                     .read_func_code = 0x03,
                     .data_type = TYPE_I32,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 3
                 },
                 {   // C相电流寄存器
@@ -379,7 +628,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 2,
                     .read_func_code = 0x03,
                     .data_type = TYPE_I32,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 3
                 }
             },
@@ -389,7 +638,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // B相有功功率寄存器
@@ -397,7 +646,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // C相有功功率寄存器
@@ -405,7 +654,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // 总有功功率寄存器
@@ -413,7 +662,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 2,
                     .read_func_code = 0x03,
                     .data_type = TYPE_I32,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 3
                 }
             },
@@ -423,7 +672,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // B相无功功率寄存器
@@ -431,7 +680,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // C相无功功率寄存器
@@ -439,7 +688,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // 总无功功率寄存器
@@ -447,7 +696,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 2,
                     .read_func_code = 0x03,
                     .data_type = TYPE_I32,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 3
                 }
             },
@@ -457,7 +706,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // B相功率因数寄存器
@@ -465,7 +714,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // C相功率因数寄存器
@@ -473,7 +722,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // 总功率因数寄存器
@@ -481,7 +730,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 2,
                     .read_func_code = 0x03,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 3,
 
                 }
@@ -493,7 +742,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .read_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .pv_rated_active_pwr = {    // PV额定有功功率寄存器
@@ -501,7 +750,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 2,
                 .read_func_code = 0x03,
                 .data_type = TYPE_U32,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 3
             },
             .pv_rated_reactive_pwr = {    // PV额定无功功率寄存器
@@ -509,7 +758,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 2,
                 .read_func_code = 0x03,
                 .data_type = TYPE_I32,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 3
             },
             .set_volt = {    // 设置电压寄存器
@@ -517,7 +766,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .read_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .output_type = {    // 输出类型寄存器
@@ -525,7 +774,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .read_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .pwr_status = {    // 开关机状态寄存器
@@ -533,7 +782,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .read_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
         },
@@ -543,7 +792,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 1,
                 .write_func_code = 0x06,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0,
 
                 .write_default_val = 0
@@ -553,7 +802,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 1,
                 .write_func_code = 0x06,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0,
 
                 .write_default_val = 0
@@ -563,7 +812,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 2,
                 .write_func_code = 0x10,
                 .data_type = TYPE_U32,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 3
             },
             .reactive_pwr_ctrl = {    // 无功功率数值控制寄存器
@@ -571,7 +820,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 2,
                 .write_func_code = 0x10,
                 .data_type = TYPE_I32,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 3
             },
             .pwr_factor_ctrl = {    // 功率因数控制寄存器
@@ -579,7 +828,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 2,
                 .write_func_code = 0x10,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 3
             },
             .active_pwr_pct_ctrl = {    // 有功功率百分比控制寄存器
@@ -587,7 +836,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 2,
                 .write_func_code = 0x10,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 2
             },
             .reactive_pwr_pct_ctrl = {    // 无功功率百分比控制寄存器
@@ -595,7 +844,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 2,
                 .write_func_code = 0x10,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 2
             },
         }
@@ -611,7 +860,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
             .reg_cnt = 1,
             .read_func_code = 0x03,
             .data_type = TYPE_U16,
-            .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+            .byte_order = Type_Byte_ABCD,
             .decimal_places = 2,
 
             .default_val = 5000
@@ -623,7 +872,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x03,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 },
                 {   // B相电压寄存器
@@ -631,7 +880,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x03,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 },
                 {   // C相电压寄存器
@@ -639,7 +888,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x03,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 }
             },
@@ -649,7 +898,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x03,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 },
                 {   // B相电流寄存器
@@ -657,7 +906,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x03,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 },
                 {   // C相电流寄存器
@@ -665,7 +914,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x03,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 }
             },
@@ -675,7 +924,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // B相有功功率寄存器
@@ -683,7 +932,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // C相有功功率寄存器
@@ -691,7 +940,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // 总有功功率寄存器
@@ -699,7 +948,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 2,
                     .read_func_code = 0x03,
                     .data_type = TYPE_I32,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 3
                 }
             },
@@ -709,7 +958,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // B相无功功率寄存器
@@ -717,7 +966,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // C相无功功率寄存器
@@ -725,7 +974,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // 总无功功率寄存器
@@ -733,7 +982,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 2,
                     .read_func_code = 0x03,
                     .data_type = TYPE_I32,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 3
                 }
             },
@@ -743,7 +992,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // B相功率因数寄存器
@@ -751,7 +1000,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // C相功率因数寄存器
@@ -759,7 +1008,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // 总功率因数寄存器
@@ -767,7 +1016,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 }
             },
@@ -778,7 +1027,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .read_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .pv_rated_active_pwr = {    // PV额定有功功率寄存器
@@ -786,7 +1035,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 1,
                 .read_func_code = 0x03,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .pv_rated_reactive_pwr = {    // PV额定无功功率寄存器
@@ -794,7 +1043,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .read_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .set_volt = {    // 设置电压寄存器
@@ -802,7 +1051,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .read_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .output_type = {    // 输出类型寄存器
@@ -810,7 +1059,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .read_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .pwr_status = {    // 开关机状态寄存器
@@ -818,7 +1067,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .read_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
         },
@@ -828,7 +1077,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .write_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0,
 
                 .write_default_val = 0
@@ -838,7 +1087,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .write_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0,
 
                 .write_default_val = 0
@@ -848,7 +1097,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .write_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .reactive_pwr_ctrl = {    // 无功功率数值控制寄存器
@@ -856,7 +1105,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .write_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .pwr_factor_ctrl = {    // 功率因数控制寄存器
@@ -864,7 +1113,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .write_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .active_pwr_pct_ctrl = {    // 有功功率百分比控制寄存器
@@ -872,7 +1121,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .write_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .reactive_pwr_pct_ctrl = {    // 无功功率百分比控制寄存器
@@ -880,7 +1129,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .write_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
         }
@@ -896,7 +1145,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
             .reg_cnt = 1,
             .read_func_code = 0x04,
             .data_type = TYPE_U16,
-            .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+            .byte_order = Type_Byte_ABCD,
             .decimal_places = 2,
 
             .default_val = 5000
@@ -908,7 +1157,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x04,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 },
                 {   // B相电压寄存器
@@ -916,7 +1165,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x04,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 },
                 {   // C相电压寄存器
@@ -924,7 +1173,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x04,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 }
             },
@@ -934,7 +1183,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x04,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 },
                 {   // B相电流寄存器
@@ -942,7 +1191,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x04,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 },
                 {   // C相电流寄存器
@@ -950,7 +1199,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x04,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 1
                 }
             },
@@ -960,7 +1209,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // B相有功功率寄存器
@@ -968,7 +1217,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // C相有功功率寄存器
@@ -976,7 +1225,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // 总有功功率寄存器
@@ -984,7 +1233,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 2,
                     .read_func_code = 0x04,
                     .data_type = TYPE_I32,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 }
             },
@@ -994,7 +1243,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // B相无功功率寄存器
@@ -1002,7 +1251,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // C相无功功率寄存器
@@ -1010,7 +1259,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // 总无功功率寄存器
@@ -1018,7 +1267,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 2,
                     .read_func_code = 0x04,
                     .data_type = TYPE_I32,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 }
             },
@@ -1028,7 +1277,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // B相功率因数寄存器
@@ -1036,7 +1285,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // C相功率因数寄存器
@@ -1044,7 +1293,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 0,
                     .read_func_code = 0,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 0
                 },
                 {   // 总功率因数寄存器
@@ -1052,7 +1301,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                     .reg_cnt = 1,
                     .read_func_code = 0x04,
                     .data_type = TYPE_U16,
-                    .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                    .byte_order = Type_Byte_ABCD,
                     .decimal_places = 3
                 }
             },
@@ -1063,7 +1312,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .read_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .pv_rated_active_pwr = {    // PV额定有功功率寄存器
@@ -1071,7 +1320,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 2,
                 .read_func_code = 0x04,
                 .data_type = TYPE_I32,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .pv_rated_reactive_pwr = {    // PV额定无功功率寄存器
@@ -1079,7 +1328,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 2,
                 .read_func_code = 0x04,
                 .data_type = TYPE_I32,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .set_volt = {    // 设置电压寄存器
@@ -1087,7 +1336,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .read_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .output_type = {    // 输出类型寄存器
@@ -1095,7 +1344,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .read_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
             .pwr_status = {    // 开关机状态寄存器
@@ -1103,7 +1352,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 0,
                 .read_func_code = 0,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
         },
@@ -1113,7 +1362,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 1,
                 .write_func_code = 0x06,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0,
 
                 .write_default_val = 0xBE
@@ -1123,7 +1372,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 1,
                 .write_func_code = 0x06,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0,
 
                 .write_default_val = 0xDE
@@ -1133,7 +1382,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 1,
                 .write_func_code = 0x06,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 1
             },
             .reactive_pwr_ctrl = {    // 无功功率数值控制寄存器
@@ -1141,7 +1390,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 1,
                 .write_func_code = 0x06,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 1
             },
             .pwr_factor_ctrl = {    // 功率因数控制寄存器
@@ -1149,7 +1398,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 1,
                 .write_func_code = 0x06,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 3
             },
             .active_pwr_pct_ctrl = {    // 有功功率百分比控制寄存器
@@ -1157,7 +1406,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 1,
                 .write_func_code = 0x06,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 2
             },
             .reactive_pwr_pct_ctrl = {    // 无功功率百分比控制寄存器
@@ -1165,7 +1414,7 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .reg_cnt = 1,
                 .write_func_code = 0x06,
                 .data_type = TYPE_U16,
-                .byte_order = INVERTER_BYTE_ORDER_NORMAL,
+                .byte_order = Type_Byte_ABCD,
                 .decimal_places = 2
             },
         }
