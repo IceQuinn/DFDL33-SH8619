@@ -14,17 +14,15 @@ extern "C" {
 /* 协议结构体在inverter_protocol_library.h中定义，这里只声明运行时指针类型。 */
 struct Inv_Proto;
 
-#define INVERTER_ARCHIVE_MAX_COUNT          12U
-#define INVERTER_ARCHIVE_BRAND_WIRE_SIZE    32U
-#define INVERTER_ARCHIVE_PROTOCOL_VERSION_SIZE  2U
-#define INVERTER_ARCHIVE_WIRE_SIZE          36U
+#define INVERTER_ARCHIVE_MAX_COUNT          12
+#define INVERTER_ARCHIVE_BRAND_WIRE_SIZE    32
+#define INVERTER_ARCHIVE_WIRE_SIZE          36
 
-#define INVERTER_ARCHIVE_ADDRESS_UNUSED     0xFFU
-#define INVERTER_ARCHIVE_PROTOCOL_UNKNOWN_BYTE  0xFFU
+#define INVERTER_ARCHIVE_ADDRESS_UNUSED     0xFF
 
-#define INVERTER_ARCHIVE_LIBRARY_VERSION           2U   // 档案库版本号
-#define INVERTER_ARCHIVE_INVALID                   0U   // 无效档案
-#define INVERTER_ARCHIVE_VALID                     1U   // 有效档案
+#define INVERTER_ARCHIVE_LIBRARY_VERSION           2   // 档案库版本号
+#define INVERTER_ARCHIVE_INVALID                   0   // 无效档案
+#define INVERTER_ARCHIVE_VALID                     1   // 有效档案
 #define INVERTER_ARCHIVE_ADD_FAILED                (-1)
 
 
@@ -35,12 +33,12 @@ typedef struct Inv_MfrInfo
     /* 固定32字节ASCII名称；占满时不保证包含字符串结束符。 */
     char name[INVERTER_ARCHIVE_BRAND_WIRE_SIZE];
 
-    /* 规约版本原始2字节，保持上行协议规定的传输顺序。 */
-    uint8_t proto_ver[INVERTER_ARCHIVE_PROTOCOL_VERSION_SIZE];
+    /* 规约版本。 */
+    uint16_t proto_ver;
 } Inv_MfrInfo_t;
 
 
-#define INV_MFR_INFO_SIZE                   34U
+#define INV_MFR_INFO_SIZE                   34
 typedef char Inv_MfrInfoSizeCheck_t[
     (sizeof(Inv_MfrInfo_t) == INV_MFR_INFO_SIZE) ? 1 : -1];
 
@@ -69,7 +67,7 @@ typedef struct Inv_Archive
     uint8_t port;
 } Inv_Archive_t;
 
-#define INV_ARCHIVE_SIZE                    36U
+#define INV_ARCHIVE_SIZE                    36
 typedef char Inv_ArchiveSizeCheck_t[
     (sizeof(Inv_Archive_t) == INV_ARCHIVE_SIZE) ? 1 : -1];
 
@@ -90,7 +88,7 @@ typedef struct Inv_ArchiveLib
 } Inv_ArchiveLib_t;
 #pragma pack()
 
-#define INV_ARCHIVE_LIB_SIZE                451U
+#define INV_ARCHIVE_LIB_SIZE                451
 typedef char Inv_ArchiveLibSizeCheck_t[
     (sizeof(Inv_ArchiveLib_t) == INV_ARCHIVE_LIB_SIZE) ? 1 : -1];
 
@@ -101,7 +99,7 @@ extern Inv_ArchiveLib_t g_inv_archive_lib;
 extern const struct Inv_Proto *g_inv_archive_proto[INVERTER_ARCHIVE_MAX_COUNT];
 
 /* 将固定32字节厂家名称转换为以'\0'结束的可打印字符串。 */
-void Inv_Archive_Copy_Mfr_Name(char output[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U],
+void Inv_Archive_Copy_Mfr_Name(char output[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1],
                                const char input[INVERTER_ARCHIVE_BRAND_WIRE_SIZE]);
 
 /* 新增或更新一条档案并保存到Flash，成功返回0～11槽位下标，失败返回-1。 */

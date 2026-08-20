@@ -13,22 +13,22 @@ Inv_ArchiveLib_t g_inv_archive_lib;
 const struct Inv_Proto *g_inv_archive_proto[INVERTER_ARCHIVE_MAX_COUNT];
 
 /* 将固定32字节厂家名称转换为以'\0'结束的可打印字符串。 */
-void Inv_Archive_Copy_Mfr_Name(char output[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U],
+void Inv_Archive_Copy_Mfr_Name(char output[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1],
                                const char input[INVERTER_ARCHIVE_BRAND_WIRE_SIZE])
 {
     uint8_t index;
 
     /* 逐字节复制厂家名称，遇到结束符或Flash空白值时停止。 */
-    for(index = 0U; index < INVERTER_ARCHIVE_BRAND_WIRE_SIZE; ++index) {
+    for(index = 0; index < INVERTER_ARCHIVE_BRAND_WIRE_SIZE; ++index) {
         uint8_t character = (uint8_t)input[index];
 
         /* 字符串结束符和Flash擦除值0xFF都表示厂家名称结束。 */
-        if((character == 0U) || (character == 0xFFU)) {
+        if((character == 0) || (character == 0xFF)) {
             break;
         }
 
         /* 可打印ASCII字符原样保存，其他字符替换为问号。 */
-        if((character >= 0x20U) && (character <= 0x7EU)) {
+        if((character >= 0x20) && (character <= 0x7E)) {
             output[index] = (char)character;
         }
         else {
@@ -43,10 +43,10 @@ void Inv_Archive_Copy_Mfr_Name(char output[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U
 static void inv_archive_refresh_count(void)
 {
     uint8_t index;
-    uint8_t valid_count = 0U;
+    uint8_t valid_count = 0;
 
     /* 遍历固定档案槽位，只统计有效标志为有效的档案。 */
-    for(index = 0U; index < INVERTER_ARCHIVE_MAX_COUNT; ++index) {
+    for(index = 0; index < INVERTER_ARCHIVE_MAX_COUNT; ++index) {
         /* 当前槽位有效时累计档案数量，无效槽位不参与统计。 */
         if(g_inv_archive_lib.valid[index] == INVERTER_ARCHIVE_VALID) {
             ++valid_count;
@@ -67,7 +67,7 @@ static const Inv_Proto_t *inv_archive_find_protocol(const Inv_MfrInfo_t *mfr_inf
     }
 
     /* 依次检查协议库中的全部协议槽位。 */
-    for(protocol_index = 0U; protocol_index < INVERTER_PROTOCOL_LIBRARY_COUNT; ++protocol_index) {
+    for(protocol_index = 0; protocol_index < INVERTER_PROTOCOL_LIBRARY_COUNT; ++protocol_index) {
         /* 只有有效协议，并且厂家名称和规约版本完全相同时才算匹配成功。 */
         if((g_inv_proto_lib.valid[protocol_index] == INVERTER_PROTOCOL_VALID) &&
            (rt_memcmp(&g_inv_proto_lib.proto[protocol_index].mfr_info, mfr_info, sizeof(*mfr_info)) == 0)) {
@@ -99,13 +99,13 @@ int8_t Inv_Archive_Add(const Inv_Archive_t *archive)
 
     /* 档案为空、Modbus地址越界或端口号越界时拒绝写入。 */
     if((archive == RT_NULL) ||
-       (archive->mb_addr < 1U) || (archive->mb_addr > 247U) ||
+       (archive->mb_addr < 1) || (archive->mb_addr > 247) ||
        (archive->port < INV_PORT_RJ45_1) || (archive->port > INV_PORT_WIRELESS)) {
         return INVERTER_ARCHIVE_ADD_FAILED;
     }
 
     /* 遍历档案槽位，优先更新已有设备，同时记录第一个空闲槽位。 */
-    for(index = 0U; index < INVERTER_ARCHIVE_MAX_COUNT; ++index) {
+    for(index = 0; index < INVERTER_ARCHIVE_MAX_COUNT; ++index) {
         Inv_Archive_t *stored_archive = &g_inv_archive_lib.archives[index];
 
         /* 有效槽位需要判断是否为相同端口、相同地址的同一台设备。 */
@@ -157,11 +157,11 @@ int8_t Inv_Archive_Add_Device(uint8_t mb_addr, uint8_t port, const Inv_MfrInfo_t
 /* 校验全部有效档案，并为能够匹配协议的档案建立运行时协议指针。 */
 void Inv_Archive_Validate_Protocols(void)
 {
-    uint8_t valid_count = 0U;
-    uint8_t archive_changed = 0U;
+    uint8_t valid_count = 0;
+    uint8_t archive_changed = 0;
 
     /* 逐个检查固定档案槽位，避免只按count遍历时遗漏中间的有效槽位。 */
-    for(uint8_t i = 0U; i < INVERTER_ARCHIVE_MAX_COUNT; ++i) {
+    for(uint8_t i = 0; i < INVERTER_ARCHIVE_MAX_COUNT; ++i) {
         Inv_Archive_t *archive = &g_inv_archive_lib.archives[i];
         const Inv_Proto_t *protocol;
 
@@ -178,7 +178,7 @@ void Inv_Archive_Validate_Protocols(void)
             rt_kprintf("[%08d] archive[%d] addr[%d] port[%d] disabled: matching protocol not found\n", rt_tick_get(), i + 1, archive->mb_addr, archive->port);
             g_inv_archive_lib.valid[i] = INVERTER_ARCHIVE_INVALID;
             g_inv_archive_proto[i] = RT_NULL;
-            archive_changed = 1U;
+            archive_changed = 1;
             continue;
         }
 
@@ -189,11 +189,11 @@ void Inv_Archive_Validate_Protocols(void)
     /* 历史count和本次有效档案统计不一致时，同步修正持久化计数。 */
     if(g_inv_archive_lib.count != valid_count) {
         g_inv_archive_lib.count = valid_count;
-        archive_changed = 1U;
+        archive_changed = 1;
     }
 
     /* 只有档案有效状态或档案数量发生变化时才写Flash，减少擦写次数。 */
-    if(archive_changed != 0U) {
+    if(archive_changed != 0) {
         Inv_Archive_Save();
     }
 }
@@ -217,11 +217,11 @@ uint8_t Inv_Archive_Port_Is_Occupied(uint8_t port)
     for(uint8_t i = 0; i < INVERTER_ARCHIVE_MAX_COUNT; ++i) {
         /* 档案有效并且端口号相同时，说明该端口已经被占用。 */
         if((g_inv_archive_lib.valid[i] == INVERTER_ARCHIVE_VALID) && (g_inv_archive_lib.archives[i].port == port)) {
-            return 1U;
+            return 1;
         }
     }
 
-    return 0U;
+    return 0;
 }
 
 /* 清空档案库和运行时协议指针，并将空档案库保存到Flash。 */

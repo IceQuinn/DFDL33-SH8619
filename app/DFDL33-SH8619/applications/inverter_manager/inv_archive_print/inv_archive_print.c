@@ -39,10 +39,10 @@ static const char *inv_archive_port_name(uint8_t port)
 void Inv_Archive_Print(void)
 {
     uint8_t index;
-    uint8_t valid_count = 0U;
+    uint8_t valid_count = 0;
 
     /* 打印前重新统计有效槽位，便于对比档案库中保存的count。 */
-    for(index = 0U; index < INVERTER_ARCHIVE_MAX_COUNT; ++index) {
+    for(index = 0; index < INVERTER_ARCHIVE_MAX_COUNT; ++index) {
         /* 当前槽位有效时累计实际有效数量。 */
         if(g_inv_archive_lib.valid[index] == INVERTER_ARCHIVE_VALID) {
             ++valid_count;
@@ -53,12 +53,12 @@ void Inv_Archive_Print(void)
     rt_kprintf("[%08d] %-5s %-11s %-15s %-32s %-13s %-18s\n", rt_tick_get(), "No.", "Valid", "Modbus address", "Manufacturer", "Protocol ver", "Access port");
 
     /* 逐槽位打印档案内容，无效槽位也保留输出以便检查Flash数据。 */
-    for(index = 0U; index < INVERTER_ARCHIVE_MAX_COUNT; ++index) {
+    for(index = 0; index < INVERTER_ARCHIVE_MAX_COUNT; ++index) {
         const Inv_Archive_t *archive = &g_inv_archive_lib.archives[index];
         const char *manufacturer_text;
         const char *valid_text;
         uint8_t valid = g_inv_archive_lib.valid[index];
-        char manufacturer[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U];
+        char manufacturer[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1];
         char modbus_address[16];
 
         Inv_Archive_Copy_Mfr_Name(manufacturer, archive->mfr_info.name);
@@ -80,7 +80,7 @@ void Inv_Archive_Print(void)
             valid_text = "INVALID";
         }
 
-        rt_kprintf("[%08d] %-5d %-7s(%d)  %-15s %-32s %d.%d          %d(%s)\n", rt_tick_get(), index + 1, valid_text, valid, modbus_address, manufacturer_text, archive->mfr_info.proto_ver[0], archive->mfr_info.proto_ver[1], archive->port, inv_archive_port_name(archive->port));
+        rt_kprintf("[%08d] %-5d %-7s(%d)  %-15s %-32s 0x%04X         %d(%s)\n", rt_tick_get(), index + 1, valid_text, valid, modbus_address, manufacturer_text, (unsigned int)archive->mfr_info.proto_ver, archive->port, inv_archive_port_name(archive->port));
     }
 
     rt_kprintf("[%08d] Printed %d archive slots, valid count=%d\n", rt_tick_get(), INVERTER_ARCHIVE_MAX_COUNT, valid_count);

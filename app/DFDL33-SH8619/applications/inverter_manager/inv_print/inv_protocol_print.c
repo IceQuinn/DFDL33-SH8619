@@ -122,18 +122,18 @@ static void inv_proto_print_feature(const Inv_Feature_t *feature)
 const Inv_Proto_t *Inv_Proto_Get(uint16_t proto_number)
 {
     /* 协议序号从1开始，0或超过协议库容量都属于越界。 */
-    if((proto_number == 0U) || (proto_number > INVERTER_PROTOCOL_LIBRARY_COUNT)) {
+    if((proto_number == 0) || (proto_number > INVERTER_PROTOCOL_LIBRARY_COUNT)) {
         return RT_NULL;
     }
 
-    return &g_inv_proto_lib.proto[proto_number - 1U];
+    return &g_inv_proto_lib.proto[proto_number - 1];
 }
 
 /* 完整打印一条协议中的厂家信息、数据类、参数类和控制类。 */
 static void inv_proto_print_one(uint16_t proto_number, uint16_t valid_number, const Inv_Proto_t *proto)
 {
     const char *manufacturer_text;
-    char manufacturer[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U];
+    char manufacturer[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1];
 
     Inv_Archive_Copy_Mfr_Name(manufacturer, proto->mfr_info.name);
 
@@ -145,7 +145,7 @@ static void inv_proto_print_one(uint16_t proto_number, uint16_t valid_number, co
         manufacturer_text = manufacturer;
     }
 
-    rt_kprintf("[%08d] valid[%d] protocol[%d] manufacturer[%s] version[%d.%d]\n", rt_tick_get(), valid_number, proto_number, manufacturer_text, proto->mfr_info.proto_ver[0], proto->mfr_info.proto_ver[1]);
+    rt_kprintf("[%08d] valid[%d] protocol[%d] manufacturer[%s] version[0x%04X]\n", rt_tick_get(), valid_number, proto_number, manufacturer_text, (unsigned int)proto->mfr_info.proto_ver);
     inv_proto_print_feature(&proto->feature);
 
     inv_proto_print_read_table_header("[data]");
@@ -190,11 +190,11 @@ static void inv_proto_print_one(uint16_t proto_number, uint16_t valid_number, co
 void Inv_Proto_Print(uint16_t count)
 {
     uint16_t proto_number;
-    uint16_t valid_number = 0U;
+    uint16_t valid_number = 0;
 
     /* count为0时使用默认打印数量10。 */
-    if(count == 0U) {
-        count = 10U;
+    if(count == 0) {
+        count = 10;
     }
 
     /* 请求数量超过协议库容量时限制为全部100条。 */
@@ -205,11 +205,11 @@ void Inv_Proto_Print(uint16_t count)
     rt_kprintf("[%08d] Protocol library: print count=%d, capacity=%d\n", rt_tick_get(), count, INVERTER_PROTOCOL_LIBRARY_COUNT);
 
     /* 按1开始的协议序号依次打印有效或无效状态。 */
-    for(proto_number = 1U; proto_number <= count; ++proto_number) {
+    for(proto_number = 1; proto_number <= count; ++proto_number) {
         const Inv_Proto_t *proto = Inv_Proto_Get(proto_number);
 
         /* 有效协议打印完整内容并累计有效协议序号。 */
-        if(g_inv_proto_lib.valid[proto_number - 1U] == INVERTER_PROTOCOL_VALID) {
+        if(g_inv_proto_lib.valid[proto_number - 1] == INVERTER_PROTOCOL_VALID) {
             ++valid_number;
             inv_proto_print_one(proto_number, valid_number, proto);
         }

@@ -19,7 +19,7 @@ void Inv_Proto_Default_Init(void)
     rt_memset(&g_inv_proto_lib, 0, sizeof(g_inv_proto_lib));
 
     /* 将全部内置默认协议依次复制到协议库前部并置为有效。 */
-    for(index = 0U; index < INVERTER_PROTOCOL_DEFAULT_COUNT; ++index) {
+    for(index = 0; index < INVERTER_PROTOCOL_DEFAULT_COUNT; ++index) {
         rt_memcpy(&g_inv_proto_lib.proto[index], &g_inv_proto_default_lib[index], sizeof(Inv_Proto_t));
         g_inv_proto_lib.valid[index] = INVERTER_PROTOCOL_VALID;
     }

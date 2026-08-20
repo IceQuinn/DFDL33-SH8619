@@ -16,11 +16,11 @@ extern "C" {
 
 
 /* 逆变器协议库固定提供100条厂家协议配置。 */
-#define INVERTER_PROTOCOL_LIBRARY_COUNT             100U
-#define INVERTER_PROTOCOL_DEFAULT_COUNT             4U
-#define INVERTER_PROTOCOL_LIBRARY_VERSION           11U
-#define INVERTER_PROTOCOL_INVALID                   0U
-#define INVERTER_PROTOCOL_VALID                     1U
+#define INVERTER_PROTOCOL_LIBRARY_COUNT             100
+#define INVERTER_PROTOCOL_DEFAULT_COUNT             4
+#define INVERTER_PROTOCOL_LIBRARY_VERSION           11
+#define INVERTER_PROTOCOL_INVALID                   0
+#define INVERTER_PROTOCOL_VALID                     1
 
 
 /* 使用 0xFFFF 表示某个厂家不支持或未配置该寄存器。 */
@@ -34,16 +34,16 @@ extern "C" {
 typedef enum Inv_ByteOrder
 {
     /* 16位数据表示AB，32位数据表示ABCD。 */
-    INVERTER_BYTE_ORDER_NORMAL = 0U,
+    INVERTER_BYTE_ORDER_NORMAL = 0,
 
     /* 16位数据表示BA，32位数据表示CDAB。 */
-    INVERTER_BYTE_ORDER_SWAP = 1U,
+    INVERTER_BYTE_ORDER_SWAP = 1,
 
     /* 仅用于32位数据，表示BADC。 */
-    INVERTER_BYTE_ORDER_BADC = 2U,
+    INVERTER_BYTE_ORDER_BADC = 2,
 
     /* 仅用于32位数据，表示DCBA。 */
-    INVERTER_BYTE_ORDER_DCBA = 3U
+    INVERTER_BYTE_ORDER_DCBA = 3
 } Inv_ByteOrder_t;
 
 /* 数据类和参数类使用的只读Modbus RTU寄存器描述，不保存实时数据。 */
@@ -84,7 +84,7 @@ typedef struct Inv_RegBlk
 } Inv_RegBlk_t;
 
 /* 只读寄存器块由地址2字节、寄存器个数1字节、读功能码1字节和数据格式2字节组成，共6字节。 */
-#define INV_REG_BLK_SIZE                            6U
+#define INV_REG_BLK_SIZE                            6
 typedef char Inv_RegBlkSizeCheck_t[
     (sizeof(Inv_RegBlk_t) == INV_REG_BLK_SIZE) ? 1 : -1];
 
@@ -126,7 +126,7 @@ typedef struct Inv_CtrlRegBlk
 } Inv_CtrlRegBlk_t;
 
 /* 普通控制寄存器块由地址2字节、寄存器个数1字节、写功能码1字节和数据格式2字节组成，共6字节。 */
-#define INV_CTRL_REG_BLK_SIZE                       6U
+#define INV_CTRL_REG_BLK_SIZE                       6
 typedef char Inv_CtrlRegBlkSizeCheck_t[
     (sizeof(Inv_CtrlRegBlk_t) == INV_CTRL_REG_BLK_SIZE) ? 1 : -1];
 
@@ -156,7 +156,7 @@ typedef struct Inv_CtrlDefaultRegBlk
 } Inv_CtrlDefaultRegBlk_t;
 
 /* 带默认值的控制寄存器块由普通控制字段6字节和默认写入值2字节组成，共8字节。 */
-#define INV_CTRL_DEFAULT_REG_BLK_SIZE               8U
+#define INV_CTRL_DEFAULT_REG_BLK_SIZE               8
 typedef char Inv_CtrlDefaultRegBlkSizeCheck_t[
     (sizeof(Inv_CtrlDefaultRegBlk_t) == INV_CTRL_DEFAULT_REG_BLK_SIZE) ? 1 : -1];
 
@@ -200,7 +200,7 @@ typedef struct Inv_Feature
 } Inv_Feature_t;
 
 /* 特征数据由地址2字节、寄存器个数1字节、读功能码1字节、数据格式2字节和默认值2字节组成，共8字节。 */
-#define INV_FEATURE_SIZE                            8U
+#define INV_FEATURE_SIZE                            8
 typedef char Inv_FeatureSizeCheck_t[
     (sizeof(Inv_Feature_t) == INV_FEATURE_SIZE) ? 1 : -1];
 
@@ -232,7 +232,7 @@ typedef struct Inv_ProtoData
  * 合计108字节
  * 使用C99兼容的负数组长度方式执行编译期检查；后续增删字段却没有同步更新
  * 期望大小时，编译器会直接报错。 */
-#define INV_PROTO_DATA_SIZE                         108U
+#define INV_PROTO_DATA_SIZE                         108
 typedef char Inv_ProtoDataSizeCheck_t[
     (sizeof(Inv_ProtoData_t) == INV_PROTO_DATA_SIZE) ? 1 : -1];
 
@@ -259,7 +259,7 @@ typedef struct Inv_ProtoParam
 } Inv_ProtoParam_t;
 
 /* 参数类包含6个只读寄存器块，按1字节对齐后共6×6=36字节。 */
-#define INV_PROTO_PARAM_SIZE                        36U
+#define INV_PROTO_PARAM_SIZE                        36
 typedef char Inv_ProtoParamSizeCheck_t[
     (sizeof(Inv_ProtoParam_t) == INV_PROTO_PARAM_SIZE) ? 1 : -1];
 
@@ -292,7 +292,7 @@ typedef struct Inv_ProtoCtrl
 } Inv_ProtoCtrl_t;
 
 /* 控制类包含2个带默认值控制点和5个普通控制点，共8×2+6×5=46字节。 */
-#define INV_PROTO_CTRL_SIZE                         46U
+#define INV_PROTO_CTRL_SIZE                         46
 typedef char Inv_ProtoCtrlSizeCheck_t[
     (sizeof(Inv_ProtoCtrl_t) == INV_PROTO_CTRL_SIZE) ? 1 : -1];
 
@@ -329,12 +329,12 @@ typedef struct Inv_ProtoLib
 #pragma pack()
 
 /* 厂家信息34字节、特征数据8字节、数据类108字节、参数类36字节、控制类46字节，共232字节。 */
-#define INV_PROTO_SIZE                              232U
+#define INV_PROTO_SIZE                              232
 typedef char Inv_ProtoSizeCheck_t[
     (sizeof(Inv_Proto_t) == INV_PROTO_SIZE) ? 1 : -1];
 
 /* AB头6字节、100个有效标志和100条232字节协议，共6+100+232×100=23306字节。 */
-#define INV_PROTO_LIB_SIZE                          23306U
+#define INV_PROTO_LIB_SIZE                          23306
 typedef char Inv_ProtoLibSizeCheck_t[
     (sizeof(Inv_ProtoLib_t) == INV_PROTO_LIB_SIZE) ? 1 : -1];
 

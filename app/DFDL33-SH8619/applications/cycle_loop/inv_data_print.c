@@ -127,7 +127,7 @@ static void inv_data_print_archive_index(uint8_t archive_index)
     }
 
     Inv_Archive_Copy_Mfr_Name(manufacturer, archive.mfr_info.name);
-    rt_kprintf("[%08d] archive[%d] VALID addr[%d] port[%d] manufacturer[%s] protocol[%d.%d]\n", rt_tick_get(), archive_number, archive.mb_addr, archive.port, manufacturer, archive.mfr_info.proto_ver[0], archive.mfr_info.proto_ver[1]);
+    rt_kprintf("[%08d] archive[%d] VALID addr[%d] port[%d] manufacturer[%s] protocol[0x%04X]\n", rt_tick_get(), archive_number, archive.mb_addr, archive.port, manufacturer, (unsigned int)archive.mfr_info.proto_ver);
     inv_data_print_data_class(archive_number, &data.data);
     inv_data_print_param_class(archive_number, &data.param);
     inv_data_print_ctrl_class(archive_number, &data.ctrl);
