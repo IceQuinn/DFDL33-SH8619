@@ -116,6 +116,8 @@ static Inv_Control_Result_Info_t g_inv_control_results[INV_CONTROL_RESULT_QUEUE_
 static uint8_t g_inv_control_result_read_index;  /* 下一项待取控制结果下标。 */
 static uint8_t g_inv_control_result_write_index; /* 下一项待写控制结果下标。 */
 static uint8_t g_inv_control_result_count;       /* 当前结果队列中的有效结果数量。 */
+static struct rt_semaphore g_inv_control_result_sem; /* 控制结果到达时唤醒等待结果的上层线程。 */
+static rt_bool_t g_inv_control_result_sem_initialized; /* RT_TRUE表示结果信号量已经初始化。 */
 static volatile rt_bool_t g_inv_data_initialized; /* RT_TRUE表示端口上下文已经完成初始化。 */
 
 /* 数据类各数组对应的日志名称。 */
@@ -193,6 +195,7 @@ static void inv_control_push_result(const Inv_Control_Request_t *request,
 {
     Inv_Control_Result_Info_t result_info;
     rt_base_t level;
+    rt_bool_t release_result_sem = RT_TRUE;
 
     rt_memset(&result_info, 0, sizeof(result_info));
     result_info.request = *request;
@@ -202,16 +205,22 @@ static void inv_control_push_result(const Inv_Control_Request_t *request,
 
     level = rt_hw_interrupt_disable();
 
-    /* 结果长期未读取导致队列已满时，移动读下标以保留本次最新控制结果。 */
+    /* 队列已满时用最新结果替换最旧结果，结果总数不变，因此不增加信号量计数。 */
     if(g_inv_control_result_count >= INV_CONTROL_RESULT_QUEUE_SIZE) {
         g_inv_control_result_read_index = (g_inv_control_result_read_index + 1U) % INV_CONTROL_RESULT_QUEUE_SIZE;
         --g_inv_control_result_count;
+        release_result_sem = RT_FALSE;
     }
 
     g_inv_control_results[g_inv_control_result_write_index] = result_info;
     g_inv_control_result_write_index = (g_inv_control_result_write_index + 1U) % INV_CONTROL_RESULT_QUEUE_SIZE;
     ++g_inv_control_result_count;
     rt_hw_interrupt_enable(level);
+
+    /* 新增结果后释放一次信号量，正在等待的上层线程会立即被唤醒。 */
+    if(release_result_sem == RT_TRUE) {
+        rt_sem_release(&g_inv_control_result_sem);
+    }
 }
 
 /* 将只读协议寄存器复制为统一抄读配置，避免直接读取1字节对齐结构中的16位字段。 */
@@ -1462,6 +1471,8 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
 /* 初始化实时数据及三个端口状态机，端口映射与自动识别阶段保持一致。 */
 void Inv_Data_Init(void)
 {
+    rt_err_t semaphore_result;
+
     g_inv_data_initialized = RT_FALSE;
     rt_memset(g_inv_data, 0, sizeof(g_inv_data));
     rt_memset(g_inv_data_ports, 0, sizeof(g_inv_data_ports));
@@ -1469,6 +1480,22 @@ void Inv_Data_Init(void)
     g_inv_control_result_read_index = 0U;
     g_inv_control_result_write_index = 0U;
     g_inv_control_result_count = 0U;
+
+    /* 首次初始化时创建静态结果信号量，初始计数为0表示没有完成结果。 */
+    if(g_inv_control_result_sem_initialized != RT_TRUE) {
+        semaphore_result = rt_sem_init(&g_inv_control_result_sem, "ctrl_res", 0U, RT_IPC_FLAG_FIFO);
+        if(semaphore_result != RT_EOK) {
+            rt_kprintf("[%08d] control result semaphore init failed, result[%d]\n", rt_tick_get(), semaphore_result);
+            return;
+        }
+        g_inv_control_result_sem_initialized = RT_TRUE;
+    }
+    /* 重复初始化实时数据时清空旧信号，保证信号量计数与已清空的结果队列一致。 */
+    else {
+        while(rt_sem_trytake(&g_inv_control_result_sem) == RT_EOK) {
+            /* 循环取走全部旧信号，直到信号量计数归零。 */
+        }
+    }
 
     g_inv_data_ports[0].uart_no         = UART1_NO;
     g_inv_data_ports[0].archive_port    = INV_PORT_RS485_2;
@@ -1579,19 +1606,35 @@ rt_err_t Inv_Control_Submit(const Inv_Control_Request_t *request)
     return RT_EOK;
 }
 
-/* 取出最早生成的一项控制结果，查询和周期线程写入之间使用临界区保护。 */
-rt_err_t Inv_Control_Get_Result(Inv_Control_Result_Info_t *result)
+/* 等待结果信号量并取出最早生成的一项控制结果。 */
+rt_err_t Inv_Control_Get_Result(Inv_Control_Result_Info_t *result, int32_t timeout)
 {
     rt_base_t level;
+    rt_err_t wait_result;
 
-    /* 输出指针为空时不能返回控制结果。 */
+    /* 输出指针为空或等待时间小于永久等待值时，参数无效。 */
     if(result == RT_NULL) {
         return -RT_EINVAL;
     }
 
+    if(timeout < RT_WAITING_FOREVER) {
+        return -RT_EINVAL;
+    }
+
+    /* 结果信号量尚未初始化时不能进入阻塞等待。 */
+    if(g_inv_control_result_sem_initialized != RT_TRUE) {
+        return -RT_EBUSY;
+    }
+
+    /* 先等待结果信号，超时或线程等待被中断时直接返回RT-Thread错误码。 */
+    wait_result = rt_sem_take(&g_inv_control_result_sem, timeout);
+    if(wait_result != RT_EOK) {
+        return wait_result;
+    }
+
     level = rt_hw_interrupt_disable();
 
-    /* 结果队列为空表示当前没有已经结束的控制事务。 */
+    /* 正常情况下取得信号后队列必然有结果，队列为空仅可能由重复初始化引起。 */
     if(g_inv_control_result_count == 0U) {
         rt_hw_interrupt_enable(level);
         return -RT_EEMPTY;

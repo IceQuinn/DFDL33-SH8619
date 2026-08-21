@@ -195,23 +195,35 @@ MSH_CMD_EXPORT(inv_data_print, print inverter realtime data);
 void Inv_Control_Test(void)
 {
     Inv_Control_Request_t request;
+    Inv_Control_Result_Info_t result;
+    rt_err_t control_result;
 
     request.request_id = 2U;
     request.archive_index = 0U;
     request.type = INV_CONTROL_POWER_ON;
-    request.value = 1234;                    /* 定点值，具体含义由协议库配置决定。 */
+    request.value = 0; /* 开机使用协议库默认写入值，该字段不会参与组帧。 */
 
-    Inv_Control_Submit(&request);   
+    control_result = Inv_Control_Submit(&request);
 
-    rt_thread_mdelay(1000);
-    
-    Inv_Control_Result_Info_t result;
-
-    if(Inv_Control_Get_Result(&result) == RT_EOK) {
-        rt_kprintf("[%08d] request[%d] result[%d]\n",
-                rt_tick_get(),
-                result.request.request_id,
-                result.result);
+    /* 请求没有进入控制队列时直接打印提交错误，不再等待结果信号量。 */
+    if(control_result != RT_EOK) {
+        rt_kprintf("[%08d] request[%d] submit failed, result[%d]\n", rt_tick_get(), request.request_id, control_result);
+        return;
     }
+
+    /* MSH测试线程最多等待3秒，结果生成后信号量会立即唤醒本线程。 */
+    control_result = Inv_Control_Get_Result(&result, 3000);
+    if(control_result != RT_EOK) {
+        rt_kprintf("[%08d] request[%d] wait failed, result[%d]\n", rt_tick_get(), request.request_id, control_result);
+        return;
+    }
+
+    /* request_id用于确认取出的异步结果是否属于本次测试命令。 */
+    if(result.request.request_id != request.request_id) {
+        rt_kprintf("[%08d] request[%d] got another request[%d] result\n", rt_tick_get(), request.request_id, result.request.request_id);
+        return;
+    }
+
+    rt_kprintf("[%08d] request[%d] result[%d] exception[%d]\n", rt_tick_get(), result.request.request_id, result.result, result.exception_code);
 }
 MSH_CMD_EXPORT(Inv_Control_Test, Inv_Control_Test);

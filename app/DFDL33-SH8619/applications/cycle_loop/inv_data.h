@@ -153,8 +153,8 @@ rt_err_t Inv_Data_Rx_Frame(uint16_t uart_no, const uint8_t *frame, uint16_t fram
 /* 异步提交逆变器控制请求，返回RT_EOK仅表示请求已经进入目标端口队列。 */
 rt_err_t Inv_Control_Submit(const Inv_Control_Request_t *request);
 
-/* 取出一项已经完成的控制结果，当前没有结果时返回-RT_EEMPTY。 */
-rt_err_t Inv_Control_Get_Result(Inv_Control_Result_Info_t *result);
+/* 等待并取出一项控制结果，timeout单位为系统tick，支持0和RT_WAITING_FOREVER。 */
+rt_err_t Inv_Control_Get_Result(Inv_Control_Result_Info_t *result, int32_t timeout);
 
 /* 按0～11档案槽位获取实时数据，槽位无效或越界时返回RT_NULL。 */
 Inv_Data_t *Inv_Data_Get(uint8_t archive_index);
