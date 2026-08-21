@@ -143,10 +143,10 @@ static void uart_dispatch_frame(uint16_t uart_no)
         return;
     }
 
-    /* 自动识别阶段优先接收报文，识别状态机没有等待响应时再交给周期抄读。 */
+    /* 自动识别阶段优先接收报文，没有识别事务等待响应时再交给下行读写状态机。 */
     result = cycle_loop_rx_frame(uart_no, rx->frame_buf, (uint16_t)rx->frame_len);
 
-    /* 自动识别没有接收本帧时，尝试提交给周期抄读端口的独立接收邮箱。 */
+    /* 自动识别没有接收本帧时，尝试提交给周期读取或实时控制使用的端口邮箱。 */
     if(result != RT_EOK) {
         Inv_Data_Rx_Frame(uart_no, rx->frame_buf, (uint16_t)rx->frame_len);
     }

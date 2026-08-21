@@ -1073,24 +1073,24 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
         },
         .ctrl = {
             .pwr_on = {    // 开机控制寄存器
-                .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-                .reg_cnt = 0,
-                .write_func_code = 0,
+                .reg_addr = 40330,
+                .reg_cnt = 1,
+                .write_func_code = 0x06,
                 .data_type = TYPE_U16,
                 .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0,
 
-                .write_default_val = 0
+                .write_default_val = 1234
             },
             .pwr_off = {    // 关机控制寄存器
-                .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-                .reg_cnt = 0,
-                .write_func_code = 0,
+                .reg_addr = 40331,
+                .reg_cnt = 1,
+                .write_func_code = 0x06,
                 .data_type = TYPE_U16,
                 .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0,
 
-                .write_default_val = 0
+                .write_default_val = 4321
             },
             .active_pwr_ctrl = {    // 有功功率数值控制寄存器
                 .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,

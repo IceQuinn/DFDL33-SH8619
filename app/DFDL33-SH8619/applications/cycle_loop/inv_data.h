@@ -23,6 +23,51 @@ extern "C" {
 /* 设备编号在线上最多占用32字节，内存中额外保留一个字符串结束符。 */
 #define INV_DATA_DEVICE_NO_MAX_LEN                  32U
 
+/* 逆变器控制类型与协议库Inv_ProtoCtrl_t中的控制寄存器一一对应。 */
+typedef enum Inv_Control_Type
+{
+    INV_CONTROL_POWER_ON = 0,             /* 使用协议默认值执行开机控制。 */
+    INV_CONTROL_POWER_OFF,                /* 使用协议默认值执行关机控制。 */
+    INV_CONTROL_ACTIVE_POWER,             /* 写入有功功率数值。 */
+    INV_CONTROL_REACTIVE_POWER,           /* 写入无功功率数值。 */
+    INV_CONTROL_POWER_FACTOR,             /* 写入功率因数。 */
+    INV_CONTROL_ACTIVE_POWER_PERCENT,     /* 写入有功功率百分比。 */
+    INV_CONTROL_REACTIVE_POWER_PERCENT,   /* 写入无功功率百分比。 */
+    INV_CONTROL_TYPE_MAX                  /* 控制类型数量，仅用于参数范围检查。 */
+} Inv_Control_Type_t;
+
+/* 已受理控制请求的最终执行结果，提交接口返回成功不代表控制已经完成。 */
+typedef enum Inv_Control_Result
+{
+    INV_CONTROL_RESULT_OK = 0,            /* Modbus写响应完整校验通过。 */
+    INV_CONTROL_RESULT_ARCHIVE_INVALID,   /* 目标档案无效或已经失效。 */
+    INV_CONTROL_RESULT_PROTOCOL_MISSING,  /* 目标档案没有匹配的协议对象。 */
+    INV_CONTROL_RESULT_UNSUPPORTED,       /* 协议未配置该控制项或配置不支持。 */
+    INV_CONTROL_RESULT_BUILD_FAILED,      /* 控制值转换或Modbus写请求组帧失败。 */
+    INV_CONTROL_RESULT_SEND_FAILED,       /* 写请求没有完整写入下行串口。 */
+    INV_CONTROL_RESULT_TIMEOUT,           /* 写请求发送后1秒内没有收到响应。 */
+    INV_CONTROL_RESULT_RESPONSE_INVALID,  /* 收到响应，但CRC、地址、功能码或长度错误。 */
+    INV_CONTROL_RESULT_DEVICE_EXCEPTION   /* 逆变器返回Modbus异常响应。 */
+} Inv_Control_Result_t;
+
+/* 调用方提交的异步控制请求，request_id由调用方生成并在结果中原样返回。 */
+typedef struct Inv_Control_Request
+{
+    uint32_t request_id;                   /* 调用方用于关联请求和结果的流水号。 */
+    int32_t value;                         /* 协议定点整数值，开关机控制时忽略该字段。 */
+    uint8_t archive_index;                 /* 目标档案槽位下标，范围0～11。 */
+    Inv_Control_Type_t type;               /* 本次需要执行的逆变器控制类型。 */
+} Inv_Control_Request_t;
+
+/* 控制完成结果由查询接口取出，Modbus异常码只在DEVICE_EXCEPTION时有效。 */
+typedef struct Inv_Control_Result_Info
+{
+    Inv_Control_Request_t request;         /* 已完成的控制请求，开关机会带回实际默认写入值。 */
+    Inv_Control_Result_t result;           /* 本次控制最终执行结果。 */
+    uint8_t exception_code;                /* 逆变器返回的Modbus异常码，其他结果固定为0。 */
+    uint32_t finish_tick;                  /* 生成控制结果时rt_tick_get()返回的实时tick。 */
+} Inv_Control_Result_Info_t;
+
 /* 单个数值型实时数据项，协议原始值完成数据类型和字节序转换后写入value。 */
 typedef struct Inv_RealtimeValue
 {
@@ -104,6 +149,12 @@ void Inv_Data_Poll_Loop(void);
 
 /* 串口管理层调用本接口提交周期抄读阶段收到的一帧完整响应。 */
 rt_err_t Inv_Data_Rx_Frame(uint16_t uart_no, const uint8_t *frame, uint16_t frame_len);
+
+/* 异步提交逆变器控制请求，返回RT_EOK仅表示请求已经进入目标端口队列。 */
+rt_err_t Inv_Control_Submit(const Inv_Control_Request_t *request);
+
+/* 取出一项已经完成的控制结果，当前没有结果时返回-RT_EEMPTY。 */
+rt_err_t Inv_Control_Get_Result(Inv_Control_Result_Info_t *result);
 
 /* 按0～11档案槽位获取实时数据，槽位无效或越界时返回RT_NULL。 */
 Inv_Data_t *Inv_Data_Get(uint8_t archive_index);

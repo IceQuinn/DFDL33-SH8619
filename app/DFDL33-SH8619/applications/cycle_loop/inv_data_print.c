@@ -190,3 +190,28 @@ static int inv_data_print(int argc, char **argv)
     return 0;
 }
 MSH_CMD_EXPORT(inv_data_print, print inverter realtime data);
+
+
+void Inv_Control_Test(void)
+{
+    Inv_Control_Request_t request;
+
+    request.request_id = 2U;
+    request.archive_index = 0U;
+    request.type = INV_CONTROL_POWER_ON;
+    request.value = 1234;                    /* 定点值，具体含义由协议库配置决定。 */
+
+    Inv_Control_Submit(&request);   
+
+    rt_thread_mdelay(1000);
+    
+    Inv_Control_Result_Info_t result;
+
+    if(Inv_Control_Get_Result(&result) == RT_EOK) {
+        rt_kprintf("[%08d] request[%d] result[%d]\n",
+                rt_tick_get(),
+                result.request.request_id,
+                result.result);
+    }
+}
+MSH_CMD_EXPORT(Inv_Control_Test, Inv_Control_Test);

@@ -19,9 +19,14 @@
 #define MODBUS_RTU_ADU_MAX               256
 #define MODBUS_READ_REG_MAX              125
 #define MODBUS_READ_REQUEST_LEN          8
+#define MODBUS_WRITE_REG_MAX             123
+#define MODBUS_WRITE_SINGLE_REQUEST_LEN    8
+#define MODBUS_WRITE_MULTI_BASE_LEN         9
 
 #define MODBUS_FUNC_READ_HOLDING         0x03
 #define MODBUS_FUNC_READ_INPUT           0x04
+#define MODBUS_FUNC_WRITE_SINGLE         0x06
+#define MODBUS_FUNC_WRITE_MULTIPLE       0x10
 
 #define MODBUS_EXCEPTION_ILLEGAL_DATA_ADDRESS 0x02U /* 请求的寄存器地址或寄存器范围不被从站支持。 */
 
@@ -61,5 +66,25 @@ modbus_m_parse_result modbus_m_read_response(uint8_t slave_addr,
                                              uint16_t register_capacity,
                                              uint16_t *register_count,
                                              uint8_t *exception_code);
+
+/* 组成06或10功能码的Modbus RTU写保持寄存器请求帧。 */
+rt_err_t modbus_m_write_request(uint8_t slave_addr,
+                                uint8_t function_code,
+                                uint16_t start_addr,
+                                const uint16_t *registers,
+                                uint16_t register_count,
+                                uint8_t *frame,
+                                uint16_t frame_size,
+                                uint16_t *frame_len);
+
+/* 解析06或10功能码的Modbus RTU正常响应或异常响应。 */
+modbus_m_parse_result modbus_m_write_response(uint8_t slave_addr,
+                                              uint8_t function_code,
+                                              uint16_t start_addr,
+                                              const uint16_t *registers,
+                                              uint16_t register_count,
+                                              const uint8_t *frame,
+                                              uint16_t frame_len,
+                                              uint8_t *exception_code);
 
 #endif /* APPLICATIONS_MODBUS_MASTER_MODBUS_MASTER_H_ */

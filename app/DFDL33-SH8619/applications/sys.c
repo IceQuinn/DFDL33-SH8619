@@ -42,7 +42,7 @@
 
 #define PROJECT_NAME    "DFDL33-SH8619"
 
-const APP_Version g_app_version  = {1, 0, 0, 21};       // 研发内部固件版本（对内版本）
+const APP_Version g_app_version  = {1, 0, 0, 23};       // 研发内部固件版本（对内版本）
 const APP_Version g_show_app_ver = {1, 0, 0, 1};        // 研发发布固件版本（对外版本）
 char PHM_Ver[32] = "PHM V1.0.1.0 2025.07.01";           // 电鸿版本号
 char app_firmware_ver_ascll[32]  = {0};                 //固件版本号以及更新日期
