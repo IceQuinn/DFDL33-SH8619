@@ -20,8 +20,10 @@
 #include "ctu_cfg.h"
 #include "main_uart.h"
 #include "cycle_loop.h"
+#include "time_ctrl.h"
 #include "event_deal.h"
 #include "led.h"
+#include "voltage_acq.h"
 
 
 /* 应用线程创建参数表。 */
@@ -37,7 +39,7 @@ typedef struct User_Thread_Table {
 const user_thread_table_typedef user_thread_table[] = {
     {"uart_mgmt",     uart_mgmt_thread_entry,      RT_NULL,    1024,   17, 15},    /* UART管理线程 */
     {"cycle",     cycle_loop_thread_entry,      RT_NULL,    4096,   17, 15},    /* 周期抄读线程 */
-        // {"meas_data",   meas_data_deal,         RT_NULL,    1024,   22, 15},    /* 测量数据线程 */
+    {"time_ctrl",   time_ctrl_thread_entry,         RT_NULL,    2048,   22, 15},    /* 时段控线程 */
         // {"record",      Record_Wave_Thread,     RT_NULL,    1024,   6,  15},    /* 录波线程 */
     {"event",       Event_Deal_Loop,        RT_NULL,    1024,   30, 10},    /* 事件记录线程 */
         // {"btn",         btn_thread_entry,       RT_NULL,    768,    9,  10},    /* 按键线程 */
@@ -48,6 +50,7 @@ const user_thread_table_typedef user_thread_table[] = {
         // {"temp",        user_temp_thread,       RT_NULL,    4096,   29, 10},    /* 温度检测线程 */
     {"led_run",     User_Led_Thread_Entry,  RT_NULL,    512,    25, 10},    /* LED灯运行线程 */
         // {"645_sl",      dlt645_deal_thread_entry, NULL,     2048,   20, 15},    /* 645解析线程 */
+    {"voltage_acq", voltage_acq_thread_entry,  RT_NULL, 1024,   15, 10},
 };
 
 /* 按线程参数表依次创建并启动全部应用线程。 */

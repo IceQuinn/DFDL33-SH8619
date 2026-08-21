@@ -1093,10 +1093,10 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .write_default_val = 4321
             },
             .active_pwr_ctrl = {    // 有功功率数值控制寄存器
-                .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-                .reg_cnt = 0,
-                .write_func_code = 0,
-                .data_type = TYPE_U16,
+                .reg_addr = 259,
+                .reg_cnt = 2,
+                .write_func_code = 0x10,
+                .data_type = TYPE_I32,
                 .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
@@ -1117,9 +1117,9 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .decimal_places = 0
             },
             .active_pwr_pct_ctrl = {    // 有功功率百分比控制寄存器
-                .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-                .reg_cnt = 0,
-                .write_func_code = 0,
+                .reg_addr = 256,
+                .reg_cnt = 1,
+                .write_func_code = 0x06,
                 .data_type = TYPE_U16,
                 .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
