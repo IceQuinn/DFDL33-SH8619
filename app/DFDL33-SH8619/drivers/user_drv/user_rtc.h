@@ -22,6 +22,7 @@ void show_rtc_time(void);
 
 uint8_t  get_month(void);
 uint16_t get_rtc_ms(void);
+char *get_char_time(void);
 
 uint16_t set_year(uint16_t year);
 uint16_t set_month(uint16_t month);

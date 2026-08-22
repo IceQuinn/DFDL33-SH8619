@@ -18,6 +18,7 @@
 
 #include "sys.h"
 #include "user_comm.h"
+#include "user_rtc.h"
 //#include "user_gpio.h"
 
 #define OS_YEAR     ((((__DATE__ [7] - '0') * 10 + (__DATE__ [8] - '0')) * 10 + (__DATE__ [9] - '0')) * 10 + (__DATE__ [10] - '0'))
@@ -186,13 +187,13 @@ int8_t GetDataByteFromType(uint8_t DataType)
     return data_byte;
 }
 
-/* 按十进制逐字节打印数组内容，整行日志只读取一次实时tick。 */
+/* 按十六进制逐字节打印数组内容，整行日志只读取一次RTC时间。 */
 void show_arr(const char *name, const void *data, uint32_t len)
 {
     const uint8_t *ptr = (const uint8_t *)data;
     uint32_t index;
 
-    rt_kprintf("[%08d] %s[%03d] =", rt_tick_get(), name, len);
+    rt_kprintf("%s %s[%03d] =", get_char_time(), name, len);
 
     /* 每个数组元素使用%02x输出。 */
     for(index = 0U; index < len; ++index) {

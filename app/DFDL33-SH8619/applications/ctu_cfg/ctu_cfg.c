@@ -45,6 +45,7 @@ void Ctu_Cfg_Init(void)
 //        CFG_Vx_To_Vlast(ctu_cfg.hdr.ver, ctu_cfg.hdr.len);
 //        ctu_cfg_save();
     }
+    set_default_data();
 }
 
 void set_default_para(void)

@@ -10,6 +10,7 @@
 
 #include "inv_data.h"
 #include "inverter_archive.h"
+#include "user_rtc.h"
 
 /* 数据类各数组对应的打印名称。 */
 static const char *g_inv_data_print_u_name[ENUM_PHASE_MAX] = {"Ua", "Ub", "Uc"};
@@ -26,11 +27,11 @@ static void inv_data_print_value(uint8_t archive_number,
 {
     /* 数据有效时打印int32_t实时值和最近一次成功更新时间。 */
     if(value->valid != 0U) {
-        rt_kprintf("[%08d] archive[%d] %s.%s value[%d] update_tick[%d]\n", rt_tick_get(), archive_number, data_class, name, value->value, value->update_tick);
+        rt_kprintf("%s archive[%d] %s.%s value[%d] update_tick[%d]\n", get_char_time(), archive_number, data_class, name, value->value, value->update_tick);
     }
     /* 数据尚未读取成功、读取失败或协议未配置时打印INVALID。 */
     else {
-        rt_kprintf("[%08d] archive[%d] %s.%s INVALID\n", rt_tick_get(), archive_number, data_class, name);
+        rt_kprintf("%s archive[%d] %s.%s INVALID\n", get_char_time(), archive_number, data_class, name);
     }
 }
 
@@ -42,11 +43,11 @@ static void inv_data_print_string(uint8_t archive_number,
 {
     /* 字符串有效时打印内容、有效长度和最近一次成功更新时间。 */
     if(value->valid != 0U) {
-        rt_kprintf("[%08d] archive[%d] %s.%s value[%s] length[%d] update_tick[%d]\n", rt_tick_get(), archive_number, data_class, name, value->value, value->length, value->update_tick);
+        rt_kprintf("%s archive[%d] %s.%s value[%s] length[%d] update_tick[%d]\n", get_char_time(), archive_number, data_class, name, value->value, value->length, value->update_tick);
     }
     /* 字符串尚未读取成功、读取失败或协议未配置时打印INVALID。 */
     else {
-        rt_kprintf("[%08d] archive[%d] %s.%s INVALID\n", rt_tick_get(), archive_number, data_class, name);
+        rt_kprintf("%s archive[%d] %s.%s INVALID\n", get_char_time(), archive_number, data_class, name);
     }
 }
 
@@ -122,12 +123,12 @@ static void inv_data_print_archive_index(uint8_t archive_index)
 
     /* 无效档案只打印档案编号和INVALID，不继续打印实时数据项。 */
     if(archive_valid != INVERTER_ARCHIVE_VALID) {
-        rt_kprintf("[%08d] archive[%d] INVALID\n", rt_tick_get(), archive_number);
+        rt_kprintf("%s archive[%d] INVALID\n", get_char_time(), archive_number);
         return;
     }
 
     Inv_Archive_Copy_Mfr_Name(manufacturer, archive.mfr_info.name);
-    rt_kprintf("[%08d] archive[%d] VALID addr[%d] port[%d] manufacturer[%s] protocol[0x%04X]\n", rt_tick_get(), archive_number, archive.mb_addr, archive.port, manufacturer, (unsigned int)archive.mfr_info.proto_ver);
+    rt_kprintf("%s archive[%d] VALID addr[%d] port[%d] manufacturer[%s] protocol[0x%04X]\n", get_char_time(), archive_number, archive.mb_addr, archive.port, manufacturer, (unsigned int)archive.mfr_info.proto_ver);
     inv_data_print_data_class(archive_number, &data.data);
     inv_data_print_param_class(archive_number, &data.param);
     inv_data_print_ctrl_class(archive_number, &data.ctrl);
@@ -149,7 +150,7 @@ void Inv_Data_Print_Archive(uint8_t archive_number)
 {
     /* 档案编号从1开始，0或超过12时打印参数错误。 */
     if((archive_number == 0U) || (archive_number > INVERTER_ARCHIVE_MAX_COUNT)) {
-        rt_kprintf("[%08d] archive number[%d] invalid, expected 1-12\n", rt_tick_get(), archive_number);
+        rt_kprintf("%s archive number[%d] invalid, expected 1-12\n", get_char_time(), archive_number);
         return;
     }
 
@@ -172,7 +173,7 @@ static int inv_data_print(int argc, char **argv)
 
     /* 参数数量不是一个时打印正确命令格式。 */
     if(argc != 2) {
-        rt_kprintf("[%08d] usage: inv_data_print [archive:1-12]\n", rt_tick_get());
+        rt_kprintf("%s usage: inv_data_print [archive:1-12]\n", get_char_time());
         return -1;
     }
 
@@ -181,7 +182,7 @@ static int inv_data_print(int argc, char **argv)
     /* 参数必须是完整十进制数字，并且位于1～12档案编号范围内。 */
     if((end_ptr == argv[1]) || (*end_ptr != '\0') ||
        (parsed_archive_number < 1) || (parsed_archive_number > max_archive_number)) {
-        rt_kprintf("[%08d] archive number[%s] is invalid, expected 1-12\n", rt_tick_get(), argv[1]);
+        rt_kprintf("%s archive number[%s] is invalid, expected 1-12\n", get_char_time(), argv[1]);
         return -1;
     }
 
@@ -207,23 +208,23 @@ void Inv_Control_Test(void)
 
     /* 请求没有进入控制队列时直接打印提交错误，不再等待结果信号量。 */
     if(control_result != RT_EOK) {
-        rt_kprintf("[%08d] request[%d] submit failed, result[%d]\n", rt_tick_get(), request.request_id, control_result);
+        rt_kprintf("%s request[%d] submit failed, result[%d]\n", get_char_time(), request.request_id, control_result);
         return;
     }
 
     /* MSH测试线程最多等待3秒，结果生成后信号量会立即唤醒本线程。 */
     control_result = Inv_Control_Get_Result(&result, 3000);
     if(control_result != RT_EOK) {
-        rt_kprintf("[%08d] request[%d] wait failed, result[%d]\n", rt_tick_get(), request.request_id, control_result);
+        rt_kprintf("%s request[%d] wait failed, result[%d]\n", get_char_time(), request.request_id, control_result);
         return;
     }
 
     /* request_id用于确认取出的异步结果是否属于本次测试命令。 */
     if(result.request.request_id != request.request_id) {
-        rt_kprintf("[%08d] request[%d] got another request[%d] result\n", rt_tick_get(), request.request_id, result.request.request_id);
+        rt_kprintf("%s request[%d] got another request[%d] result\n", get_char_time(), request.request_id, result.request.request_id);
         return;
     }
 
-    rt_kprintf("[%08d] request[%d] result[%d] exception[%d]\n", rt_tick_get(), result.request.request_id, result.result, result.exception_code);
+    rt_kprintf("%s request[%d] result[%d] exception[%d]\n", get_char_time(), result.request.request_id, result.result, result.exception_code);
 }
 MSH_CMD_EXPORT(Inv_Control_Test, Inv_Control_Test);

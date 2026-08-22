@@ -14,6 +14,7 @@
 #include "inv_data.h"
 #include "inverter_archive.h"
 #include "inverter_protocol_library.h"
+#include "user_rtc.h"
 
 #define TIME_CTRL_THREAD_STACK_SIZE     2048U
 #define TIME_CTRL_THREAD_PRIORITY          18U
@@ -256,8 +257,8 @@ static void time_ctrl_submit_pending(uint16_t *pending_mask,
             request.type = INV_CONTROL_ACTIVE_POWER_PERCENT;
             if(time_ctrl_restore_value(archive_index, &request.value) == RT_FALSE) {
                 *pending_mask &= (uint16_t)(~bit);
-                rt_kprintf("[%08d] time control archive[%d] restore value unavailable\n",
-                           rt_tick_get(), archive_index + 1U);
+                rt_kprintf("%s time control archive[%d] restore value unavailable\n",
+                           get_char_time(), archive_index + 1U);
                 continue;
             }
         }
@@ -352,8 +353,8 @@ void time_ctrl_thread_entry(void *parameter)
                 if(action == TIME_CTRL_ACTION_START) {
                     active_period = action_period;
                     g_time_ctrl_active = RT_TRUE;
-                    rt_kprintf("[%08d] time control period[%d] started\n",
-                               rt_tick_get(), active_period + 1);
+                    rt_kprintf("%s time control period[%d] started\n",
+                               get_char_time(), active_period + 1);
                 }
                 else {
                     affected_mask = 0U;
@@ -361,7 +362,7 @@ void time_ctrl_thread_entry(void *parameter)
                     if(action_period >= 0) {
                         done_mask |= (uint8_t)(1U << (uint8_t)action_period);
                     }
-                    rt_kprintf("[%08d] time control restored rated active power\n", rt_tick_get());
+                    rt_kprintf("%s time control restored rated active power\n", get_char_time());
                 }
                 action = TIME_CTRL_ACTION_NONE;
                 action_period = TIME_CTRL_NO_ACTIVE_PERIOD;
@@ -394,8 +395,8 @@ void time_ctrl_thread_entry(void *parameter)
                         if(pending_mask == 0U) {
                             done_mask |= bit;
                             action = TIME_CTRL_ACTION_NONE;
-                            rt_kprintf("[%08d] time control period[%d] has no valid archive\n",
-                                       rt_tick_get(), index + 1U);
+                            rt_kprintf("%s time control period[%d] has no valid archive\n",
+                                       get_char_time(), index + 1U);
                         }
                         else {
                             /* 包含正在排队的调节，防止新Set命令覆盖半完成的批量控制。 */
@@ -481,15 +482,15 @@ static Time_Ctrl_Result_t time_ctrl_test_set_default(void)
     command.periods[1].mode = TIME_CTRL_ACTIVE_POWER_VALUE;
     command.periods[1].value = TIME_CTRL_TEST_POWER_VALUE;
 
-    rt_kprintf("[%08d] test period[1] %04d-%02d-%02d %02d:%02d:%02d - %02d:%02d:%02d, percent[%d]\n",
-               rt_tick_get(),
+    rt_kprintf("%s test period[1] %04d-%02d-%02d %02d:%02d:%02d - %02d:%02d:%02d, percent[%d]\n",
+               get_char_time(),
                command.periods[0].start.year, command.periods[0].start.month,
                command.periods[0].start.day, command.periods[0].start.hour,
                command.periods[0].start.minute, command.periods[0].start.second,
                command.periods[0].end.hour, command.periods[0].end.minute,
                command.periods[0].end.second, command.periods[0].value);
-    rt_kprintf("[%08d] test period[2] %04d-%02d-%02d %02d:%02d:%02d - %02d:%02d:%02d, power[%d]\n",
-               rt_tick_get(),
+    rt_kprintf("%s test period[2] %04d-%02d-%02d %02d:%02d:%02d - %02d:%02d:%02d, power[%d]\n",
+               get_char_time(),
                command.periods[1].start.year, command.periods[1].start.month,
                command.periods[1].start.day, command.periods[1].start.hour,
                command.periods[1].start.minute, command.periods[1].start.second,
@@ -506,7 +507,7 @@ static int time_ctrl(int argc, char **argv)
 
     if((argc == 2) && (rt_strcmp(argv[1], "stop") == 0)) {
         result = Time_Ctrl_Stop();
-        rt_kprintf("[%08d] time_ctrl stop: %s\n", rt_tick_get(), Time_Ctrl_Result_Text(result));
+        rt_kprintf("%s time_ctrl stop: %s\n", get_char_time(), Time_Ctrl_Result_Text(result));
         return (result == TIME_CTRL_RESULT_OK) ? 0 : -1;
     }
 
@@ -517,8 +518,8 @@ static int time_ctrl(int argc, char **argv)
     }
 
     result = time_ctrl_test_set_default();
-    rt_kprintf("[%08d] time_ctrl default test: %s (%d)\n",
-               rt_tick_get(), Time_Ctrl_Result_Text(result), result);
+    rt_kprintf("%s time_ctrl default test: %s (%d)\n",
+               get_char_time(), Time_Ctrl_Result_Text(result), result);
     return (result == TIME_CTRL_RESULT_OK) ? 0 : -1;
 }
 MSH_CMD_EXPORT(time_ctrl, run default active-power time-control test);

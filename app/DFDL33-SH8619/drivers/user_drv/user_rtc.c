@@ -83,12 +83,30 @@ uint32_t ertc_sub_second_get(void)
     return cnt;
 }
 
-#define RTC_PREDIV  39999   // LICK预分频系数，固定值
+#define RTC_PREDIV  32767   // LICK预分频系数，固定值
 uint16_t get_rtc_ms(void)
 {
     uint32_t ss = ertc_sub_second_get();
-    return (uint16_t)((RTC_PREDIV - ss) * 1000 / RTC_PREDIV);
+    return (uint16_t)((RTC_PREDIV - ss) * 1000 / (RTC_PREDIV+1));
 }
+
+char str_time[32];
+char* get_char_time(void)
+{
+    time_t now;
+    now = time(RT_NULL);
+
+    struct tm tm_info = {0};
+
+    localtime_r(&now, &tm_info);
+
+    rt_sprintf(str_time, "[%04d-%02d-%02d %02d:%02d:%02d.%03d]", tm_info.tm_year+1900, tm_info.tm_mon + 1, tm_info.tm_mday, tm_info.tm_hour, tm_info.tm_min, tm_info.tm_sec, get_rtc_ms());
+//    rt_kprintf("%s", str_time);
+
+    return str_time;
+}
+MSH_CMD_EXPORT(get_char_time, get_char_time);
+
 
 // 设置年,2025
 uint16_t set_year(uint16_t year)
