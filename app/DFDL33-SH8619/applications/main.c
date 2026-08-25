@@ -24,6 +24,7 @@
 #include "event_deal.h"
 #include "led.h"
 #include "voltage_acq.h"
+#include "dlt645_deal.h"
 
 
 /* 应用线程创建参数表。 */
@@ -49,7 +50,7 @@ const user_thread_table_typedef user_thread_table[] = {
         // {"md_s_poll",   modbus_deal_thread,     RT_NULL,    1024,   21, 10},    /* ModBus解析线程 */
         // {"temp",        user_temp_thread,       RT_NULL,    4096,   29, 10},    /* 温度检测线程 */
     {"led_run",     User_Led_Thread_Entry,  RT_NULL,    512,    25, 10},    /* LED灯运行线程 */
-        // {"645_sl",      dlt645_deal_thread_entry, NULL,     2048,   20, 15},    /* 645解析线程 */
+//        {"645_sl",      dlt645_deal_thread_entry, NULL,     2048,   20, 15},    /* 645解析线程 */
     {"voltage_acq", voltage_acq_thread_entry,  RT_NULL, 1024,   15, 10},
 };
 
