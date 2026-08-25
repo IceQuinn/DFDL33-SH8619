@@ -844,6 +844,97 @@ static Time_Ctrl_Result_t time_ctrl_test_set_default(void)
     return (accepted_count > 0U) ? TIME_CTRL_RESULT_OK : TIME_CTRL_RESULT_ARCHIVE_INVALID;
 }
 
+/* 将控制方式转换成打印使用的固定文本。 */
+static const char *time_ctrl_mode_text(Time_Ctrl_Mode_t mode)
+{
+    if(mode == TIME_CTRL_ACTIVE_POWER_VALUE) {
+        return "active_power";
+    }
+    if(mode == TIME_CTRL_ACTIVE_POWER_PERCENT) {
+        return "active_power_percent";
+    }
+    return "unknown";
+}
+
+/* 打印全部有效档案中已经启用的时段控制，没有配置的档案不输出。 */
+void Time_Ctrl_Print_All(void)
+{
+    uint8_t archive_index;       /* 当前正在检查的档案下标。 */
+    uint8_t period_index;        /* 当前正在打印的时段下标。 */
+    rt_bool_t enabled;           /* 当前档案邮箱中的时段控制启用状态。 */
+    Time_Ctrl_Command_t command; /* 在临界区内取得的单档案命令副本。 */
+    rt_base_t level;             /* 关中断前的CPU中断状态。 */
+
+    if(g_time_ctrl_initialized != RT_TRUE) {
+        return;
+    }
+
+    for(archive_index = 0U;
+        archive_index < INVERTER_ARCHIVE_MAX_COUNT;
+        ++archive_index) {
+        /* 无效档案不属于当前档案库，因此不打印其邮箱中的历史命令。 */
+        if(g_inv_archive_lib.valid[archive_index] != INVERTER_ARCHIVE_VALID) {
+            continue;
+        }
+
+        /* 命令结构整体复制期间禁止Set或Stop改写同一个邮箱。 */
+        level = rt_hw_interrupt_disable();
+        enabled = g_time_ctrl_mailboxes[archive_index].enabled;
+        if(enabled == RT_TRUE) {
+            command = g_time_ctrl_mailboxes[archive_index].command;
+        }
+        rt_hw_interrupt_enable(level);
+
+        if(enabled != RT_TRUE) {
+            continue;
+        }
+
+        for(period_index = 0U;
+            period_index < TIME_CTRL_PERIOD_COUNT;
+            ++period_index) {
+            /* 当前打印时段的只读指针，用于缩短字段访问表达式。 */
+            const Time_Ctrl_Period_t *period = &command.periods[period_index];
+
+            rt_kprintf("archive[%d] period[%d] "
+                       "%04d-%02d-%02d %02d:%02d:%02d - "
+                       "%04d-%02d-%02d %02d:%02d:%02d "
+                       "mode[%s] value[%d]\n",
+                       archive_index + 1U,
+                       period_index + 1U,
+                       period->start.year,
+                       period->start.month,
+                       period->start.day,
+                       period->start.hour,
+                       period->start.minute,
+                       period->start.second,
+                       period->end.year,
+                       period->end.month,
+                       period->end.day,
+                       period->end.hour,
+                       period->end.minute,
+                       period->end.second,
+                       time_ctrl_mode_text(period->mode),
+                       period->value);
+        }
+    }
+}
+
+/* FinSH入口：打印全部有效档案中已经启用的时段控制。 */
+static int time_ctrl_print(int argc, char **argv)
+{
+    RT_UNUSED(argv);
+
+    if(argc != 1) {
+        rt_kprintf("usage: time_ctrl_print\n");
+        return -1;
+    }
+
+    Time_Ctrl_Print_All();
+    return 0;
+}
+MSH_CMD_EXPORT(time_ctrl_print, print enabled time controls in all archives);
+
+
 /* FinSH入口：无参数运行默认测试，stop参数停止全部档案。 */
 static int time_ctrl(int argc, char **argv)
 {

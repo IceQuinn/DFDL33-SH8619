@@ -80,6 +80,9 @@ Time_Ctrl_Result_t Time_Ctrl_Stop(void);
 /* 将时段控制结果码转换成固定英文说明。 */
 const char *Time_Ctrl_Result_Text(Time_Ctrl_Result_t result);
 
+/* 打印全部有效档案中已经启用的时段控制，没有时段控制的档案不输出。 */
+void Time_Ctrl_Print_All(void);
+
 /* 线程表使用的时段控制入口，应用层只能创建一个该线程实例。 */
 void time_ctrl_thread_entry(void *parameter);
 
