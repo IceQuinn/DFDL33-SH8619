@@ -13,11 +13,11 @@
 #include "user_rtc.h"
 
 /* 数据类各数组对应的打印名称。 */
-static const char *g_inv_data_print_u_name[ENUM_PHASE_MAX] = {"Ua", "Ub", "Uc"};
-static const char *g_inv_data_print_i_name[ENUM_PHASE_MAX] = {"Ia", "Ib", "Ic"};
-static const char *g_inv_data_print_p_name[ENUM_PMAX] = {"Pa", "Pb", "Pc", "Pt"};
-static const char *g_inv_data_print_q_name[ENUM_QMAX] = {"Qa", "Qb", "Qc", "Qt"};
-static const char *g_inv_data_print_pf_name[ENUM_PFMAX] = {"PFa", "PFb", "PFc", "PFt"};
+static const char *g_inv_data_print_u_name[ENUM_PHASE_MAX] = {"Ua", "Ub", "Uc"}; /* 三相电压数组下标对应的名称。 */
+static const char *g_inv_data_print_i_name[ENUM_PHASE_MAX] = {"Ia", "Ib", "Ic"}; /* 三相电流数组下标对应的名称。 */
+static const char *g_inv_data_print_p_name[ENUM_PMAX] = {"Pa", "Pb", "Pc", "Pt"}; /* 分相及总有功功率名称。 */
+static const char *g_inv_data_print_q_name[ENUM_QMAX] = {"Qa", "Qb", "Qc", "Qt"}; /* 分相及总无功功率名称。 */
+static const char *g_inv_data_print_pf_name[ENUM_PFMAX] = {"PFa", "PFb", "PFc", "PFt"}; /* 分相及总功率因数名称。 */
 
 /* 打印一个数值型实时数据项，无效数据明确打印INVALID。 */
 static void inv_data_print_value(uint8_t archive_number,
@@ -54,7 +54,7 @@ static void inv_data_print_string(uint8_t archive_number,
 /* 打印数据类中的电压、电流、有功、无功和功率因数实时数据。 */
 static void inv_data_print_data_class(uint8_t archive_number, const Inv_RealtimeData_t *data)
 {
-    uint8_t index;
+    uint8_t index; /* 当前正在打印的数据数组下标。 */
 
     /* 打印A、B、C三相电压。 */
     for(index = 0U; index < ENUM_PHASE_MAX; ++index) {
@@ -85,6 +85,7 @@ static void inv_data_print_data_class(uint8_t archive_number, const Inv_Realtime
 /* 打印参数类中的设备编号、额定功率、电压、输出类型和开关机状态。 */
 static void inv_data_print_param_class(uint8_t archive_number, const Inv_RealtimeParam_t *param)
 {
+    /* 参数类字段数量固定，按照协议定义顺序逐项打印有效值或INVALID。 */
     inv_data_print_string(archive_number, "param", "device_no", &param->dev_no);
     inv_data_print_value(archive_number, "param", "pv_rated_p", &param->pv_rated_active_pwr);
     inv_data_print_value(archive_number, "param", "pv_rated_q", &param->pv_rated_reactive_pwr);
@@ -96,6 +97,7 @@ static void inv_data_print_param_class(uint8_t archive_number, const Inv_Realtim
 /* 打印控制类中的开关机及功率控制寄存器实时数据。 */
 static void inv_data_print_ctrl_class(uint8_t archive_number, const Inv_RealtimeCtrl_t *ctrl)
 {
+    /* 控制类字段数量固定，按照通用控制类型顺序逐项打印。 */
     inv_data_print_value(archive_number, "ctrl", "power_on", &ctrl->pwr_on);
     inv_data_print_value(archive_number, "ctrl", "power_off", &ctrl->pwr_off);
     inv_data_print_value(archive_number, "ctrl", "active_pwr_ctrl", &ctrl->active_pwr_ctrl);
@@ -108,11 +110,11 @@ static void inv_data_print_ctrl_class(uint8_t archive_number, const Inv_Realtime
 /* 打印指定档案槽位，档案有效时使用实时数据快照打印全部31项数据。 */
 static void inv_data_print_archive_index(uint8_t archive_index)
 {
-    Inv_Archive_t archive;
-    Inv_Data_t data;
-    char manufacturer[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U];
-    uint8_t archive_number = archive_index + 1U;
-    uint8_t archive_valid;
+    Inv_Archive_t archive; /* 临界区内取得的单个档案配置快照。 */
+    Inv_Data_t data;       /* 临界区内取得的单个档案实时数据快照。 */
+    char manufacturer[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U]; /* 补字符串结束符后的厂家名称。 */
+    uint8_t archive_number = archive_index + 1U; /* 面向日志显示的1～12档案编号。 */
+    uint8_t archive_valid; /* 当前档案槽位的有效标志快照。 */
 
     /* 临界区内复制有效标志、档案和实时数据，耗时打印在退出临界区后执行。 */
     rt_enter_critical();
@@ -127,7 +129,7 @@ static void inv_data_print_archive_index(uint8_t archive_index)
         return;
     }
 
-    Inv_Archive_Copy_Mfr_Name(manufacturer, archive.mfr_info.name);
+    Inv_Archive_Copy_Mfr_Name(manufacturer, archive.mfr_info.name); /* 将Flash定长厂家字段转换为安全C字符串。 */
     rt_kprintf("%s archive[%d] VALID addr[%d] port[%d] manufacturer[%s] protocol[0x%04X]\n", get_char_time(), archive_number, archive.mb_addr, archive.port, manufacturer, (unsigned int)archive.mfr_info.proto_ver);
     inv_data_print_data_class(archive_number, &data.data);
     inv_data_print_param_class(archive_number, &data.param);
@@ -137,7 +139,7 @@ static void inv_data_print_archive_index(uint8_t archive_index)
 /* 打印全部12个档案槽位，有效档案打印实时数据，无效档案打印INVALID。 */
 void Inv_Data_Print_All(void)
 {
-    uint8_t archive_index;
+    uint8_t archive_index; /* 当前正在打印的0～11档案槽位下标。 */
 
     /* 固定遍历全部档案槽位，不能只按有效档案count打印。 */
     for(archive_index = 0U; archive_index < INVERTER_ARCHIVE_MAX_COUNT; ++archive_index) {
@@ -160,10 +162,10 @@ void Inv_Data_Print_Archive(uint8_t archive_number)
 /* MSH命令入口，无参数打印全部档案，提供参数时打印指定档案。 */
 static int inv_data_print(int argc, char **argv)
 {
-    char *end_ptr;
-    int32_t archive_number;
-    int32_t max_archive_number = INVERTER_ARCHIVE_MAX_COUNT;
-    int64_t parsed_archive_number;
+    char *end_ptr;             /* strtol返回的首个未解析字符地址。 */
+    int32_t archive_number;    /* 校验通过后转换为int32_t的档案编号。 */
+    int32_t max_archive_number = INVERTER_ARCHIVE_MAX_COUNT; /* MSH允许输入的最大档案编号。 */
+    int64_t parsed_archive_number; /* strtol解析出的宽范围临时数值。 */
 
     /* 未提供参数时打印全部12个档案槽位。 */
     if(argc == 1) {
@@ -187,7 +189,7 @@ static int inv_data_print(int argc, char **argv)
     }
 
     archive_number = (int32_t)parsed_archive_number;
-    Inv_Data_Print_Archive((uint8_t)archive_number);
+    Inv_Data_Print_Archive((uint8_t)archive_number); /* 参数已校验为1～12，可以安全转换后打印。 */
     return 0;
 }
 MSH_CMD_EXPORT(inv_data_print, print inverter realtime data);
@@ -195,16 +197,16 @@ MSH_CMD_EXPORT(inv_data_print, print inverter realtime data);
 
 void Inv_Control_Test(void)
 {
-    Inv_Control_Request_t request;
-    Inv_Control_Result_Info_t result;
-    rt_err_t control_result;
+    Inv_Control_Request_t request;   /* 本次MSH测试提交的开机控制请求。 */
+    Inv_Control_Result_Info_t result; /* 等待信号量后取得的异步控制结果。 */
+    rt_err_t control_result;          /* 控制提交或等待结果接口的返回码。 */
 
     request.request_id = 2U;
     request.archive_index = 0U;
     request.type = INV_CONTROL_POWER_ON;
     request.value = 0; /* 开机使用协议库默认写入值，该字段不会参与组帧。 */
 
-    control_result = Inv_Control_Submit(&request);
+    control_result = Inv_Control_Submit(&request); /* 先确认请求是否成功进入对应端口控制队列。 */
 
     /* 请求没有进入控制队列时直接打印提交错误，不再等待结果信号量。 */
     if(control_result != RT_EOK) {
@@ -213,7 +215,8 @@ void Inv_Control_Test(void)
     }
 
     /* MSH测试线程最多等待3秒，结果生成后信号量会立即唤醒本线程。 */
-    control_result = Inv_Control_Get_Result(&result, 3000);
+    control_result = Inv_Control_Get_Result(&result, 3000); /* 最多等待3秒取得最早完成的控制结果。 */
+    /* 等待超时、信号量错误或结果接口失败时结束本次测试。 */
     if(control_result != RT_EOK) {
         rt_kprintf("%s request[%d] wait failed, result[%d]\n", get_char_time(), request.request_id, control_result);
         return;

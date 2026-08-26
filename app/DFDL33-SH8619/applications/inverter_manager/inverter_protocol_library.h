@@ -112,9 +112,9 @@ typedef char Inv_CtrlRegBlkSizeCheck_t[
 typedef struct Inv_CtrlDefaultRegBlk
 {
     /* 与普通控制寄存器块保持相同的地址、写功能码和数据格式布局。 */
-    uint16_t reg_addr;
-    uint8_t reg_cnt;
-    uint8_t write_func_code;
+    uint16_t reg_addr;       /* Modbus写请求直接使用的16位控制寄存器起始地址。 */
+    uint8_t reg_cnt;         /* 固定命令连续写入的16位寄存器数量。 */
+    uint8_t write_func_code; /* 固定命令使用的0x06或0x10写功能码。 */
 
     uint16_t data_type : 4;
     uint16_t byte_order : 4;

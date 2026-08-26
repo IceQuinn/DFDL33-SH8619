@@ -7,20 +7,20 @@
 #include "user_ex_flash_mgmt.h"
 
 /* 全局逆变器档案库，固定提供12个档案槽位，上电后由应用程序负责装载和维护。 */
-Inv_ArchiveLib_t g_inv_archive_lib;
+Inv_ArchiveLib_t g_inv_archive_lib; /* 保存档案头、有效数量、12个有效标志和12条档案内容。 */
 
 /* 协议指针只在RAM中使用，不能随档案库写入Flash。 */
-const struct Inv_Proto *g_inv_archive_proto[INVERTER_ARCHIVE_MAX_COUNT];
+const struct Inv_Proto *g_inv_archive_proto[INVERTER_ARCHIVE_MAX_COUNT]; /* 每个有效档案匹配到的运行时协议地址。 */
 
 /* 将固定32字节厂家名称转换为以'\0'结束的可打印字符串。 */
 void Inv_Archive_Copy_Mfr_Name(char output[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1],
                                const char input[INVERTER_ARCHIVE_BRAND_WIRE_SIZE])
 {
-    uint8_t index;
+    uint8_t index; /* 厂家名称固定长度缓冲区的字符下标。 */
 
     /* 逐字节复制厂家名称，遇到结束符或Flash空白值时停止。 */
     for(index = 0; index < INVERTER_ARCHIVE_BRAND_WIRE_SIZE; ++index) {
-        uint8_t character = (uint8_t)input[index];
+        uint8_t character = (uint8_t)input[index]; /* 当前厂家名称原始字节。 */
 
         /* 字符串结束符和Flash擦除值0xFF都表示厂家名称结束。 */
         if((character == 0) || (character == 0xFF)) {
@@ -31,6 +31,7 @@ void Inv_Archive_Copy_Mfr_Name(char output[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1]
         if((character >= 0x20) && (character <= 0x7E)) {
             output[index] = (char)character;
         }
+        /* 非打印ASCII字节替换为问号，避免控制字符破坏日志格式。 */
         else {
             output[index] = '?';
         }
@@ -42,8 +43,8 @@ void Inv_Archive_Copy_Mfr_Name(char output[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1]
 /* 按槽位有效标志重新统计档案数，避免增量修改导致count与槽位状态不一致。 */
 static void inv_archive_refresh_count(void)
 {
-    uint8_t index;
-    uint8_t valid_count = 0;
+    uint8_t index;           /* 固定档案槽位遍历下标。 */
+    uint8_t valid_count = 0; /* 根据valid数组重新统计的有效档案数。 */
 
     /* 遍历固定档案槽位，只统计有效标志为有效的档案。 */
     for(index = 0; index < INVERTER_ARCHIVE_MAX_COUNT; ++index) {
@@ -59,7 +60,7 @@ static void inv_archive_refresh_count(void)
 /* 按厂家名称和规约版本查找有效协议，没有匹配项时返回RT_NULL。 */
 static const Inv_Proto_t *inv_archive_find_protocol(const Inv_MfrInfo_t *mfr_info)
 {
-    uint16_t protocol_index;
+    uint16_t protocol_index; /* 100条协议库的遍历下标。 */
 
     /* 调用方没有提供厂家信息时无法匹配协议。 */
     if(mfr_info == RT_NULL) {
@@ -81,7 +82,7 @@ static const Inv_Proto_t *inv_archive_find_protocol(const Inv_MfrInfo_t *mfr_inf
 /* 重新统计有效档案数，并将不包含运行时协议指针的档案库保存到Flash A/B区。 */
 void Inv_Archive_Save(void)
 {
-    inv_archive_refresh_count();
+    inv_archive_refresh_count(); /* 保存前重新生成count，保证持久化数据自洽。 */
     AB_save(flash_write,
             ARCH_LIB_ADDR_A,
             ARCH_LIB_ADDR_B,
@@ -94,8 +95,8 @@ void Inv_Archive_Save(void)
 /* 新增或更新档案，并同步建立该档案与协议库之间的运行时指针关系。 */
 int8_t Inv_Archive_Add(const Inv_Archive_t *archive)
 {
-    uint8_t index;
-    uint8_t empty_index = INVERTER_ARCHIVE_MAX_COUNT;
+    uint8_t index;                                           /* 档案槽位遍历下标。 */
+    uint8_t empty_index = INVERTER_ARCHIVE_MAX_COUNT;         /* 第一个无效槽位，初值表示尚未找到。 */
 
     /* 档案为空、Modbus地址越界或端口号越界时拒绝写入。 */
     if((archive == RT_NULL) ||
@@ -106,7 +107,7 @@ int8_t Inv_Archive_Add(const Inv_Archive_t *archive)
 
     /* 遍历档案槽位，优先更新已有设备，同时记录第一个空闲槽位。 */
     for(index = 0; index < INVERTER_ARCHIVE_MAX_COUNT; ++index) {
-        Inv_Archive_t *stored_archive = &g_inv_archive_lib.archives[index];
+        Inv_Archive_t *stored_archive = &g_inv_archive_lib.archives[index]; /* 当前槽位中的档案地址。 */
 
         /* 有效槽位需要判断是否为相同端口、相同地址的同一台设备。 */
         if(g_inv_archive_lib.valid[index] == INVERTER_ARCHIVE_VALID) {
@@ -114,7 +115,7 @@ int8_t Inv_Archive_Add(const Inv_Archive_t *archive)
             if((stored_archive->port == archive->port) && (stored_archive->mb_addr == archive->mb_addr)) {
                 rt_memcpy(stored_archive, archive, sizeof(*stored_archive));
                 g_inv_archive_proto[index] = inv_archive_find_protocol(&stored_archive->mfr_info);
-                Inv_Archive_Save();
+                Inv_Archive_Save(); /* 更新已有设备后立即同步Flash A/B区。 */
                 return (int8_t)index;
             }
         }
@@ -133,21 +134,21 @@ int8_t Inv_Archive_Add(const Inv_Archive_t *archive)
     rt_memcpy(&g_inv_archive_lib.archives[empty_index], archive, sizeof(g_inv_archive_lib.archives[empty_index]));
     g_inv_archive_lib.valid[empty_index] = INVERTER_ARCHIVE_VALID;
     g_inv_archive_proto[empty_index] = inv_archive_find_protocol(&g_inv_archive_lib.archives[empty_index].mfr_info);
-    Inv_Archive_Save();
+    Inv_Archive_Save(); /* 新档案及其有效标志设置完整后持久化。 */
     return (int8_t)empty_index;
 }
 
 /* 根据设备地址、接入端口和厂家信息生成档案，再调用统一档案新增接口。 */
 int8_t Inv_Archive_Add_Device(uint8_t mb_addr, uint8_t port, const Inv_MfrInfo_t *mfr_info)
 {
-    Inv_Archive_t archive;
+    Inv_Archive_t archive; /* 根据自动识别结果临时构造的完整档案。 */
 
     /* 厂家信息为空时无法生成完整档案。 */
     if(mfr_info == RT_NULL) {
         return INVERTER_ARCHIVE_ADD_FAILED;
     }
 
-    rt_memset(&archive, 0, sizeof(archive));
+    rt_memset(&archive, 0, sizeof(archive)); /* 清除档案结构中没有识别来源的保留内容。 */
     archive.mb_addr = mb_addr;
     archive.port = port;
     rt_memcpy(&archive.mfr_info, mfr_info, sizeof(archive.mfr_info)); /* 整体复制厂家名称和规约版本。 */
@@ -157,13 +158,13 @@ int8_t Inv_Archive_Add_Device(uint8_t mb_addr, uint8_t port, const Inv_MfrInfo_t
 /* 校验全部有效档案，并为能够匹配协议的档案建立运行时协议指针。 */
 void Inv_Archive_Validate_Protocols(void)
 {
-    uint8_t valid_count = 0;
-    uint8_t archive_changed = 0;
+    uint8_t valid_count = 0;     /* 本次协议校验后保留的有效档案数量。 */
+    uint8_t archive_changed = 0; /* 有效标志或count是否需要重新保存。 */
 
     /* 逐个检查固定档案槽位，避免只按count遍历时遗漏中间的有效槽位。 */
     for(uint8_t i = 0; i < INVERTER_ARCHIVE_MAX_COUNT; ++i) {
-        Inv_Archive_t *archive = &g_inv_archive_lib.archives[i];
-        const Inv_Proto_t *protocol;
+        Inv_Archive_t *archive = &g_inv_archive_lib.archives[i]; /* 当前待校验档案。 */
+        const Inv_Proto_t *protocol;                             /* 当前档案匹配到的协议对象。 */
 
         /* 无效档案不参与协议匹配，同时清除可能残留的运行时指针。 */
         if(g_inv_archive_lib.valid[i] != INVERTER_ARCHIVE_VALID) {
@@ -171,7 +172,7 @@ void Inv_Archive_Validate_Protocols(void)
             continue;
         }
 
-        protocol = inv_archive_find_protocol(&archive->mfr_info);
+        protocol = inv_archive_find_protocol(&archive->mfr_info); /* 按厂家名称和版本进行严格匹配。 */
 
         /* 有效档案找不到协议时，将该档案置为无效并清除协议指针。 */
         if(protocol == RT_NULL) {
@@ -194,7 +195,7 @@ void Inv_Archive_Validate_Protocols(void)
 
     /* 只有档案有效状态或档案数量发生变化时才写Flash，减少擦写次数。 */
     if(archive_changed != 0) {
-        Inv_Archive_Save();
+        Inv_Archive_Save(); /* 仅在校验结果改变持久化内容时擦写Flash。 */
     }
 }
 
@@ -229,14 +230,14 @@ void Inv_Archive_Default_Init(void)
 {
     rt_memset(&g_inv_archive_lib, 0, sizeof(g_inv_archive_lib)); /* 清除全部持久化档案数据。 */
     rt_memset(g_inv_archive_proto, 0, sizeof(g_inv_archive_proto)); /* 清除全部运行时协议指针。 */
-    Inv_Archive_Save();
+    Inv_Archive_Save(); /* 将清空后的默认档案库写入Flash。 */
 }
 MSH_CMD_EXPORT(Inv_Archive_Default_Init, Inv_Archive_Default_Init);
 
 /* 从Flash装载档案库，装载失败时恢复空档案库，并为有效档案重新关联协议。 */
 void Inv_Archive_Init(void)
 {
-    int32_t check_sta;
+    int32_t check_sta; /* Flash A/B区校验和恢复接口的返回状态。 */
 
     rt_memset(g_inv_archive_proto, 0, sizeof(g_inv_archive_proto)); /* Flash不保存指针，上电时必须重新建立。 */
     check_sta = AB_check(flash_read,          // 读接口

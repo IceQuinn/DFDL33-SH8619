@@ -143,13 +143,21 @@ static void uart_dispatch_frame(uint16_t uart_no)
         return;
     }
 
-    /* 自动识别阶段优先接收报文，没有识别事务等待响应时再交给下行读写状态机。 */
-    result = cycle_loop_rx_frame(uart_no, rx->frame_buf, (uint16_t)rx->frame_len);
-
-    /* 自动识别没有接收本帧时，尝试提交给周期读取或实时控制使用的端口邮箱。 */
-    if(result != RT_EOK) {
-        Inv_Data_Rx_Frame(uart_no, rx->frame_buf, (uint16_t)rx->frame_len);
+    if((UART3_NO == uart_no) || (UART8_NO == uart_no)){ // 北向串口
+        extern void dlt645_rx_callback(void *ptr, uint16_t len, uint16_t buf_source);
+        dlt645_rx_callback(rx->frame_buf, rx->frame_len, uart_no);
     }
+    else{   // 南向串口
+        /* 自动识别阶段优先接收报文，没有识别事务等待响应时再交给下行读写状态机。 */
+        result = cycle_loop_rx_frame(uart_no, rx->frame_buf, (uint16_t)rx->frame_len);
+
+        /* 自动识别没有接收本帧时，尝试提交给周期读取或实时控制使用的端口邮箱。 */
+        if(result != RT_EOK) {
+            Inv_Data_Rx_Frame(uart_no, rx->frame_buf, (uint16_t)rx->frame_len);
+        }
+    }
+
+
 
     rx->frame_len = 0U;                 /* 本帧提交后释放frame_buf供下一帧使用。 */
     rx->frame_overflow = RT_FALSE;
@@ -248,17 +256,15 @@ void uart_init(void)
 /* 串口管理线程按1ms周期截取并分发三个轮询串口的完整响应帧。 */
 void uart_mgmt_thread_entry(void *parameter)
 {
-    uint16_t index;
-
-    RT_UNUSED(parameter);
+    uint16_t i;
 
     /* 串口管理线程持续运行并处理所有已初始化串口。 */
     while(1) {
         /* 每个串口独立判断帧间静默时间，不会等待其他串口完成。 */
-        for(index = 0U; index < UART_NO_MAXS; ++index) {
+        for(i = 0U; i < UART_NO_MAXS; ++i) {
             /* 串口设备存在并且截取到完整帧时，将帧提交给轮询模块。 */
-            if((uart_dev[index] != RT_NULL) && (uart_take_timeout_frame(&rx_manage[index]) == RT_TRUE)) {
-                uart_dispatch_frame(index);
+            if((uart_dev[i] != RT_NULL) && (uart_take_timeout_frame(&rx_manage[i]) == RT_TRUE)) {
+                uart_dispatch_frame(i);
             }
         }
 

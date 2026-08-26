@@ -6,6 +6,7 @@
 #include "ctu_cfg.h"
 #include "main_uart.h"
 #include "dlt645_data_center.h"
+#include "rng_buf.h"
 
 #define DBG_TAG "dlt645"
 #define DBG_LVL DBG_LOG
@@ -253,19 +254,39 @@ void dlt645_deal(uint8_t uart_no, uint8_t *dlt645_addr, uint8_t *bufPtr, uint16_
 }
 
 struct rt_semaphore sem_dlt645;             //645处理线程信号量
-//645处理线程信号量初始化
-void Dlt645_Sem_Init(void)
+
+struct rng_buf dlt645_rng;
+
+uint8_t dlt645_rx_buf[1024];
+
+void Dlt645_Init(void)
 {
     if(rt_sem_init(&sem_dlt645, "dlt645", 0, RT_IPC_FLAG_FIFO) != RT_EOK)
     {
         rt_kprintf("creat sem_dlt645 failed!\n");
     }
+
+    RngBufInit(&dlt645_rng,   dlt645_rx_buf,   sizeof(dlt645_rx_buf), RNG_BUF_MODE_SINGLE);
 }
 
-void dlt645_rx_callback(void)
+void dlt645_rx_callback(void *ptr, uint16_t len, uint16_t buf_source)
 {
+    struct rngbuf_queue queue = {buf_source, len};
+    RngBufWrite(&dlt645_rng, &queue, sizeof(queue));
+    RngBufWrite(&dlt645_rng, ptr, len);
+
     //释放信号量，线程中去获取报文
     rt_sem_release(&sem_dlt645);
+}
+
+void dlt645_rx_get(void *ptr, uint16_t *len, uint16_t *buf_source)
+{
+    struct rngbuf_queue queue = {0};
+    RngBufRead(&dlt645_rng, &queue, sizeof(queue));
+    *buf_source = queue.buf_source;
+    *len = queue.len;
+
+    RngBufRead(&dlt645_rng, ptr, queue.len);
 }
 
 uint8_t dlt645_deal_rx_buf[256] = {0};
@@ -290,9 +311,8 @@ void dlt645_deal_thread_entry(void* parameter)
 #endif
 
         uint16_t uart_type = 0;
-
         //获取需要处理的串口号信息及该串口接收数据
-
+        dlt645_rx_get(dlt645_deal_rx_buf, &dlt645_deal_rx_len, &uart_type);
 
         //数据解析
         dlt645_deal(uart_type, sg_dl645_addr_bcd, dlt645_deal_rx_buf, dlt645_deal_rx_len);

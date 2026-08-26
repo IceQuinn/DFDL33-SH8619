@@ -84,36 +84,42 @@ static const char *inv_proto_byte_order_name(uint8_t data_type, uint8_t byte_ord
 /* 打印数据类或参数类的只读寄存器表头。 */
 static void inv_proto_print_read_table_header(const char *section_name)
 {
+    /* 输出只读寄存器各字段名称，后续数据类和参数类共用该表头。 */
     rt_kprintf("[%08d] %-20s %-10s %-7s %-8s %-14s %-12s %-7s\n", rt_tick_get(), section_name, "address", "count", "read_fc", "type", "order", "decimal");
 }
 
 /* 打印数据类或参数类中的一个只读寄存器配置。 */
 static void inv_proto_print_reg(const char *name, const Inv_RegBlk_t *reg)
 {
+    /* 将寄存器数值字段和类型、字节序文本组合成一行输出。 */
     rt_kprintf("[%08d] %-20s %-10d %-7d %-8d %-14s %-12s %-7d\n", rt_tick_get(), name, reg->reg_addr, reg->reg_cnt, reg->read_func_code, inv_proto_data_type_name(reg->data_type), inv_proto_byte_order_name(reg->data_type, reg->byte_order), reg->decimal_places);
 }
 
 /* 打印控制类寄存器表头。 */
 static void inv_proto_print_ctrl_table_header(const char *section_name)
 {
+    /* 控制表头使用write_fc区分只读寄存器表的read_fc。 */
     rt_kprintf("[%08d] %-20s %-10s %-7s %-8s %-14s %-12s %-7s\n", rt_tick_get(), section_name, "address", "count", "write_fc", "type", "order", "decimal");
 }
 
 /* 打印不带默认值的控制寄存器配置。 */
 static void inv_proto_print_ctrl_reg(const char *name, const Inv_CtrlRegBlk_t *reg)
 {
+    /* 打印数值类控制寄存器，不包含开关机固定默认值。 */
     rt_kprintf("[%08d] %-20s %-10d %-7d %-8d %-14s %-12s %-7d\n", rt_tick_get(), name, reg->reg_addr, reg->reg_cnt, reg->write_func_code, inv_proto_data_type_name(reg->data_type), inv_proto_byte_order_name(reg->data_type, reg->byte_order), reg->decimal_places);
 }
 
 /* 打印开机或关机固定控制寄存器及其默认写入值。 */
 static void inv_proto_print_default_ctrl_reg(const char *name, const Inv_CtrlDefaultRegBlk_t *reg)
 {
+    /* 在普通控制寄存器字段后额外打印协议规定的默认写入值。 */
     rt_kprintf("[%08d] %-20s %-10d %-7d %-8d %-14s %-12s %-7d default=%d\n", rt_tick_get(), name, reg->reg_addr, reg->reg_cnt, reg->write_func_code, inv_proto_data_type_name(reg->data_type), inv_proto_byte_order_name(reg->data_type, reg->byte_order), reg->decimal_places, reg->write_default_val);
 }
 
 /* 打印协议识别使用的特征寄存器配置。 */
 static void inv_proto_print_feature(const Inv_Feature_t *feature)
 {
+    /* 特征寄存器单独成表，并输出自动识别匹配使用的默认值。 */
     rt_kprintf("[%08d] %-20s %-10s %-7s %-8s %-14s %-12s %-7s %-10s\n", rt_tick_get(), "[feature]", "address", "count", "read_fc", "type", "order", "decimal", "default");
     rt_kprintf("[%08d] %-20s %-10d %-7d %-8d %-14s %-12s %-7d %-10d\n", rt_tick_get(), "feature", feature->reg_addr, feature->reg_cnt, feature->read_func_code, inv_proto_data_type_name(feature->data_type), inv_proto_byte_order_name(feature->data_type, feature->byte_order), feature->decimal_places, feature->default_val);
 }
@@ -132,15 +138,16 @@ const Inv_Proto_t *Inv_Proto_Get(uint16_t proto_number)
 /* 完整打印一条协议中的厂家信息、数据类、参数类和控制类。 */
 static void inv_proto_print_one(uint16_t proto_number, uint16_t valid_number, const Inv_Proto_t *proto)
 {
-    const char *manufacturer_text;
-    char manufacturer[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1];
+    const char *manufacturer_text;                           /* 最终打印的厂家名称文本。 */
+    char manufacturer[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1]; /* 补结束符后的厂家名称。 */
 
-    Inv_Archive_Copy_Mfr_Name(manufacturer, proto->mfr_info.name);
+    Inv_Archive_Copy_Mfr_Name(manufacturer, proto->mfr_info.name); /* 安全转换协议中的定长厂家名称。 */
 
     /* 厂家名称为空时使用固定文本，避免日志字段为空。 */
     if(manufacturer[0] == '\0') {
         manufacturer_text = "(empty)";
     }
+    /* 非空厂家名称直接使用转换后的安全字符串。 */
     else {
         manufacturer_text = manufacturer;
     }
@@ -189,8 +196,8 @@ static void inv_proto_print_one(uint16_t proto_number, uint16_t valid_number, co
 /* 打印指定数量的协议槽位，count为0时默认打印前10条。 */
 void Inv_Proto_Print(uint16_t count)
 {
-    uint16_t proto_number;
-    uint16_t valid_number = 0;
+    uint16_t proto_number;     /* 从1开始显示的协议槽位序号。 */
+    uint16_t valid_number = 0; /* 已打印有效协议的连续计数。 */
 
     /* count为0时使用默认打印数量10。 */
     if(count == 0) {
@@ -206,7 +213,7 @@ void Inv_Proto_Print(uint16_t count)
 
     /* 按1开始的协议序号依次打印有效或无效状态。 */
     for(proto_number = 1; proto_number <= count; ++proto_number) {
-        const Inv_Proto_t *proto = Inv_Proto_Get(proto_number);
+        const Inv_Proto_t *proto = Inv_Proto_Get(proto_number); /* 将显示序号转换为协议数组地址。 */
 
         /* 有效协议打印完整内容并累计有效协议序号。 */
         if(g_inv_proto_lib.valid[proto_number - 1] == INVERTER_PROTOCOL_VALID) {
@@ -225,10 +232,10 @@ void Inv_Proto_Print(uint16_t count)
 /* MSH命令入口，无参数打印10条，有参数时打印指定数量的协议。 */
 static int inv_proto_print(int argc, char **argv)
 {
-    char *end_ptr;
-    int32_t count = 10;
-    int32_t max_count = INVERTER_PROTOCOL_LIBRARY_COUNT;
-    int64_t parsed_count;
+    char *end_ptr;                                        /* strtol停止解析的位置，用于检查尾随字符。 */
+    int32_t count = 10;                                   /* 未提供参数时默认打印的协议槽位数。 */
+    int32_t max_count = INVERTER_PROTOCOL_LIBRARY_COUNT;  /* 命令参数允许的最大槽位数。 */
+    int64_t parsed_count;                                 /* 命令行文本转换后的临时整数。 */
 
     /* 参数多于一个时打印正确用法并结束命令。 */
     if(argc > 2) {
@@ -238,7 +245,7 @@ static int inv_proto_print(int argc, char **argv)
 
     /* 提供数量参数时将字符串转换为整数并检查范围。 */
     if(argc == 2) {
-        parsed_count = strtol(argv[1], &end_ptr, 10);
+        parsed_count = strtol(argv[1], &end_ptr, 10); /* 按十进制解析用户输入并保留结束位置。 */
 
         /* 参数必须是完整十进制数字，并且打印数量必须位于1～100范围内。 */
         if((end_ptr == argv[1]) || (*end_ptr != '\0') ||
@@ -250,7 +257,7 @@ static int inv_proto_print(int argc, char **argv)
         count = (int32_t)parsed_count;
     }
 
-    Inv_Proto_Print((uint16_t)count);
+    Inv_Proto_Print((uint16_t)count); /* 参数检查完成后调用统一协议打印接口。 */
     return 0;
 }
 MSH_CMD_EXPORT(inv_proto_print, print inverter protocol library);

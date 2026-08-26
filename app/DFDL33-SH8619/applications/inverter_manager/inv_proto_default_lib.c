@@ -11,148 +11,148 @@
 
 typedef enum Enum_Inv_Mfr_Id
 {
-    INV_MFR_SUNGROW_1 = 0,
-    INV_MFR_HUAWEI_1,
-    INV_MFR_GOODWE_1,
-    INV_MFR_JINWANG_1,
+    INV_MFR_SUNGROW_1 = 0, /* 阳光电源默认协议在各分项配置数组中的关联编号。 */
+    INV_MFR_HUAWEI_1,     /* 华为默认协议在各分项配置数组中的关联编号。 */
+    INV_MFR_GOODWE_1,     /* 固德威默认协议在各分项配置数组中的关联编号。 */
+    INV_MFR_JINWANG_1,    /* 锦浪默认协议在各分项配置数组中的关联编号。 */
 }Enum_Inv_Mfr_Id_t;
 // ----------------------------------------------------厂家信息
 typedef struct Inv_Mfr_Id{
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_MfrInfo_t mfr_info;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 用于把厂家信息装配到同编号默认协议。 */
+    Inv_MfrInfo_t mfr_info;   /* 厂家ASCII名称和规约版本。 */
 }Inv_Mfr_Id_t;
 // ----------------------------------------------------厂家特征数据
 typedef struct Inv_Feature_Id{
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_Feature_t feature;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 用于把特征配置装配到同编号默认协议。 */
+    Inv_Feature_t feature;     /* 自动识别使用的特征寄存器配置和默认值。 */
 }Inv_Feature_Id_t;
 // ----------------------------------------------------厂家数据类
 typedef struct Inv_ProtoData_Ua_Id{ // A相电压
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t Ua;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前A相电压配置所属厂家编号。 */
+    Inv_RegBlk_t Ua;           /* A相电压只读寄存器配置。 */
 }Inv_ProtoData_Ua_Id_t;
 typedef struct Inv_ProtoData_Ub_Id{ // B相电压
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t Ub;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前B相电压配置所属厂家编号。 */
+    Inv_RegBlk_t Ub;           /* B相电压只读寄存器配置。 */
 }Inv_ProtoData_Ub_Id_t;
 typedef struct Inv_ProtoData_Uc_Id{ // C相电压
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t Uc;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前C相电压配置所属厂家编号。 */
+    Inv_RegBlk_t Uc;           /* C相电压只读寄存器配置。 */
 }Inv_ProtoData_Uc_Id_t;
 typedef struct Inv_ProtoData_Ia_Id{ // A相电流
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t Ia;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前A相电流配置所属厂家编号。 */
+    Inv_RegBlk_t Ia;           /* A相电流只读寄存器配置。 */
 }Inv_ProtoData_Ia_Id_t;
 typedef struct Inv_ProtoData_Ib_Id{ // B相电流
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t Ib;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前B相电流配置所属厂家编号。 */
+    Inv_RegBlk_t Ib;           /* B相电流只读寄存器配置。 */
 }Inv_ProtoData_Ib_Id_t;
 typedef struct Inv_ProtoData_Ic_Id{ // C相电流
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t Ic;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前C相电流配置所属厂家编号。 */
+    Inv_RegBlk_t Ic;           /* C相电流只读寄存器配置。 */
 }Inv_ProtoData_Ic_Id_t;
 typedef struct Inv_ProtoData_Pa_Id{ // A相有功功率
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t Pa;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前A相有功功率配置所属厂家编号。 */
+    Inv_RegBlk_t Pa;           /* A相有功功率只读寄存器配置。 */
 }Inv_ProtoData_Pa_Id_t;
 typedef struct Inv_ProtoData_Pb_Id{ // B相有功功率
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t Pb;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前B相有功功率配置所属厂家编号。 */
+    Inv_RegBlk_t Pb;           /* B相有功功率只读寄存器配置。 */
 }Inv_ProtoData_Pb_Id_t;
 typedef struct Inv_ProtoData_Pc_Id{ // C相有功功率
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t Pc;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前C相有功功率配置所属厂家编号。 */
+    Inv_RegBlk_t Pc;           /* C相有功功率只读寄存器配置。 */
 }Inv_ProtoData_Pc_Id_t;
 typedef struct Inv_ProtoData_Pt_Id{ // 总有功功率
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t Pt;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前总有功功率配置所属厂家编号。 */
+    Inv_RegBlk_t Pt;           /* 总有功功率只读寄存器配置。 */
 }Inv_ProtoData_Pt_Id_t;
 
 typedef struct Inv_ProtoData_Qa_Id{ // A相无功功率
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t Qa;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前A相无功功率配置所属厂家编号。 */
+    Inv_RegBlk_t Qa;           /* A相无功功率只读寄存器配置。 */
 }Inv_ProtoData_Qa_Id_t;
 typedef struct Inv_ProtoData_Qb_Id{ // B相无功功率
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t Qb;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前B相无功功率配置所属厂家编号。 */
+    Inv_RegBlk_t Qb;           /* B相无功功率只读寄存器配置。 */
 }Inv_ProtoData_Qb_Id_t;
 typedef struct Inv_ProtoData_Qc_Id{ // C相无功功率
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t Qc;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前C相无功功率配置所属厂家编号。 */
+    Inv_RegBlk_t Qc;           /* C相无功功率只读寄存器配置。 */
 }Inv_ProtoData_Qc_Id_t;
 typedef struct Inv_ProtoData_Qt_Id{ // 总无功功率
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t Qt;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前总无功功率配置所属厂家编号。 */
+    Inv_RegBlk_t Qt;           /* 总无功功率只读寄存器配置。 */
 }Inv_ProtoData_Qt_Id_t;
 typedef struct Inv_ProtoData_PFa_Id{ // A相功率因数
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t PFA;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前A相功率因数配置所属厂家编号。 */
+    Inv_RegBlk_t PFA;          /* A相功率因数只读寄存器配置。 */
 }Inv_ProtoData_PFa_Id_t;
 typedef struct Inv_ProtoData_PFb_Id{ // B相功率因数
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t PFb;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前B相功率因数配置所属厂家编号。 */
+    Inv_RegBlk_t PFb;          /* B相功率因数只读寄存器配置。 */
 }Inv_ProtoData_PFb_Id_t;
 typedef struct Inv_ProtoData_PFc_Id{ // C相功率因数
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t PFc;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前C相功率因数配置所属厂家编号。 */
+    Inv_RegBlk_t PFc;          /* C相功率因数只读寄存器配置。 */
 }Inv_ProtoData_PFc_Id_t;
 typedef struct Inv_ProtoData_PFt_Id{ // 总功率因数
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t PFt;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前总功率因数配置所属厂家编号。 */
+    Inv_RegBlk_t PFt;          /* 总功率因数只读寄存器配置。 */
 }Inv_ProtoData_PFt_Id_t;
 // ----------------------------------------------------厂家参数
 typedef struct Inv_dev_no_Id{   // 设备编号或序列号
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t dev_no;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前设备编号配置所属厂家编号。 */
+    Inv_RegBlk_t dev_no;       /* 设备编号或序列号只读寄存器配置。 */
 }Inv_dev_no_Id_t;
 typedef struct Inv_pv_rated_active_pwr_Id{ // PV额定有功功率
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t pv_rated_active_pwr;
+    Enum_Inv_Mfr_Id_t mfr_id;         /* 当前额定有功功率配置所属厂家编号。 */
+    Inv_RegBlk_t pv_rated_active_pwr;  /* PV额定有功功率只读寄存器配置。 */
 }Inv_pv_rated_active_pwr_Id_t;
 typedef struct Inv_pv_rated_reactive_pwr_Id{ // PV额定无功功率
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t pv_rated_reactive_pwr;
+    Enum_Inv_Mfr_Id_t mfr_id;           /* 当前额定无功功率配置所属厂家编号。 */
+    Inv_RegBlk_t pv_rated_reactive_pwr;  /* PV额定无功功率只读寄存器配置。 */
 }Inv_pv_rated_reactive_pwr_Id_t;
 typedef struct Inv_set_volt_Id{ // 逆变器设定电压
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t set_volt;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前设定电压配置所属厂家编号。 */
+    Inv_RegBlk_t set_volt;     /* 逆变器设定电压只读寄存器配置。 */
 }Inv_set_volt_Id_t;
 typedef struct Inv_output_type_Id{ // 输出类型
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t output_type;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前输出类型配置所属厂家编号。 */
+    Inv_RegBlk_t output_type;  /* 单相或三相等输出类型只读寄存器配置。 */
 }Inv_output_type_Id_t;
 typedef struct Inv_pwr_status_Id{ // 开关机状态
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_RegBlk_t pwr_status;
+    Enum_Inv_Mfr_Id_t mfr_id; /* 当前开关机状态配置所属厂家编号。 */
+    Inv_RegBlk_t pwr_status;   /* 开关机状态只读寄存器配置。 */
 }Inv_pwr_status_Id_t;
 // ----------------------------------------------------厂家控制类
 typedef struct Inv_pwr_on_Id{ // 逆变器开机控制寄存器
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_CtrlDefaultRegBlk_t pwr_on;
+    Enum_Inv_Mfr_Id_t mfr_id;          /* 当前开机控制配置所属厂家编号。 */
+    Inv_CtrlDefaultRegBlk_t pwr_on;     /* 开机寄存器及固定默认写入值。 */
 }Inv_pwr_on_Id_t;
 typedef struct Inv_pwr_off_Id{ // 逆变器关机控制寄存器
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_CtrlDefaultRegBlk_t pwr_off;
+    Enum_Inv_Mfr_Id_t mfr_id;          /* 当前关机控制配置所属厂家编号。 */
+    Inv_CtrlDefaultRegBlk_t pwr_off;    /* 关机寄存器及固定默认写入值。 */
 }Inv_pwr_off_Id_t;
 typedef struct Inv_active_pwr_ctrl_Id{ // 有功功率数值控制寄存器
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_CtrlRegBlk_t active_pwr_ctrl;
+    Enum_Inv_Mfr_Id_t mfr_id;        /* 当前有功数值控制配置所属厂家编号。 */
+    Inv_CtrlRegBlk_t active_pwr_ctrl; /* 有功功率数值写寄存器配置。 */
 }Inv_active_pwr_ctrl_Id_t;
 typedef struct Inv_reactive_pwr_ctrl_Id{ // 无功功率数值控制寄存器
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_CtrlRegBlk_t reactive_pwr_ctrl;
+    Enum_Inv_Mfr_Id_t mfr_id;          /* 当前无功数值控制配置所属厂家编号。 */
+    Inv_CtrlRegBlk_t reactive_pwr_ctrl; /* 无功功率数值写寄存器配置。 */
 }Inv_reactive_pwr_ctrl_Id_t;
 typedef struct Inv_pwr_factor_ctrl_Id{ // 功率因数控制寄存器
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_CtrlRegBlk_t pwr_factor_ctrl;
+    Enum_Inv_Mfr_Id_t mfr_id;       /* 当前功率因数控制配置所属厂家编号。 */
+    Inv_CtrlRegBlk_t pwr_factor_ctrl; /* 功率因数写寄存器配置。 */
 }Inv_pwr_factor_ctrl_Id_t;
 typedef struct Inv_active_pwr_pct_ctrl_Id{ // 有功功率百分比控制寄存器
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_CtrlRegBlk_t active_pwr_pct_ctrl;
+    Enum_Inv_Mfr_Id_t mfr_id;            /* 当前有功百分比控制配置所属厂家编号。 */
+    Inv_CtrlRegBlk_t active_pwr_pct_ctrl; /* 有功功率百分比写寄存器配置。 */
 }Inv_active_pwr_pct_ctrl_Id_t;
 typedef struct Inv_reactive_pwr_pct_ctrl_Id{ // 无功功率百分比控制寄存器
-    Enum_Inv_Mfr_Id_t mfr_id;
-    Inv_CtrlRegBlk_t reactive_pwr_pct_ctrl;
+    Enum_Inv_Mfr_Id_t mfr_id;              /* 当前无功百分比控制配置所属厂家编号。 */
+    Inv_CtrlRegBlk_t reactive_pwr_pct_ctrl; /* 无功功率百分比写寄存器配置。 */
 }Inv_reactive_pwr_pct_ctrl_Id_t;
 
 // ---------------------------------------------------------------------------------------------------厂家信息

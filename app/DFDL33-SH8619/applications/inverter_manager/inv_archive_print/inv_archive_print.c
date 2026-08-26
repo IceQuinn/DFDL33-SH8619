@@ -38,8 +38,8 @@ static const char *inv_archive_port_name(uint8_t port)
 /* 打印档案库统计信息及全部固定档案槽位。 */
 void Inv_Archive_Print(void)
 {
-    uint8_t index;
-    uint8_t valid_count = 0;
+    uint8_t index;           /* 档案槽位统计和打印的循环下标。 */
+    uint8_t valid_count = 0; /* 根据valid数组现场统计的有效档案数量。 */
 
     /* 打印前重新统计有效槽位，便于对比档案库中保存的count。 */
     for(index = 0; index < INVERTER_ARCHIVE_MAX_COUNT; ++index) {
@@ -54,20 +54,21 @@ void Inv_Archive_Print(void)
 
     /* 逐槽位打印档案内容，无效槽位也保留输出以便检查Flash数据。 */
     for(index = 0; index < INVERTER_ARCHIVE_MAX_COUNT; ++index) {
-        const Inv_Archive_t *archive = &g_inv_archive_lib.archives[index];
-        const char *manufacturer_text;
-        const char *valid_text;
-        uint8_t valid = g_inv_archive_lib.valid[index];
-        char manufacturer[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1];
-        char modbus_address[16];
+        const Inv_Archive_t *archive = &g_inv_archive_lib.archives[index]; /* 当前打印的档案。 */
+        const char *manufacturer_text;                                    /* 最终打印的厂家名称文本。 */
+        const char *valid_text;                                           /* 有效标志对应的可读文本。 */
+        uint8_t valid = g_inv_archive_lib.valid[index];                    /* 当前槽位原始有效标志。 */
+        char manufacturer[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1];          /* 补结束符后的厂家名称。 */
+        char modbus_address[16];                                          /* Modbus地址的十进制文本。 */
 
-        Inv_Archive_Copy_Mfr_Name(manufacturer, archive->mfr_info.name);
-        rt_snprintf(modbus_address, sizeof(modbus_address), "%d", archive->mb_addr);
+        Inv_Archive_Copy_Mfr_Name(manufacturer, archive->mfr_info.name); /* 将Flash定长名称转换为安全字符串。 */
+        rt_snprintf(modbus_address, sizeof(modbus_address), "%d", archive->mb_addr); /* 地址转文本以保持表格列宽。 */
 
         /* 厂家名称为空时使用固定文本，避免表格中该字段完全空白。 */
         if(manufacturer[0] == '\0') {
             manufacturer_text = "(empty)";
         }
+        /* 非空厂家名称直接使用转换后的安全字符串。 */
         else {
             manufacturer_text = manufacturer;
         }
@@ -76,6 +77,7 @@ void Inv_Archive_Print(void)
         if(valid == INVERTER_ARCHIVE_VALID) {
             valid_text = "VALID";
         }
+        /* 除有效值外的所有标志统一显示为INVALID并保留原始数值。 */
         else {
             valid_text = "INVALID";
         }
@@ -89,7 +91,7 @@ void Inv_Archive_Print(void)
 /* FinSH命令入口，调用统一档案打印接口。 */
 static int inv_archive_print(void)
 {
-    Inv_Archive_Print();
+    Inv_Archive_Print(); /* 复用公开接口输出统计和全部12个档案槽位。 */
     return 0;
 }
 MSH_CMD_EXPORT(inv_archive_print, print all inverter archive slots);
