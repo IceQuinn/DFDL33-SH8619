@@ -1,0 +1,155 @@
+{
+  "protocol": "DLT645-2007",
+  "version": 1,
+  "description": "DL/T 645-2007数据标识及扩展数据区结构配置",
+  "defaults": {
+    "password_permission": "00",
+    "password": "000000",
+    "operator_code": "00000000",
+    "write_include_security": true,
+    "preamble_count": 4
+  },
+  "data_identifiers": [
+    {
+      "di": "00000000",
+      "description": "组合有功总电能",
+      "access": "read",
+      "read_response": {
+        "fields": [
+          {
+            "name": "energy",
+            "description": "组合有功总电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          }
+        ]
+      }
+    },
+    {
+      "di": "02010100",
+      "description": "A相电压",
+      "access": "read",
+      "read_response": {
+        "fields": [
+          {
+            "name": "voltage_a",
+            "description": "A相电压",
+            "type": "bcd",
+            "length": 2,
+            "byte_order": "little",
+            "decimals": 1,
+            "unit": "V"
+          }
+        ]
+      }
+    },
+    {
+      "di": "02020100",
+      "description": "A相电流",
+      "access": "read",
+      "read_response": {
+        "fields": [
+          {
+            "name": "current_a",
+            "description": "A相电流",
+            "type": "bcd",
+            "length": 3,
+            "byte_order": "little",
+            "decimals": 3,
+            "unit": "A"
+          }
+        ]
+      }
+    },
+    {
+      "di": "04000101",
+      "description": "日期及星期",
+      "access": "read_write",
+      "read_response": {
+        "fields": [
+          {"name": "weekday", "description": "星期", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 1, "maximum": 7},
+          {"name": "day", "description": "日", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 1, "maximum": 31},
+          {"name": "month", "description": "月", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 1, "maximum": 12},
+          {"name": "year", "description": "年", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 0, "maximum": 99}
+        ]
+      },
+      "write_request": {
+        "fields": [
+          {"name": "weekday", "description": "星期(01~07)", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 1, "maximum": 7},
+          {"name": "day", "description": "日(01~31)", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 1, "maximum": 31},
+          {"name": "month", "description": "月(01~12)", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 1, "maximum": 12},
+          {"name": "year", "description": "年(00~99)", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 0, "maximum": 99}
+        ]
+      }
+    },
+    {
+      "di": "04000102",
+      "description": "时间",
+      "access": "read_write",
+      "read_response": {
+        "fields": [
+          {"name": "second", "description": "秒", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 0, "maximum": 59},
+          {"name": "minute", "description": "分", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 0, "maximum": 59},
+          {"name": "hour", "description": "时", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 0, "maximum": 23}
+        ]
+      },
+      "write_request": {
+        "fields": [
+          {"name": "second", "description": "秒(00~59)", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 0, "maximum": 59},
+          {"name": "minute", "description": "分(00~59)", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 0, "maximum": 59},
+          {"name": "hour", "description": "时(00~23)", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 0, "maximum": 23}
+        ]
+      }
+    },
+    {
+      "di": "F0010001",
+      "description": "扩展示例：目标电压及工作模式",
+      "access": "read_write",
+      "read_response": {
+        "fields": [
+          {
+            "name": "target_voltage",
+            "description": "目标电压",
+            "type": "bcd",
+            "length": 2,
+            "byte_order": "little",
+            "decimals": 1,
+            "unit": "V"
+          },
+          {
+            "name": "mode",
+            "description": "工作模式",
+            "type": "enum",
+            "length": 1,
+            "byte_order": "little",
+            "values": {"0": "停止", "1": "运行", "2": "维护"}
+          }
+        ]
+      },
+      "write_request": {
+        "fields": [
+          {
+            "name": "target_voltage",
+            "description": "目标电压",
+            "type": "bcd",
+            "length": 2,
+            "byte_order": "little",
+            "decimals": 1,
+            "unit": "V"
+          },
+          {
+            "name": "mode",
+            "description": "工作模式",
+            "type": "enum",
+            "length": 1,
+            "byte_order": "little",
+            "values": {"0": "停止", "1": "运行", "2": "维护"}
+          }
+        ]
+      }
+    }
+  ]
+}

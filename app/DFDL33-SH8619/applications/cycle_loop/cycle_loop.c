@@ -46,10 +46,12 @@ typedef struct Cycle_Loop_Uart_Context {
     Cycle_Loop_Scan_State_t state;      /* 当前串口状态机状态。 */
     uint16_t protocol_index;            /* 协议识别阶段正在测试的协议库下标。 */
     uint16_t feature_reg_addr;          /* 当前协议的特征寄存器起始地址。 */
-    uint16_t feature_default_val;       /* 用于判断协议是否匹配的默认特征值。 */
+    uint32_t feature_lower_limit;       /* 用于判断协议是否匹配的特征下限值。 */
+    uint32_t feature_upper_limit;       /* 用于判断协议是否匹配的特征上限值。 */
     uint8_t slave_addr;                 /* 当前设备的Modbus地址，搜索范围为1～10。 */
     uint8_t feature_reg_cnt;            /* 当前协议特征数据占用的寄存器数量。 */
     uint8_t feature_func_code;          /* 当前协议特征寄存器使用的读功能码。 */
+    uint8_t feature_byte_order;         /* 当前协议特征数据的字节排列方式。 */
     rt_tick_t request_tick;             /* 最近一次请求完整写入串口时的系统tick。 */
 
     uint8_t rx_frame[CYCLE_LOOP_RX_FRAME_SIZE]; /* 通信接收层提交的完整Modbus响应帧。 */
@@ -199,16 +201,70 @@ static void cycle_loop_advance_protocol(Cycle_Loop_Uart_Context_t *context)
     context->state = CYCLE_LOOP_SCAN_READY;
 }
 
-/* 实际值位于默认值的90%～110%闭区间时匹配，放大100倍比较可避免浮点和取整误差。 */
-static rt_bool_t cycle_loop_feature_value_matches(uint16_t actual_value,
-                                                  uint16_t default_value)
+/* 实际值位于协议配置的上下限闭区间时匹配。 */
+static rt_bool_t cycle_loop_feature_value_matches(uint32_t actual_value,
+                                                  uint32_t lower_limit,
+                                                  uint32_t upper_limit)
 {
-    uint32_t actual_scaled = (uint32_t)actual_value * 100U; /* 实际值放大100倍后的比较值。 */
-    uint32_t lower_scaled = (uint32_t)default_value * 90U;  /* 默认值减10%后的整数比较下限。 */
-    uint32_t upper_scaled = (uint32_t)default_value * 110U; /* 默认值加10%后的整数比较上限。 */
+    /* 上限小于下限表示协议库范围配置无效，禁止误识别。 */
+    if(upper_limit < lower_limit) {
+        return RT_FALSE;
+    }
 
-    return ((actual_scaled >= lower_scaled) &&
-            (actual_scaled <= upper_scaled)) ? RT_TRUE : RT_FALSE;
+    return ((actual_value >= lower_limit) &&
+            (actual_value <= upper_limit)) ? RT_TRUE : RT_FALSE;
+}
+
+/* 按协议字节序把一或两个Modbus寄存器还原为最多4字节无符号特征值。 */
+static rt_bool_t cycle_loop_decode_feature_value(const uint16_t *registers,
+                                                 uint16_t register_count,
+                                                 uint8_t byte_order,
+                                                 uint32_t *value)
+{
+    uint16_t first;  /* 字节序转换后的高位或唯一寄存器。 */
+    uint16_t second; /* 字节序转换后的低位寄存器。 */
+
+    if((registers == RT_NULL) || (value == RT_NULL) ||
+       (register_count == 0U) || (register_count > 2U)) {
+        return RT_FALSE;
+    }
+
+    first = registers[0];
+    second = (register_count == 2U) ? registers[1] : 0U;
+
+    /* BADC交换每个16位寄存器内部的高低字节。 */
+    if(byte_order == Type_Byte_BADC) {
+        first = (uint16_t)((first << 8U) | (first >> 8U));
+        second = (uint16_t)((second << 8U) | (second >> 8U));
+    }
+    /* CDAB交换两个16位寄存器；单寄存器时沿用现有定义交换内部字节。 */
+    else if(byte_order == Type_Byte_CDAB) {
+        if(register_count == 1U) {
+            first = (uint16_t)((first << 8U) | (first >> 8U));
+        }
+        else {
+            uint16_t temporary = first;
+            first = second;
+            second = temporary;
+        }
+    }
+    /* DCBA同时反转寄存器顺序及每个寄存器内部字节。 */
+    else if(byte_order == Type_Byte_DCBA) {
+        first = (uint16_t)((first << 8U) | (first >> 8U));
+        if(register_count == 2U) {
+            uint16_t temporary;
+
+            second = (uint16_t)((second << 8U) | (second >> 8U));
+            temporary = first;
+            first = second;
+            second = temporary;
+        }
+    }
+
+    *value = (register_count == 1U)
+                 ? (uint32_t)first
+                 : (((uint32_t)first << 16U) | second);
+    return RT_TRUE;
 }
 
 /* 使用匹配协议的厂家信息、当前从站地址和物理接入端口生成并持久化档案。 */
@@ -282,9 +338,11 @@ static void cycle_loop_send_feature_request(Cycle_Loop_Uart_Context_t *context)
         /* Inv_Proto_t按1字节对齐，先复制feature再读取其中的16位字段。 */
         rt_memcpy(&feature, &protocol->feature, sizeof(feature));
         context->feature_reg_addr = feature.reg_addr;
-        context->feature_default_val = feature.default_val;
+        context->feature_lower_limit = feature.lower_limit;
+        context->feature_upper_limit = feature.upper_limit;
         context->feature_reg_cnt = feature.reg_cnt;
         context->feature_func_code = feature.read_func_code;
+        context->feature_byte_order = feature.byte_order;
 
         /* 特征寄存器配置无效时跳过当前协议，继续检查下一条协议。 */
         if(modbus_m_read_request(context->slave_addr,
@@ -366,7 +424,7 @@ static void cycle_loop_handle_probe_response(Cycle_Loop_Uart_Context_t *context,
     context->state = CYCLE_LOOP_SCAN_READY;
 }
 
-/* 协议特征响应通过Modbus校验后，再比较首个寄存器与协议默认特征值。 */
+/* 协议特征响应通过Modbus校验后，按字节序还原数值并检查配置的上下限。 */
 static void cycle_loop_handle_feature_response(Cycle_Loop_Uart_Context_t *context,
                                                const uint8_t *frame,
                                                uint16_t frame_len)
@@ -374,6 +432,7 @@ static void cycle_loop_handle_feature_response(Cycle_Loop_Uart_Context_t *contex
     uint16_t registers[MODBUS_READ_REG_MAX]; /* 特征响应解析出的寄存器数据。 */
     uint16_t register_count = 0U;            /* 特征响应实际包含的寄存器数量。 */
     uint8_t exception_code = 0U;             /* Modbus异常响应中的异常码。 */
+    uint32_t feature_value = 0U;              /* 按配置字节序还原的一或两个寄存器特征值。 */
     modbus_m_parse_result result;            /* 当前协议特征响应的解析结果。 */
 
     result = modbus_m_read_response(context->slave_addr,
@@ -395,18 +454,22 @@ static void cycle_loop_handle_feature_response(Cycle_Loop_Uart_Context_t *contex
         return;
     }
 
-    /* 至少解析出一个寄存器并且首个值位于默认值正负10%范围时，协议匹配成功。 */
-    if((register_count > 0U) &&
-       (cycle_loop_feature_value_matches(registers[0],
-                                         context->feature_default_val) == RT_TRUE)) {
-        rt_kprintf("%s uart[%d] addr[%d] matched protocol[%d], feature[%d], expected[%d]\n", get_char_time(), context->uart_no, context->slave_addr, context->protocol_index, registers[0], context->feature_default_val);
+    /* 特征寄存器成功还原且数值位于配置的闭区间时，协议匹配成功。 */
+    if((cycle_loop_decode_feature_value(registers,
+                                        register_count,
+                                        context->feature_byte_order,
+                                        &feature_value) == RT_TRUE) &&
+       (cycle_loop_feature_value_matches(feature_value,
+                                         context->feature_lower_limit,
+                                         context->feature_upper_limit) == RT_TRUE)) {
+        rt_kprintf("%s uart[%d] addr[%d] matched protocol[%d], feature[%u], range[%u, %u]\n", get_char_time(), context->uart_no, context->slave_addr, context->protocol_index, (unsigned int)feature_value, (unsigned int)context->feature_lower_limit, (unsigned int)context->feature_upper_limit);
         /* 识别成功后立即写入档案并保存Flash，无论保存结果如何都结束本串口搜索。 */
         cycle_loop_add_matched_archive(context);
         cycle_loop_stop_uart(context);
         return;
     }
 
-    rt_kprintf("%s uart[%d] protocol[%d] feature[%d] is not within 10%% of expected[%d]\n", get_char_time(), context->uart_no, context->protocol_index, (register_count > 0U) ? registers[0] : 0U, context->feature_default_val);
+    rt_kprintf("%s uart[%d] protocol[%d] feature[%u] is outside range[%u, %u]\n", get_char_time(), context->uart_no, context->protocol_index, (unsigned int)feature_value, (unsigned int)context->feature_lower_limit, (unsigned int)context->feature_upper_limit);
     cycle_loop_advance_protocol(context); /* 合法响应但特征不匹配时立即测试下一条协议。 */
 }
 

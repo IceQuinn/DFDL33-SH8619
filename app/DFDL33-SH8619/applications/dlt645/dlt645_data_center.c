@@ -11,6 +11,8 @@
 #include "user_rtc.h"
 #include "main_uart.h"
 
+#include "inv_data.h"
+
 #define DBG_TAG "645_data"
 #define DBG_LVL DBG_LOG
 #include <rtdbg.h>
@@ -23,8 +25,14 @@ uint8_t sg_dl645_addr_bcd[DL645_ADDR_SIZE] = {0};
 const ReadBlockDataTypeDef ReadBlockDataStruct[] =
 {
     {0x0400040F, 4, 8, {&ctu_cfg.longitude, &ctu_cfg.latitude, RT_NULL},       1, TYPE_U32, "long lat"},//经纬度
-
+    {0x02E60101, 4, 8, {&g_inv_data[0].data.Ux[ENUM_PHASE_A].value, &g_inv_data[0].data.Ux[ENUM_PHASE_B].value, RT_NULL},       1, TYPE_U32, "Ux"},//逆变器1电压数据块
 };
+
+// const ReadDataTypeDef ReadDataStruct[] = 
+// {
+//     {0x0400040F, &ctu_cfg.longitude, 1.0, TYPE_U32, 4, "longitude"},//经度
+//     {0x0400040F, &ctu_cfg.latitude, 1.0, TYPE_U32, 4, "latitude"},//纬度
+// };
 
 uint8_t BCD2DEC(uint8_t ch)
 {

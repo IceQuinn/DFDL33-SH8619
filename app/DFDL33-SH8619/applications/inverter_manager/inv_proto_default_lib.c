@@ -24,7 +24,7 @@ typedef struct Inv_Mfr_Id{
 // ----------------------------------------------------厂家特征数据
 typedef struct Inv_Feature_Id{
     Enum_Inv_Mfr_Id_t mfr_id; /* 用于把特征配置装配到同编号默认协议。 */
-    Inv_Feature_t feature;     /* 自动识别使用的特征寄存器配置和默认值。 */
+    Inv_Feature_t feature;     /* 自动识别使用的特征寄存器配置和有效范围。 */
 }Inv_Feature_Id_t;
 // ----------------------------------------------------厂家数据类
 typedef struct Inv_ProtoData_Ua_Id{ // A相电压
@@ -164,11 +164,11 @@ Inv_Mfr_Id_t g_inv_mfr[] = {    // 厂家信息
 };
 // ---------------------------------------------------------------------------------------------------厂家特征数据
 Inv_Feature_Id_t g_inv_feature[] = {    // 厂家特征数据
-    //逆变器ID,     寄存器地址，寄存器个数，读功能码，数据类型, 字节序, 小数位数, 预留，默认值
-    {INV_MFR_SUNGROW_1, {5036, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0, 5000}},
-    {INV_MFR_HUAWEI_1,  {5036, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0, 5000}},
-    {INV_MFR_GOODWE_1,  {5036, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0, 5000}},
-    {INV_MFR_JINWANG_1, {5036, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0, 5000}},
+    //逆变器ID,     寄存器地址，寄存器个数，读功能码，数据类型, 字节序, 小数位数, 预留，下限，上限
+    {INV_MFR_SUNGROW_1, {5036, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0, 4500, 5500}},
+    {INV_MFR_HUAWEI_1,  {32085, 1, 0x03, TYPE_U16, Type_Byte_ABCD, 0, 0, 2, 2}},
+    {INV_MFR_GOODWE_1,  {0x75AC, 1, 0x03, TYPE_U16, Type_Byte_ABCD, 2, 0, 4500, 5500}},
+    {INV_MFR_JINWANG_1, {3043, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 2, 0, 4500, 5500}},
 };
 // ---------------------------------------------------------------------------------------------------数据类
 Inv_ProtoData_Ua_Id_t g_inv_Ua[] = {    // A相电压寄存器
@@ -292,7 +292,8 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
             .byte_order = Type_Byte_ABCD,
             .decimal_places = 1,
 
-            .default_val = 5000
+            .lower_limit = 4500,
+            .upper_limit = 5500
         },
         .data = {
             .Ux = {
@@ -577,7 +578,8 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
             .byte_order = Type_Byte_ABCD,
             .decimal_places = 0,
 
-            .default_val = 2,
+            .lower_limit = 2,
+            .upper_limit = 2,
         },
         .data = {
             .Ux = {
@@ -863,7 +865,8 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
             .byte_order = Type_Byte_ABCD,
             .decimal_places = 2,
 
-            .default_val = 5000
+            .lower_limit = 4500,
+            .upper_limit = 5500
         },
         .data = {
             .Ux = {
@@ -1148,7 +1151,8 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
             .byte_order = Type_Byte_ABCD,
             .decimal_places = 2,
 
-            .default_val = 5000
+            .lower_limit = 4500,
+            .upper_limit = 5500
         },
         .data = {
             .Ux = {

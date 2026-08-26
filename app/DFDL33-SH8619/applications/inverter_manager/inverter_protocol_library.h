@@ -18,7 +18,7 @@ extern "C" {
 /* 逆变器协议库固定提供100条厂家协议配置。 */
 #define INVERTER_PROTOCOL_LIBRARY_COUNT             100
 #define INVERTER_PROTOCOL_DEFAULT_COUNT             4
-#define INVERTER_PROTOCOL_LIBRARY_VERSION           12
+#define INVERTER_PROTOCOL_LIBRARY_VERSION           13
 #define INVERTER_PROTOCOL_INVALID                   0
 #define INVERTER_PROTOCOL_VALID                     1
 
@@ -154,12 +154,15 @@ typedef struct Inv_Feature
     /* bit12～bit15预留。 */
     uint16_t reserved : 4;
 
-    /* 用于厂家及型号识别的2字节默认特征值。 */
-    uint16_t default_val;
+    /* 自动识别有效范围的4字节下限值，读取值等于下限时也认为有效。 */
+    uint32_t lower_limit;
+
+    /* 自动识别有效范围的4字节上限值，读取值等于上限时也认为有效。 */
+    uint32_t upper_limit;
 } Inv_Feature_t;
 
-/* 特征数据由地址2字节、寄存器个数1字节、读功能码1字节、数据格式2字节和默认值2字节组成，共8字节。 */
-#define INV_FEATURE_SIZE                            8
+/* 特征数据由地址2字节、寄存器个数1字节、读功能码1字节、数据格式2字节及上下限各4字节组成，共14字节。 */
+#define INV_FEATURE_SIZE                            14
 typedef char Inv_FeatureSizeCheck_t[
     (sizeof(Inv_Feature_t) == INV_FEATURE_SIZE) ? 1 : -1];
 
@@ -287,13 +290,13 @@ typedef struct Inv_ProtoLib
 } Inv_ProtoLib_t;
 #pragma pack()
 
-/* 厂家信息34字节、特征数据8字节、数据类108字节、参数类36字节、控制类46字节，共232字节。 */
-#define INV_PROTO_SIZE                              232
+/* 厂家信息34字节、特征数据14字节、数据类108字节、参数类36字节、控制类46字节，共238字节。 */
+#define INV_PROTO_SIZE                              238
 typedef char Inv_ProtoSizeCheck_t[
     (sizeof(Inv_Proto_t) == INV_PROTO_SIZE) ? 1 : -1];
 
-/* AB头6字节、100个有效标志和100条232字节协议，共6+100+232×100=23306字节。 */
-#define INV_PROTO_LIB_SIZE                          23306
+/* AB头6字节、100个有效标志和100条238字节协议，共6+100+238×100=23906字节。 */
+#define INV_PROTO_LIB_SIZE                          23906
 typedef char Inv_ProtoLibSizeCheck_t[
     (sizeof(Inv_ProtoLib_t) == INV_PROTO_LIB_SIZE) ? 1 : -1];
 

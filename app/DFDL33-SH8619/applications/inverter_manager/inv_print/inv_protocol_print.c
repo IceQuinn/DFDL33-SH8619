@@ -119,9 +119,9 @@ static void inv_proto_print_default_ctrl_reg(const char *name, const Inv_CtrlDef
 /* 打印协议识别使用的特征寄存器配置。 */
 static void inv_proto_print_feature(const Inv_Feature_t *feature)
 {
-    /* 特征寄存器单独成表，并输出自动识别匹配使用的默认值。 */
-    rt_kprintf("[%08d] %-20s %-10s %-7s %-8s %-14s %-12s %-7s %-10s\n", rt_tick_get(), "[feature]", "address", "count", "read_fc", "type", "order", "decimal", "default");
-    rt_kprintf("[%08d] %-20s %-10d %-7d %-8d %-14s %-12s %-7d %-10d\n", rt_tick_get(), "feature", feature->reg_addr, feature->reg_cnt, feature->read_func_code, inv_proto_data_type_name(feature->data_type), inv_proto_byte_order_name(feature->data_type, feature->byte_order), feature->decimal_places, feature->default_val);
+    /* 特征寄存器单独成表，并输出自动识别使用的闭区间上下限。 */
+    rt_kprintf("[%08d] %-20s %-10s %-7s %-8s %-14s %-12s %-7s %-12s %-12s\n", rt_tick_get(), "[feature]", "address", "count", "read_fc", "type", "order", "decimal", "lower", "upper");
+    rt_kprintf("[%08d] %-20s %-10d %-7d %-8d %-14s %-12s %-7d %-12u %-12u\n", rt_tick_get(), "feature", feature->reg_addr, feature->reg_cnt, feature->read_func_code, inv_proto_data_type_name(feature->data_type), inv_proto_byte_order_name(feature->data_type, feature->byte_order), feature->decimal_places, (unsigned int)feature->lower_limit, (unsigned int)feature->upper_limit);
 }
 
 /* 按1～100协议序号获取协议对象，序号越界时返回RT_NULL。 */

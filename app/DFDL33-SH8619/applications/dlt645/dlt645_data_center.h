@@ -3,6 +3,17 @@
 
 #include <stdint.h>
 
+// 645只读数据结构体定义
+typedef struct
+{
+    uint32_t DataIdf;       //645数据标识
+    void    *DataBuff;     //回复数据地址
+    float    DateRate;      //上送的数据需要扩大多少倍
+    uint8_t  DataType;      //原始数据的数据类型
+    uint8_t  ReplyDataLen;  //645回复数据长度
+    uint8_t  DescribeType[16];//该类型的描述
+}ReadDataTypeDef;
+
 /* 645数据块结构体 */
 typedef struct
 {
