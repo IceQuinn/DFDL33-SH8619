@@ -20,7 +20,7 @@
 #include "user_rtc.h"
 
 #define INV_DATA_PORT_COUNT                3U
-#define INV_DATA_POINT_COUNT              31U
+#define INV_DATA_POINT_COUNT              29U
 #define INV_DATA_RESPONSE_TIMEOUT_TICKS  1000U
 #define INV_DATA_DEVICE_IDLE_TICKS      10000U
 #define INV_DATA_POLL_TICKS               10U
@@ -102,7 +102,7 @@ typedef struct Inv_Data_Port_Config {
 typedef struct Inv_Data_Port_Context {
     uint8_t port_index;                      /* 只读端口配置表下标，范围0～2。 */
     uint8_t archive_index;                   /* 下一次查找数据点使用的档案槽位游标。 */
-    uint8_t point_index;                     /* 下一次查找使用的数据点下标，范围0～30。 */
+    uint8_t point_index;                     /* 下一次查找使用的数据点下标，范围0～28。 */
     uint8_t active_archive_index;            /* 当前已发送请求所属的档案槽位下标。 */
     uint8_t slave_addr;                      /* 当前已发送请求使用的Modbus从站地址。 */
     Inv_Data_Port_State_t state;             /* 当前端口处于可发送、等待响应或空闲状态。 */
@@ -337,20 +337,6 @@ static void inv_data_copy_ctrl_config(Inv_Data_Point_Config_t *point, const Inv_
     point->decimal_places = local_reg.decimal_places;
 }
 
-/* 将带默认值的开关机控制寄存器转换为03功能码读保持寄存器配置。 */
-static void inv_data_copy_default_ctrl_config(Inv_Data_Point_Config_t *point, const Inv_CtrlDefaultRegBlk_t *reg)
-{
-    Inv_CtrlDefaultRegBlk_t local_reg; /* 带默认写入值控制配置的对齐副本。 */
-
-    rt_memcpy(&local_reg, reg, sizeof(local_reg));
-    point->reg_addr = local_reg.reg_addr;
-    point->reg_count = local_reg.reg_cnt;
-    point->function_code = MODBUS_FUNC_READ_HOLDING;
-    point->data_type = local_reg.data_type;
-    point->byte_order = local_reg.byte_order;
-    point->decimal_places = local_reg.decimal_places;
-}
-
 /* 根据控制类型从档案协议中取得写寄存器配置和实时数据存储位置。 */
 static Inv_Control_Result_t inv_control_get_active(const Inv_Control_Request_t *request,
                                                    Inv_Control_Active_t *active)
@@ -386,13 +372,13 @@ static Inv_Control_Result_t inv_control_get_active(const Inv_Control_Request_t *
         /* 开机和关机分别选择协议库中的固定寄存器和值。 */
         if(request->type == INV_CONTROL_POWER_ON) {
             rt_memcpy(&default_reg, &protocol->ctrl.pwr_on, sizeof(default_reg));
-            active->target = &g_inv_data[request->archive_index].ctrl.pwr_on;
+            active->target = RT_NULL; /* 开机寄存器只写，不保存或回读实时值。 */
             active->name = "power_on";
         }
-        /* 关机请求选择关机固定值及对应的实时回读目标。 */
+        /* 关机请求选择关机固定值，同样不配置实时回读目标。 */
         else {
             rt_memcpy(&default_reg, &protocol->ctrl.pwr_off, sizeof(default_reg));
-            active->target = &g_inv_data[request->archive_index].ctrl.pwr_off;
+            active->target = RT_NULL; /* 关机寄存器只写，不保存或回读实时值。 */
             active->name = "power_off";
         }
 
@@ -472,6 +458,12 @@ static void inv_control_mark_refresh(Inv_Data_Port_Context_t *context)
     uint8_t control_type = (uint8_t)context->active.control.request.type;   /* 需要优先回读的控制类型。 */
     uint8_t refresh_bit;                                                    /* 当前控制类型在位图中的标志位。 */
 
+    /* 开机和关机寄存器是纯写命令，不允许进入任何回读流程。 */
+    if((control_type == INV_CONTROL_POWER_ON) ||
+       (control_type == INV_CONTROL_POWER_OFF)) {
+        return;
+    }
+
     /* 当前活动控制信息经过组帧检查，档案下标和控制类型应当都位于有效范围。 */
     if((archive_index >= INVERTER_ARCHIVE_MAX_COUNT) || (control_type >= INV_CONTROL_TYPE_MAX)) {
         return;
@@ -500,8 +492,10 @@ static rt_bool_t inv_control_prepare_refresh(Inv_Data_Port_Context_t *context)
 
     /* 每个档案的每种控制类型最多保留一个回读标志，相同控制连续写入会自动合并。 */
     for(archive_index = 0U; archive_index < INVERTER_ARCHIVE_MAX_COUNT; ++archive_index) {
-        /* 在当前档案内依次检查七种可能待回读的控制类型。 */
-        for(control_type = 0U; control_type < INV_CONTROL_TYPE_MAX; ++control_type) {
+        /* 只检查五种数值控制类型，开机和关机永远不允许重读。 */
+        for(control_type = INV_CONTROL_ACTIVE_POWER;
+            control_type < INV_CONTROL_TYPE_MAX;
+            ++control_type) {
             refresh_bit = (uint8_t)(1U << control_type);
 
             /* 当前类型没有置位时跳过，不生成无意义回读请求。 */
@@ -539,7 +533,7 @@ static rt_bool_t inv_control_prepare_refresh(Inv_Data_Port_Context_t *context)
     return RT_FALSE;
 }
 
-/* 按0～30数据点下标取得协议寄存器配置和对应实时数据存储位置。 */
+/* 按0～28数据点下标取得协议寄存器配置和对应实时数据存储位置。 */
 static rt_bool_t inv_data_get_point(uint8_t archive_index,
                                     uint8_t point_index,
                                     Inv_Data_Point_Config_t *point)
@@ -634,41 +628,29 @@ static rt_bool_t inv_data_get_point(uint8_t archive_index,
             break;
         }
     }
-    /* 下标23～29对应控制类的7个保持寄存器数据点。 */
-    else if(point_index < 30U) {
-        /* 控制类点下标固定映射到协议库中的七项控制配置。 */
+    /* 下标23～27对应五个允许读取的数值控制寄存器。 */
+    else if(point_index < 28U) {
+        /* 开机和关机是纯写命令，不加入周期轮询点。 */
         switch(point_index) {
         case 23U:
-            inv_data_copy_default_ctrl_config(point, &protocol->ctrl.pwr_on);
-            point->number_target = &data->ctrl.pwr_on;
-            point->name = "power_on";
-            break;
-
-        case 24U:
-            inv_data_copy_default_ctrl_config(point, &protocol->ctrl.pwr_off);
-            point->number_target = &data->ctrl.pwr_off;
-            point->name = "power_off";
-            break;
-
-        case 25U:
             inv_data_copy_ctrl_config(point, &protocol->ctrl.active_pwr_ctrl);
             point->number_target = &data->ctrl.active_pwr_ctrl;
             point->name = "active_pwr_ctrl";
             break;
 
-        case 26U:
+        case 24U:
             inv_data_copy_ctrl_config(point, &protocol->ctrl.reactive_pwr_ctrl);
             point->number_target = &data->ctrl.reactive_pwr_ctrl;
             point->name = "reactive_pwr_ctrl";
             break;
 
-        case 27U:
+        case 25U:
             inv_data_copy_ctrl_config(point, &protocol->ctrl.pwr_factor_ctrl);
             point->number_target = &data->ctrl.pwr_factor_ctrl;
             point->name = "power_factor_ctrl";
             break;
 
-        case 28U:
+        case 26U:
             inv_data_copy_ctrl_config(point, &protocol->ctrl.active_pwr_pct_ctrl);
             point->number_target = &data->ctrl.active_pwr_pct_ctrl;
             point->name = "active_pwr_pct_ctrl";
@@ -681,7 +663,7 @@ static rt_bool_t inv_data_get_point(uint8_t archive_index,
             break;
         }
     }
-    /* 下标30对应Inv_Proto_t末尾独立的日发电量寄存器。 */
+    /* 下标28对应Inv_Proto_t末尾独立的日发电量寄存器。 */
     else {
         inv_data_copy_read_config(point, &protocol->daily_generation);
         point->number_target = &data->daily_generation;
@@ -713,12 +695,12 @@ static rt_bool_t inv_data_point_is_readable(const Inv_Data_Point_Config_t *point
     return RT_TRUE;
 }
 
-/* 当前数据点完成后推进游标，31个点结束后切换到下一个档案槽位。 */
+/* 当前数据点完成后推进游标，29个点结束后切换到下一个档案槽位。 */
 static void inv_data_advance_cursor(Inv_Data_Port_Context_t *context)
 {
     ++context->point_index;
 
-    /* 当前档案的31个数据点已经遍历完成时切换下一档案。 */
+    /* 当前档案的29个数据点已经遍历完成时切换下一档案。 */
     if(context->point_index >= INV_DATA_POINT_COUNT) {
         context->point_index = 0U;
         ++context->archive_index;
@@ -749,7 +731,7 @@ static rt_bool_t inv_data_find_next_point(Inv_Data_Port_Context_t *context, uint
         return RT_FALSE;
     }
 
-    /* 最多检查12个档案的全部31个点，避免没有可读点时形成死循环。 */
+    /* 最多检查12个档案的全部29个点，避免没有可读点时形成死循环。 */
     for(attempt = 0U; attempt < (INVERTER_ARCHIVE_MAX_COUNT * INV_DATA_POINT_COUNT); ++attempt) {
         uint8_t archive_index = context->archive_index; /* 本次尝试对应的档案游标。 */
         uint8_t point_index = context->point_index;     /* 本次尝试对应的数据点游标。 */

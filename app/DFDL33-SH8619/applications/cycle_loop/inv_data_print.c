@@ -12,176 +12,378 @@
 #include "inverter_archive.h"
 #include "user_rtc.h"
 
+/* 一张表横向显示全部12台逆变器，单元格使用空格分隔。 */
+#define INV_DATA_PRINT_GROUP_SIZE           INVERTER_ARCHIVE_MAX_COUNT
+#define INV_DATA_PRINT_CELL_WIDTH           12U
+
 /* 数据类各数组对应的打印名称。 */
-static const char *g_inv_data_print_u_name[ENUM_PHASE_MAX] = {"Ua", "Ub", "Uc"}; /* 三相电压数组下标对应的名称。 */
-static const char *g_inv_data_print_i_name[ENUM_PHASE_MAX] = {"Ia", "Ib", "Ic"}; /* 三相电流数组下标对应的名称。 */
-static const char *g_inv_data_print_p_name[ENUM_PMAX] = {"Pa", "Pb", "Pc", "Pt"}; /* 分相及总有功功率名称。 */
-static const char *g_inv_data_print_q_name[ENUM_QMAX] = {"Qa", "Qb", "Qc", "Qt"}; /* 分相及总无功功率名称。 */
-static const char *g_inv_data_print_pf_name[ENUM_PFMAX] = {"PFa", "PFb", "PFc", "PFt"}; /* 分相及总功率因数名称。 */
+static const char *g_inv_data_print_u_name[ENUM_PHASE_MAX] = {"Ua", "Ub", "Uc"};
+static const char *g_inv_data_print_i_name[ENUM_PHASE_MAX] = {"Ia", "Ib", "Ic"};
+static const char *g_inv_data_print_p_name[ENUM_PMAX] = {"Pa", "Pb", "Pc", "Pt"};
+static const char *g_inv_data_print_q_name[ENUM_QMAX] = {"Qa", "Qb", "Qc", "Qt"};
+static const char *g_inv_data_print_pf_name[ENUM_PFMAX] = {"PFa", "PFb", "PFc", "PFt"};
 
-/* 打印一个数值型实时数据项，无效数据明确打印INVALID。 */
-static void inv_data_print_value(uint8_t archive_number,
-                                 const char *data_class,
-                                 const char *name,
-                                 const Inv_RealtimeValue_t *value)
+/* 将档案端口编号转换为表格中使用的短名称。 */
+static const char *inv_data_print_port_name(uint8_t port)
 {
-    /* 数据有效时打印int32_t实时值和最近一次成功更新时间。 */
-    if(value->valid != 0U) {
-        rt_kprintf("%s archive[%d] %s.%s value[%d] update_tick[%d]\n", get_char_time(), archive_number, data_class, name, value->value, value->update_tick);
-    }
-    /* 数据尚未读取成功、读取失败或协议未配置时打印INVALID。 */
-    else {
-        rt_kprintf("%s archive[%d] %s.%s INVALID\n", get_char_time(), archive_number, data_class, name);
+    switch(port) {
+    case INV_PORT_RJ45_1:
+        return "RJ45-I";
+    case INV_PORT_RJ45_2:
+        return "RJ45-II";
+    case INV_PORT_RS485_2:
+        return "RS485-II";
+    case INV_PORT_WIRELESS:
+        return "WIRELESS";
+    default:
+        return "UNKNOWN";
     }
 }
 
-/* 打印设备编号字符串实时数据，无效数据明确打印INVALID。 */
-static void inv_data_print_string(uint8_t archive_number,
-                                  const char *data_class,
-                                  const char *name,
-                                  const Inv_RealtimeString_t *value)
+/* 打印一个固定宽度单元格，过长文本以~结尾，避免破坏后续列对齐。 */
+static void inv_data_print_cell(const char *text)
 {
-    /* 字符串有效时打印内容、有效长度和最近一次成功更新时间。 */
-    if(value->valid != 0U) {
-        rt_kprintf("%s archive[%d] %s.%s value[%s] length[%d] update_tick[%d]\n", get_char_time(), archive_number, data_class, name, value->value, value->length, value->update_tick);
+    char display[INV_DATA_PRINT_CELL_WIDTH + 1U];
+    rt_size_t length;
+
+    if(text == RT_NULL) {
+        text = "--";
     }
-    /* 字符串尚未读取成功、读取失败或协议未配置时打印INVALID。 */
-    else {
-        rt_kprintf("%s archive[%d] %s.%s INVALID\n", get_char_time(), archive_number, data_class, name);
+
+    length = rt_strlen(text);
+    if(length > INV_DATA_PRINT_CELL_WIDTH) {
+        rt_memcpy(display, text, INV_DATA_PRINT_CELL_WIDTH - 1U);
+        display[INV_DATA_PRINT_CELL_WIDTH - 1U] = '~';
+        display[INV_DATA_PRINT_CELL_WIDTH] = '\0';
+        text = display;
     }
+
+    rt_kprintf(" %-12s", text);
 }
 
-/* 打印数据类中的电压、电流、有功、无功和功率因数实时数据。 */
-static void inv_data_print_data_class(uint8_t archive_number, const Inv_RealtimeData_t *data)
+static void inv_data_print_row_begin(const char *name)
 {
-    uint8_t index; /* 当前正在打印的数据数组下标。 */
-
-    /* 打印A、B、C三相电压。 */
-    for(index = 0U; index < ENUM_PHASE_MAX; ++index) {
-        inv_data_print_value(archive_number, "data", g_inv_data_print_u_name[index], &data->Ux[index]);
-    }
-
-    /* 打印A、B、C三相电流。 */
-    for(index = 0U; index < ENUM_PHASE_MAX; ++index) {
-        inv_data_print_value(archive_number, "data", g_inv_data_print_i_name[index], &data->Ix[index]);
-    }
-
-    /* 打印三相及总有功功率。 */
-    for(index = 0U; index < ENUM_PMAX; ++index) {
-        inv_data_print_value(archive_number, "data", g_inv_data_print_p_name[index], &data->Px[index]);
-    }
-
-    /* 打印三相及总无功功率。 */
-    for(index = 0U; index < ENUM_QMAX; ++index) {
-        inv_data_print_value(archive_number, "data", g_inv_data_print_q_name[index], &data->Qx[index]);
-    }
-
-    /* 打印三相及总功率因数。 */
-    for(index = 0U; index < ENUM_PFMAX; ++index) {
-        inv_data_print_value(archive_number, "data", g_inv_data_print_pf_name[index], &data->PFx[index]);
-    }
+    rt_kprintf("%-20s ", name);
 }
 
-/* 打印参数类中的设备编号、额定功率、电压和输出类型。 */
-static void inv_data_print_param_class(uint8_t archive_number, const Inv_RealtimeParam_t *param)
+static void inv_data_print_row_end(void)
 {
-    /* 参数类字段数量固定，按照协议定义顺序逐项打印有效值或INVALID。 */
-    inv_data_print_string(archive_number, "param", "device_no", &param->dev_no);
-    inv_data_print_value(archive_number, "param", "pv_rated_p", &param->pv_rated_active_pwr);
-    inv_data_print_value(archive_number, "param", "pv_rated_q", &param->pv_rated_reactive_pwr);
-    inv_data_print_value(archive_number, "param", "set_voltage", &param->set_volt);
-    inv_data_print_value(archive_number, "param", "output_type", &param->output_type);
+    rt_kprintf("\n");
 }
 
-/* 打印控制类中的开关机及功率控制寄存器实时数据。 */
-static void inv_data_print_ctrl_class(uint8_t archive_number, const Inv_RealtimeCtrl_t *ctrl)
+/* 打印当前分组的逆变器编号表头。 */
+static void inv_data_print_header(uint8_t first_archive, uint8_t archive_count)
 {
-    /* 控制类字段数量固定，按照通用控制类型顺序逐项打印。 */
-    inv_data_print_value(archive_number, "ctrl", "power_on", &ctrl->pwr_on);
-    inv_data_print_value(archive_number, "ctrl", "power_off", &ctrl->pwr_off);
-    inv_data_print_value(archive_number, "ctrl", "active_pwr_ctrl", &ctrl->active_pwr_ctrl);
-    inv_data_print_value(archive_number, "ctrl", "reactive_pwr_ctrl", &ctrl->reactive_pwr_ctrl);
-    inv_data_print_value(archive_number, "ctrl", "power_factor_ctrl", &ctrl->pwr_factor_ctrl);
-    inv_data_print_value(archive_number, "ctrl", "active_pwr_pct_ctrl", &ctrl->active_pwr_pct_ctrl);
-    inv_data_print_value(archive_number, "ctrl", "reactive_pwr_pct_ctrl", &ctrl->reactive_pwr_pct_ctrl);
+    uint8_t offset;
+    char inverter_name[16];
+
+    inv_data_print_row_begin("Item");
+    for(offset = 0U; offset < archive_count; ++offset) {
+        rt_snprintf(inverter_name, sizeof(inverter_name), "INV%d", first_archive + offset + 1U);
+        inv_data_print_cell(inverter_name);
+    }
+    inv_data_print_row_end();
 }
 
-/* 打印指定档案槽位，档案有效时使用实时数据快照打印全部31项数据。 */
-static void inv_data_print_archive_index(uint8_t archive_index)
+/* 打印数值型实时数据行，无效档案显示--，无效实时值显示INVALID。 */
+static void inv_data_print_value_row(const char *name,
+                                     const Inv_RealtimeValue_t *const sources[],
+                                     const uint8_t archive_valid[],
+                                     uint8_t archive_count)
 {
-    Inv_Archive_t archive; /* 临界区内取得的单个档案配置快照。 */
-    Inv_Data_t data;       /* 临界区内取得的单个档案实时数据快照。 */
-    char manufacturer[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U]; /* 补字符串结束符后的厂家名称。 */
-    uint8_t archive_number = archive_index + 1U; /* 面向日志显示的1～12档案编号。 */
-    uint8_t archive_valid; /* 当前档案槽位的有效标志快照。 */
+    Inv_RealtimeValue_t values[INV_DATA_PRINT_GROUP_SIZE];
+    uint8_t offset;
+    char text[24];
 
-    /* 临界区内复制有效标志、档案和实时数据，耗时打印在退出临界区后执行。 */
     rt_enter_critical();
-    archive_valid = g_inv_archive_lib.valid[archive_index];
-    rt_memcpy(&archive, &g_inv_archive_lib.archives[archive_index], sizeof(archive));
-    rt_memcpy(&data, &g_inv_data[archive_index], sizeof(data));
+    for(offset = 0U; offset < archive_count; ++offset) {
+        rt_memcpy(&values[offset], sources[offset], sizeof(values[offset]));
+    }
     rt_exit_critical();
 
-    /* 无效档案只打印档案编号和INVALID，不继续打印实时数据项。 */
-    if(archive_valid != INVERTER_ARCHIVE_VALID) {
-        rt_kprintf("%s archive[%d] INVALID\n", get_char_time(), archive_number);
-        return;
+    inv_data_print_row_begin(name);
+    for(offset = 0U; offset < archive_count; ++offset) {
+        if(archive_valid[offset] != INVERTER_ARCHIVE_VALID) {
+            inv_data_print_cell("--");
+        }
+        else if(values[offset].valid == 0U) {
+            inv_data_print_cell("INVALID");
+        }
+        else {
+            rt_snprintf(text, sizeof(text), "%d", values[offset].value);
+            inv_data_print_cell(text);
+        }
     }
-
-    Inv_Archive_Copy_Mfr_Name(manufacturer, archive.mfr_info.name); /* 将Flash定长厂家字段转换为安全C字符串。 */
-    rt_kprintf("%s archive[%d] VALID addr[%d] port[%d] manufacturer[%s] protocol[0x%04X]\n", get_char_time(), archive_number, archive.mb_addr, archive.port, manufacturer, (unsigned int)archive.mfr_info.proto_ver);
-    inv_data_print_data_class(archive_number, &data.data);
-    inv_data_print_param_class(archive_number, &data.param);
-    inv_data_print_ctrl_class(archive_number, &data.ctrl);
-    inv_data_print_value(archive_number, "daily", "daily_generation", &data.daily_generation);
+    inv_data_print_row_end();
 }
 
-/* 打印全部12个档案槽位，有效档案打印实时数据，无效档案打印INVALID。 */
+/* 打印设备编号实时数据行。 */
+static void inv_data_print_string_row(const char *name,
+                                      const Inv_RealtimeString_t *const sources[],
+                                      const uint8_t archive_valid[],
+                                      uint8_t archive_count)
+{
+    Inv_RealtimeString_t values[INV_DATA_PRINT_GROUP_SIZE];
+    uint8_t offset;
+
+    rt_enter_critical();
+    for(offset = 0U; offset < archive_count; ++offset) {
+        rt_memcpy(&values[offset], sources[offset], sizeof(values[offset]));
+    }
+    rt_exit_critical();
+
+    inv_data_print_row_begin(name);
+    for(offset = 0U; offset < archive_count; ++offset) {
+        if(archive_valid[offset] != INVERTER_ARCHIVE_VALID) {
+            inv_data_print_cell("--");
+        }
+        else if(values[offset].valid == 0U) {
+            inv_data_print_cell("INVALID");
+        }
+        else {
+            values[offset].value[INV_DATA_DEVICE_NO_MAX_LEN] = '\0';
+            inv_data_print_cell(values[offset].value);
+        }
+    }
+    inv_data_print_row_end();
+}
+
+/* 打印当前分组的档案字段。 */
+static void inv_data_print_archive_rows(const Inv_Archive_t archives[],
+                                        const uint8_t archive_valid[],
+                                        uint8_t archive_count)
+{
+    uint8_t offset;
+    char text[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 16U];
+    char manufacturer[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1U];
+
+    rt_kprintf("[ARCHIVE]\n");
+
+    inv_data_print_row_begin("Valid");
+    for(offset = 0U; offset < archive_count; ++offset) {
+        rt_snprintf(text, sizeof(text), "%s(%d)",
+                    (archive_valid[offset] == INVERTER_ARCHIVE_VALID) ? "VALID" : "INVALID",
+                    archive_valid[offset]);
+        inv_data_print_cell(text);
+    }
+    inv_data_print_row_end();
+
+    inv_data_print_row_begin("Modbus address");
+    for(offset = 0U; offset < archive_count; ++offset) {
+        rt_snprintf(text, sizeof(text), "%d", archives[offset].mb_addr);
+        inv_data_print_cell(text);
+    }
+    inv_data_print_row_end();
+
+    inv_data_print_row_begin("Manufacturer");
+    for(offset = 0U; offset < archive_count; ++offset) {
+        Inv_Archive_Copy_Mfr_Name(manufacturer, archives[offset].mfr_info.name);
+        inv_data_print_cell((manufacturer[0] == '\0') ? "(empty)" : manufacturer);
+    }
+    inv_data_print_row_end();
+
+    inv_data_print_row_begin("Protocol version");
+    for(offset = 0U; offset < archive_count; ++offset) {
+        rt_snprintf(text, sizeof(text), "0x%04X", (unsigned int)archives[offset].mfr_info.proto_ver);
+        inv_data_print_cell(text);
+    }
+    inv_data_print_row_end();
+
+    inv_data_print_row_begin("Access port");
+    for(offset = 0U; offset < archive_count; ++offset) {
+        rt_snprintf(text, sizeof(text), "%d(%s)", archives[offset].port,
+                    inv_data_print_port_name(archives[offset].port));
+        inv_data_print_cell(text);
+    }
+    inv_data_print_row_end();
+}
+
+/* 打印当前分组的数据类实时数据。 */
+static void inv_data_print_data_rows(uint8_t first_archive,
+                                     uint8_t archive_count,
+                                     const uint8_t archive_valid[])
+{
+    const Inv_RealtimeValue_t *sources[INV_DATA_PRINT_GROUP_SIZE];
+    uint8_t field;
+    uint8_t offset;
+
+    rt_kprintf("\n[DATA]\n");
+
+    for(field = 0U; field < ENUM_PHASE_MAX; ++field) {
+        for(offset = 0U; offset < archive_count; ++offset) {
+            sources[offset] = &g_inv_data[first_archive + offset].data.Ux[field];
+        }
+        inv_data_print_value_row(g_inv_data_print_u_name[field], sources, archive_valid, archive_count);
+    }
+
+    for(field = 0U; field < ENUM_PHASE_MAX; ++field) {
+        for(offset = 0U; offset < archive_count; ++offset) {
+            sources[offset] = &g_inv_data[first_archive + offset].data.Ix[field];
+        }
+        inv_data_print_value_row(g_inv_data_print_i_name[field], sources, archive_valid, archive_count);
+    }
+
+    for(field = 0U; field < ENUM_PMAX; ++field) {
+        for(offset = 0U; offset < archive_count; ++offset) {
+            sources[offset] = &g_inv_data[first_archive + offset].data.Px[field];
+        }
+        inv_data_print_value_row(g_inv_data_print_p_name[field], sources, archive_valid, archive_count);
+    }
+
+    for(field = 0U; field < ENUM_QMAX; ++field) {
+        for(offset = 0U; offset < archive_count; ++offset) {
+            sources[offset] = &g_inv_data[first_archive + offset].data.Qx[field];
+        }
+        inv_data_print_value_row(g_inv_data_print_q_name[field], sources, archive_valid, archive_count);
+    }
+
+    for(field = 0U; field < ENUM_PFMAX; ++field) {
+        for(offset = 0U; offset < archive_count; ++offset) {
+            sources[offset] = &g_inv_data[first_archive + offset].data.PFx[field];
+        }
+        inv_data_print_value_row(g_inv_data_print_pf_name[field], sources, archive_valid, archive_count);
+    }
+
+    for(offset = 0U; offset < archive_count; ++offset) {
+        sources[offset] = &g_inv_data[first_archive + offset].daily_generation;
+    }
+    inv_data_print_value_row("Daily generation", sources, archive_valid, archive_count);
+}
+
+/* 打印当前分组的参数类实时数据。 */
+static void inv_data_print_param_rows(uint8_t first_archive,
+                                      uint8_t archive_count,
+                                      const uint8_t archive_valid[])
+{
+    const Inv_RealtimeValue_t *number_sources[INV_DATA_PRINT_GROUP_SIZE];
+    const Inv_RealtimeString_t *string_sources[INV_DATA_PRINT_GROUP_SIZE];
+    uint8_t offset;
+
+    rt_kprintf("\n[PARAMETER]\n");
+
+    for(offset = 0U; offset < archive_count; ++offset) {
+        string_sources[offset] = &g_inv_data[first_archive + offset].param.dev_no;
+    }
+    inv_data_print_string_row("Device number", string_sources, archive_valid, archive_count);
+
+    for(offset = 0U; offset < archive_count; ++offset) {
+        number_sources[offset] = &g_inv_data[first_archive + offset].param.pv_rated_active_pwr;
+    }
+    inv_data_print_value_row("PV rated active P", number_sources, archive_valid, archive_count);
+
+    for(offset = 0U; offset < archive_count; ++offset) {
+        number_sources[offset] = &g_inv_data[first_archive + offset].param.pv_rated_reactive_pwr;
+    }
+    inv_data_print_value_row("PV rated reactive P", number_sources, archive_valid, archive_count);
+
+    for(offset = 0U; offset < archive_count; ++offset) {
+        number_sources[offset] = &g_inv_data[first_archive + offset].param.set_volt;
+    }
+    inv_data_print_value_row("Set voltage", number_sources, archive_valid, archive_count);
+
+    for(offset = 0U; offset < archive_count; ++offset) {
+        number_sources[offset] = &g_inv_data[first_archive + offset].param.output_type;
+    }
+    inv_data_print_value_row("Output type", number_sources, archive_valid, archive_count);
+}
+
+/* 打印当前分组的五个可回读控制类实时数据。 */
+static void inv_data_print_control_rows(uint8_t first_archive,
+                                        uint8_t archive_count,
+                                        const uint8_t archive_valid[])
+{
+    const Inv_RealtimeValue_t *sources[INV_DATA_PRINT_GROUP_SIZE];
+    uint8_t offset;
+
+    rt_kprintf("\n[CONTROL]\n");
+
+    for(offset = 0U; offset < archive_count; ++offset) {
+        sources[offset] = &g_inv_data[first_archive + offset].ctrl.active_pwr_ctrl;
+    }
+    inv_data_print_value_row("Active power", sources, archive_valid, archive_count);
+
+    for(offset = 0U; offset < archive_count; ++offset) {
+        sources[offset] = &g_inv_data[first_archive + offset].ctrl.reactive_pwr_ctrl;
+    }
+    inv_data_print_value_row("Reactive power", sources, archive_valid, archive_count);
+
+    for(offset = 0U; offset < archive_count; ++offset) {
+        sources[offset] = &g_inv_data[first_archive + offset].ctrl.pwr_factor_ctrl;
+    }
+    inv_data_print_value_row("Power factor", sources, archive_valid, archive_count);
+
+    for(offset = 0U; offset < archive_count; ++offset) {
+        sources[offset] = &g_inv_data[first_archive + offset].ctrl.active_pwr_pct_ctrl;
+    }
+    inv_data_print_value_row("Active power pct", sources, archive_valid, archive_count);
+
+    for(offset = 0U; offset < archive_count; ++offset) {
+        sources[offset] = &g_inv_data[first_archive + offset].ctrl.reactive_pwr_pct_ctrl;
+    }
+    inv_data_print_value_row("Reactive power pct", sources, archive_valid, archive_count);
+}
+
+/* 以字段为行、逆变器为列打印一个档案分组。 */
+static void inv_data_print_group(uint8_t first_archive, uint8_t archive_count)
+{
+    Inv_Archive_t archives[INV_DATA_PRINT_GROUP_SIZE];
+    uint8_t archive_valid[INV_DATA_PRINT_GROUP_SIZE];
+    uint8_t offset;
+
+    rt_enter_critical();
+    for(offset = 0U; offset < archive_count; ++offset) {
+        archive_valid[offset] = g_inv_archive_lib.valid[first_archive + offset];
+        rt_memcpy(&archives[offset], &g_inv_archive_lib.archives[first_archive + offset],
+                  sizeof(archives[offset]));
+    }
+    rt_exit_critical();
+
+    rt_kprintf("%s Inverter realtime data: INV%d-INV%d\n", get_char_time(),
+               first_archive + 1U, first_archive + archive_count);
+    inv_data_print_header(first_archive, archive_count);
+    inv_data_print_archive_rows(archives, archive_valid, archive_count);
+    inv_data_print_data_rows(first_archive, archive_count, archive_valid);
+    inv_data_print_param_rows(first_archive, archive_count, archive_valid);
+    inv_data_print_control_rows(first_archive, archive_count, archive_valid);
+    rt_kprintf("\n");
+}
+
+/* 使用一张无边框横向表格打印全部12个档案槽位。 */
 void Inv_Data_Print_All(void)
 {
-    uint8_t archive_index; /* 当前正在打印的0～11档案槽位下标。 */
-
-    /* 固定遍历全部档案槽位，不能只按有效档案count打印。 */
-    for(archive_index = 0U; archive_index < INVERTER_ARCHIVE_MAX_COUNT; ++archive_index) {
-        inv_data_print_archive_index(archive_index);
-    }
+    inv_data_print_group(0U, INVERTER_ARCHIVE_MAX_COUNT);
 }
 
-/* 按1～12档案编号打印单台逆变器实时数据。 */
+/* 按1～12档案编号打印单台逆变器的纵向字段表格。 */
 void Inv_Data_Print_Archive(uint8_t archive_number)
 {
-    /* 档案编号从1开始，0或超过12时打印参数错误。 */
     if((archive_number == 0U) || (archive_number > INVERTER_ARCHIVE_MAX_COUNT)) {
         rt_kprintf("%s archive number[%d] invalid, expected 1-12\n", get_char_time(), archive_number);
         return;
     }
 
-    inv_data_print_archive_index(archive_number - 1U);
+    inv_data_print_group(archive_number - 1U, 1U);
 }
 
 /* MSH命令入口，无参数打印全部档案，提供参数时打印指定档案。 */
 static int inv_data_print(int argc, char **argv)
 {
-    char *end_ptr;             /* strtol返回的首个未解析字符地址。 */
-    int32_t archive_number;    /* 校验通过后转换为int32_t的档案编号。 */
-    int32_t max_archive_number = INVERTER_ARCHIVE_MAX_COUNT; /* MSH允许输入的最大档案编号。 */
-    int64_t parsed_archive_number; /* strtol解析出的宽范围临时数值。 */
+    char *end_ptr;
+    int32_t archive_number;
+    int32_t max_archive_number = INVERTER_ARCHIVE_MAX_COUNT;
+    int64_t parsed_archive_number;
 
-    /* 未提供参数时打印全部12个档案槽位。 */
     if(argc == 1) {
         Inv_Data_Print_All();
         return 0;
     }
 
-    /* 参数数量不是一个时打印正确命令格式。 */
     if(argc != 2) {
         rt_kprintf("%s usage: inv_data_print [archive:1-12]\n", get_char_time());
         return -1;
     }
 
     parsed_archive_number = strtol(argv[1], &end_ptr, 10);
-
-    /* 参数必须是完整十进制数字，并且位于1～12档案编号范围内。 */
     if((end_ptr == argv[1]) || (*end_ptr != '\0') ||
        (parsed_archive_number < 1) || (parsed_archive_number > max_archive_number)) {
         rt_kprintf("%s archive number[%s] is invalid, expected 1-12\n", get_char_time(), argv[1]);
@@ -189,7 +391,7 @@ static int inv_data_print(int argc, char **argv)
     }
 
     archive_number = (int32_t)parsed_archive_number;
-    Inv_Data_Print_Archive((uint8_t)archive_number); /* 参数已校验为1～12，可以安全转换后打印。 */
+    Inv_Data_Print_Archive((uint8_t)archive_number);
     return 0;
 }
 MSH_CMD_EXPORT(inv_data_print, print inverter realtime data);

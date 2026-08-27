@@ -120,8 +120,6 @@ typedef struct Inv_RealtimeParam
 /* 控制类实时数据，用于记录最近一次成功执行或确认的控制值。 */
 typedef struct Inv_RealtimeCtrl
 {
-    Inv_RealtimeValue_t pwr_on;                   /* 最近一次开机控制值。 */
-    Inv_RealtimeValue_t pwr_off;                  /* 最近一次关机控制值。 */
     Inv_RealtimeValue_t active_pwr_ctrl;          /* 有功功率控制值。 */
     Inv_RealtimeValue_t reactive_pwr_ctrl;        /* 无功功率控制值。 */
     Inv_RealtimeValue_t pwr_factor_ctrl;          /* 功率因数控制值。 */
