@@ -115,7 +115,6 @@ typedef struct Inv_RealtimeParam
     Inv_RealtimeValue_t pv_rated_reactive_pwr;    /* PV额定无功功率。 */
     Inv_RealtimeValue_t set_volt;                 /* 逆变器设定电压。 */
     Inv_RealtimeValue_t output_type;              /* 逆变器输出类型。 */
-    Inv_RealtimeValue_t pwr_status;               /* 逆变器开关机状态。 */
 } Inv_RealtimeParam_t;
 
 /* 控制类实时数据，用于记录最近一次成功执行或确认的控制值。 */
@@ -136,6 +135,7 @@ typedef struct Inv_Data
     Inv_RealtimeData_t data;    /* 周期抄读的数据类实时数据。 */
     Inv_RealtimeParam_t param;  /* 周期或初始化抄读的参数类实时数据。 */
     Inv_RealtimeCtrl_t ctrl;    /* 最近一次控制类实时数据。 */
+    Inv_RealtimeValue_t daily_generation; /* 日发电量实时数据，与协议结构末尾寄存器对应。 */
 } Inv_Data_t;
 
 /* 实时数据只保存在RAM中，下标与g_inv_archive_lib中的档案槽位一一对应。 */

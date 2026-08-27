@@ -18,7 +18,7 @@ extern "C" {
 /* 逆变器协议库固定提供100条厂家协议配置。 */
 #define INVERTER_PROTOCOL_LIBRARY_COUNT             100
 #define INVERTER_PROTOCOL_DEFAULT_COUNT             4
-#define INVERTER_PROTOCOL_LIBRARY_VERSION           13
+#define INVERTER_PROTOCOL_LIBRARY_VERSION           14
 #define INVERTER_PROTOCOL_INVALID                   0
 #define INVERTER_PROTOCOL_VALID                     1
 
@@ -216,12 +216,10 @@ typedef struct Inv_ProtoParam
     /* 输出类型，例如单相、三相三线或三相四线，通常为枚举或位域。 */
     Inv_RegBlk_t output_type;
 
-    /* 开关机状态 */
-    Inv_RegBlk_t pwr_status;
 } Inv_ProtoParam_t;
 
-/* 参数类包含6个只读寄存器块，按1字节对齐后共6×6=36字节。 */
-#define INV_PROTO_PARAM_SIZE                        36
+/* 参数类包含5个只读寄存器块，按1字节对齐后共5×6=30字节。 */
+#define INV_PROTO_PARAM_SIZE                        30
 typedef char Inv_ProtoParamSizeCheck_t[
     (sizeof(Inv_ProtoParam_t) == INV_PROTO_PARAM_SIZE) ? 1 : -1];
 
@@ -275,6 +273,9 @@ typedef struct Inv_Proto
 
     /* 控制类。 */
     Inv_ProtoCtrl_t ctrl;
+
+    /* 日发电量只读寄存器，按需求独立放在整条协议结构的末尾。 */
+    Inv_RegBlk_t daily_generation;
 } Inv_Proto_t;
 
 typedef struct Inv_ProtoLib
@@ -290,7 +291,7 @@ typedef struct Inv_ProtoLib
 } Inv_ProtoLib_t;
 #pragma pack()
 
-/* 厂家信息34字节、特征数据14字节、数据类108字节、参数类36字节、控制类46字节，共238字节。 */
+/* 厂家信息34字节、特征数据14字节、数据类108字节、参数类30字节、控制类46字节、日发电量6字节，共238字节。 */
 #define INV_PROTO_SIZE                              238
 typedef char Inv_ProtoSizeCheck_t[
     (sizeof(Inv_Proto_t) == INV_PROTO_SIZE) ? 1 : -1];

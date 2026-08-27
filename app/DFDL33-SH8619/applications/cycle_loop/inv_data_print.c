@@ -82,7 +82,7 @@ static void inv_data_print_data_class(uint8_t archive_number, const Inv_Realtime
     }
 }
 
-/* 打印参数类中的设备编号、额定功率、电压、输出类型和开关机状态。 */
+/* 打印参数类中的设备编号、额定功率、电压和输出类型。 */
 static void inv_data_print_param_class(uint8_t archive_number, const Inv_RealtimeParam_t *param)
 {
     /* 参数类字段数量固定，按照协议定义顺序逐项打印有效值或INVALID。 */
@@ -91,7 +91,6 @@ static void inv_data_print_param_class(uint8_t archive_number, const Inv_Realtim
     inv_data_print_value(archive_number, "param", "pv_rated_q", &param->pv_rated_reactive_pwr);
     inv_data_print_value(archive_number, "param", "set_voltage", &param->set_volt);
     inv_data_print_value(archive_number, "param", "output_type", &param->output_type);
-    inv_data_print_value(archive_number, "param", "power_status", &param->pwr_status);
 }
 
 /* 打印控制类中的开关机及功率控制寄存器实时数据。 */
@@ -134,6 +133,7 @@ static void inv_data_print_archive_index(uint8_t archive_index)
     inv_data_print_data_class(archive_number, &data.data);
     inv_data_print_param_class(archive_number, &data.param);
     inv_data_print_ctrl_class(archive_number, &data.ctrl);
+    inv_data_print_value(archive_number, "daily", "daily_generation", &data.daily_generation);
 }
 
 /* 打印全部12个档案槽位，有效档案打印实时数据，无效档案打印INVALID。 */

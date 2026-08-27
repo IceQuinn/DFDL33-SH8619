@@ -181,7 +181,6 @@ static void inv_proto_print_one(uint16_t proto_number, uint16_t valid_number, co
     inv_proto_print_reg("pv_rated_q", &proto->param.pv_rated_reactive_pwr);
     inv_proto_print_reg("set_voltage", &proto->param.set_volt);
     inv_proto_print_reg("output_type", &proto->param.output_type);
-    inv_proto_print_reg("power_status", &proto->param.pwr_status);
 
     inv_proto_print_ctrl_table_header("[control]");
     inv_proto_print_default_ctrl_reg("power_on", &proto->ctrl.pwr_on);
@@ -191,6 +190,9 @@ static void inv_proto_print_one(uint16_t proto_number, uint16_t valid_number, co
     inv_proto_print_ctrl_reg("power_factor", &proto->ctrl.pwr_factor_ctrl);
     inv_proto_print_ctrl_reg("active_pwr_pct", &proto->ctrl.active_pwr_pct_ctrl);
     inv_proto_print_ctrl_reg("reactive_pwr_pct", &proto->ctrl.reactive_pwr_pct_ctrl);
+
+    inv_proto_print_read_table_header("[daily]");
+    inv_proto_print_reg("daily_generation", &proto->daily_generation);
 }
 
 /* 打印指定数量的协议槽位，count为0时默认打印前10条。 */

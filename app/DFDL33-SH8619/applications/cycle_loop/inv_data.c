@@ -599,9 +599,9 @@ static rt_bool_t inv_data_get_point(uint8_t archive_index,
         point->number_target = &data->data.PFx[offset];
         point->name = g_inv_data_pf_name[offset];
     }
-    /* 下标18～23对应参数类的6个只读数据点。 */
-    else if(point_index < 24U) {
-        /* 参数类点下标固定映射到协议库中的六项参数配置。 */
+    /* 下标18～22对应参数类的5个只读数据点。 */
+    else if(point_index < 23U) {
+        /* 参数类点下标固定映射到协议库中的五项参数配置。 */
         switch(point_index) {
         case 18U:
             inv_data_copy_read_config(point, &protocol->param.dev_no);
@@ -627,54 +627,48 @@ static rt_bool_t inv_data_get_point(uint8_t archive_index,
             point->name = "set_voltage";
             break;
 
-        case 22U:
+        default:
             inv_data_copy_read_config(point, &protocol->param.output_type);
             point->number_target = &data->param.output_type;
             point->name = "output_type";
             break;
-
-        default:
-            inv_data_copy_read_config(point, &protocol->param.pwr_status);
-            point->number_target = &data->param.pwr_status;
-            point->name = "power_status";
-            break;
         }
     }
-    /* 下标24～30对应控制类的7个保持寄存器数据点。 */
-    else {
+    /* 下标23～29对应控制类的7个保持寄存器数据点。 */
+    else if(point_index < 30U) {
         /* 控制类点下标固定映射到协议库中的七项控制配置。 */
         switch(point_index) {
-        case 24U:
+        case 23U:
             inv_data_copy_default_ctrl_config(point, &protocol->ctrl.pwr_on);
             point->number_target = &data->ctrl.pwr_on;
             point->name = "power_on";
             break;
 
-        case 25U:
+        case 24U:
             inv_data_copy_default_ctrl_config(point, &protocol->ctrl.pwr_off);
             point->number_target = &data->ctrl.pwr_off;
             point->name = "power_off";
             break;
 
-        case 26U:
+        case 25U:
             inv_data_copy_ctrl_config(point, &protocol->ctrl.active_pwr_ctrl);
             point->number_target = &data->ctrl.active_pwr_ctrl;
             point->name = "active_pwr_ctrl";
             break;
 
-        case 27U:
+        case 26U:
             inv_data_copy_ctrl_config(point, &protocol->ctrl.reactive_pwr_ctrl);
             point->number_target = &data->ctrl.reactive_pwr_ctrl;
             point->name = "reactive_pwr_ctrl";
             break;
 
-        case 28U:
+        case 27U:
             inv_data_copy_ctrl_config(point, &protocol->ctrl.pwr_factor_ctrl);
             point->number_target = &data->ctrl.pwr_factor_ctrl;
             point->name = "power_factor_ctrl";
             break;
 
-        case 29U:
+        case 28U:
             inv_data_copy_ctrl_config(point, &protocol->ctrl.active_pwr_pct_ctrl);
             point->number_target = &data->ctrl.active_pwr_pct_ctrl;
             point->name = "active_pwr_pct_ctrl";
@@ -686,6 +680,12 @@ static rt_bool_t inv_data_get_point(uint8_t archive_index,
             point->name = "reactive_pwr_pct_ctrl";
             break;
         }
+    }
+    /* 下标30对应Inv_Proto_t末尾独立的日发电量寄存器。 */
+    else {
+        inv_data_copy_read_config(point, &protocol->daily_generation);
+        point->number_target = &data->daily_generation;
+        point->name = "daily_generation";
     }
 
     return RT_TRUE;

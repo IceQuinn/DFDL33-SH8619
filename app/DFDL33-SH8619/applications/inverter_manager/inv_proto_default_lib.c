@@ -121,10 +121,10 @@ typedef struct Inv_output_type_Id{ // 输出类型
     Enum_Inv_Mfr_Id_t mfr_id; /* 当前输出类型配置所属厂家编号。 */
     Inv_RegBlk_t output_type;  /* 单相或三相等输出类型只读寄存器配置。 */
 }Inv_output_type_Id_t;
-typedef struct Inv_pwr_status_Id{ // 开关机状态
-    Enum_Inv_Mfr_Id_t mfr_id; /* 当前开关机状态配置所属厂家编号。 */
-    Inv_RegBlk_t pwr_status;   /* 开关机状态只读寄存器配置。 */
-}Inv_pwr_status_Id_t;
+typedef struct Inv_daily_generation_Id{ // 日发电量
+    Enum_Inv_Mfr_Id_t mfr_id;       /* 当前日发电量配置所属厂家编号。 */
+    Inv_RegBlk_t daily_generation;   /* 日发电量只读寄存器配置。 */
+}Inv_daily_generation_Id_t;
 // ----------------------------------------------------厂家控制类
 typedef struct Inv_pwr_on_Id{ // 逆变器开机控制寄存器
     Enum_Inv_Mfr_Id_t mfr_id;          /* 当前开机控制配置所属厂家编号。 */
@@ -248,8 +248,8 @@ Inv_set_volt_Id_t g_inv_set_volt[] = {    // 逆变器设定电压
 Inv_output_type_Id_t g_inv_output_type[] = {    // 逆变器输出类型
     {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
 };
-Inv_pwr_status_Id_t g_inv_pwr_status[] = {    // 开关机状态
-    {INV_MFR_SUNGROW_1, {5020, 1, 0x04, TYPE_U16, Type_Byte_ABCD, 1, 0}},
+Inv_daily_generation_Id_t g_inv_daily_generation[] = {    // 日发电量
+    {INV_MFR_SUNGROW_1, {INVERTER_PROTOCOL_REGISTER_UNUSED, 0, 0, TYPE_U16, Type_Byte_ABCD, 0, 0}},
 };
 // ---------------------------------------------------------------------------------------------------控制类数据
 Inv_pwr_on_Id_t g_inv_pwr_on[] = {    // 逆变器开机控制寄存器
@@ -492,14 +492,6 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
-            .pwr_status = {    // 开关机状态寄存器
-                .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-                .reg_cnt = 0,
-                .read_func_code = 0,
-                .data_type = TYPE_U16,
-                .byte_order = Type_Byte_ABCD,
-                .decimal_places = 0
-            },
         },
         .ctrl = {
             .pwr_on = {    // 开机控制寄存器
@@ -562,6 +554,14 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .byte_order = Type_Byte_ABCD,
                 .decimal_places = 1
             },
+        },
+        .daily_generation = {    // 日发电量寄存器
+            .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
+            .reg_cnt = 0,
+            .read_func_code = 0,
+            .data_type = TYPE_U16,
+            .byte_order = Type_Byte_ABCD,
+            .decimal_places = 0
         },
     },
     // 厂家二：华为
@@ -779,14 +779,6 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
-            .pwr_status = {    // 开关机状态寄存器
-                .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-                .reg_cnt = 0,
-                .read_func_code = 0,
-                .data_type = TYPE_U16,
-                .byte_order = Type_Byte_ABCD,
-                .decimal_places = 0
-            },
         },
         .ctrl = {
             .pwr_on = {    // 开机控制寄存器
@@ -849,6 +841,14 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .byte_order = Type_Byte_ABCD,
                 .decimal_places = 2
             },
+        },
+        .daily_generation = {    // 日发电量寄存器
+            .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
+            .reg_cnt = 0,
+            .read_func_code = 0,
+            .data_type = TYPE_U16,
+            .byte_order = Type_Byte_ABCD,
+            .decimal_places = 0
         }
     },
     // 厂家三：固德威
@@ -1065,14 +1065,6 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
-            .pwr_status = {    // 开关机状态寄存器
-                .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-                .reg_cnt = 0,
-                .read_func_code = 0,
-                .data_type = TYPE_U16,
-                .byte_order = Type_Byte_ABCD,
-                .decimal_places = 0
-            },
         },
         .ctrl = {
             .pwr_on = {    // 开机控制寄存器
@@ -1135,6 +1127,14 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
+        },
+        .daily_generation = {    // 日发电量寄存器
+            .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
+            .reg_cnt = 0,
+            .read_func_code = 0,
+            .data_type = TYPE_U16,
+            .byte_order = Type_Byte_ABCD,
+            .decimal_places = 0
         }
     },
     // 厂家四：锦浪
@@ -1351,14 +1351,6 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .byte_order = Type_Byte_ABCD,
                 .decimal_places = 0
             },
-            .pwr_status = {    // 开关机状态寄存器
-                .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
-                .reg_cnt = 0,
-                .read_func_code = 0,
-                .data_type = TYPE_U16,
-                .byte_order = Type_Byte_ABCD,
-                .decimal_places = 0
-            },
         },
         .ctrl = {
             .pwr_on = {    // 开机控制寄存器
@@ -1421,6 +1413,14 @@ Inv_Proto_t g_inv_proto_default_lib[4] = {
                 .byte_order = Type_Byte_ABCD,
                 .decimal_places = 2
             },
+        },
+        .daily_generation = {    // 日发电量寄存器
+            .reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED,
+            .reg_cnt = 0,
+            .read_func_code = 0,
+            .data_type = TYPE_U16,
+            .byte_order = Type_Byte_ABCD,
+            .decimal_places = 0
         }
     },
 };
