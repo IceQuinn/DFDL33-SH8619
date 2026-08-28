@@ -665,9 +665,9 @@ static rt_bool_t inv_data_get_point(uint8_t archive_index,
     }
     /* 下标28对应Inv_Proto_t末尾独立的日发电量寄存器。 */
     else {
-        inv_data_copy_read_config(point, &protocol->daily_generation);
-        point->number_target = &data->daily_generation;
-        point->name = "daily_generation";
+        inv_data_copy_read_config(point, &protocol->daily_energy);
+        point->number_target = &data->daily_energy;
+        point->name = "daily_energy";
     }
 
     return RT_TRUE;
@@ -1448,8 +1448,10 @@ static void inv_data_handle_response(Inv_Data_Port_Context_t *context)
     }
      /* 收到报文但解析或数据转换失败时，本次请求立即结束，不再继续计算超时。 */
      else {
-         rt_kprintf("%s uart[%d] archive[%d] data[%s] reply rejected: %s, exception[%d]\n", get_char_time(), inv_data_uart_no(context), context->active_archive_index + 1, context->active.read.points[0].name, modbus_m_parse_result_text(result), exception_code);
-         inv_data_invalidate_active_point(context);
+        rt_snprintf(frame_name, sizeof(frame_name), "uart[%d] archive[%d] data[%s] values[%d] reply[%s]", inv_data_uart_no(context), context->active_archive_index + 1, context->active.read.points[0].name, context->active.read.point_count, modbus_m_parse_result_text(result));
+        show_arr(frame_name, frame, frame_len);
+        rt_kprintf("%s uart[%d] archive[%d] data[%s] reply rejected: %s, exception[%d]\n", get_char_time(), inv_data_uart_no(context), context->active_archive_index + 1, context->active.read.points[0].name, modbus_m_parse_result_text(result), exception_code);
+        inv_data_invalidate_active_point(context);
      }
 
     inv_data_finish_active_point(context);

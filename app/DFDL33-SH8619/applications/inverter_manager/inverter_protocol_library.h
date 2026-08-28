@@ -17,8 +17,8 @@ extern "C" {
 
 /* 逆变器协议库固定提供100条厂家协议配置。 */
 #define INVERTER_PROTOCOL_LIBRARY_COUNT             100
-#define INVERTER_PROTOCOL_DEFAULT_COUNT             4
-#define INVERTER_PROTOCOL_LIBRARY_VERSION           14
+#define INVERTER_PROTOCOL_DEFAULT_COUNT             15
+#define INVERTER_PROTOCOL_LIBRARY_VERSION           15
 #define INVERTER_PROTOCOL_INVALID                   0
 #define INVERTER_PROTOCOL_VALID                     1
 
@@ -275,7 +275,7 @@ typedef struct Inv_Proto
     Inv_ProtoCtrl_t ctrl;
 
     /* 日发电量只读寄存器，按需求独立放在整条协议结构的末尾。 */
-    Inv_RegBlk_t daily_generation;
+    Inv_RegBlk_t daily_energy;
 } Inv_Proto_t;
 
 typedef struct Inv_ProtoLib
@@ -303,6 +303,9 @@ typedef char Inv_ProtoLibSizeCheck_t[
 
 /* 全局逆变器协议库，数组下标范围为0~99，前4项分别对应阳光、华为、固德威和锦浪。 */
 extern Inv_ProtoLib_t g_inv_proto_lib;
+
+/* 按厂家枚举轮询各分项配置表，重新组装RAM中的默认协议库。 */
+void inv_proto_default_lib_init(void);
 
 /* 按1~100的序号获取协议；有效和无效协议均返回对应指针，越界返回NULL。 */
 const Inv_Proto_t *Inv_Proto_Get(uint16_t proto_number);

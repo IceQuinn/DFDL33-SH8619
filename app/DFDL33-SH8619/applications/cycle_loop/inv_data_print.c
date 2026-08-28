@@ -245,7 +245,7 @@ static void inv_data_print_data_rows(uint8_t first_archive,
     }
 
     for(offset = 0U; offset < archive_count; ++offset) {
-        sources[offset] = &g_inv_data[first_archive + offset].daily_generation;
+        sources[offset] = &g_inv_data[first_archive + offset].daily_energy;
     }
     inv_data_print_value_row("Daily generation", sources, archive_valid, archive_count);
 }

@@ -81,7 +81,7 @@ struct Event_Manger_Str
 struct Event_Manger_Str Event_Manger[EVT_CLASS_MAX] =
 {
     {.Event_Flash_Addr_A = FLASH_SELF_CHECK_EVENT_A_ADDR, .Event_Flash_Addr_B = FLASH_SELF_CHECK_EVENT_B_ADDR, .Event_Name = "Flash Event Self Check "},
-    {.Event_Flash_Addr_A = FLASH_OPERATE_EVENT_A_ADDR,    .Event_Flash_Addr_B = FLASH_OPERATE_EVENT_A_ADDR,    .Event_Name = "Flash Event Operate    "},
+    {.Event_Flash_Addr_A = FLASH_OPERATE_EVENT_A_ADDR,    .Event_Flash_Addr_B = FLASH_OPERATE_EVENT_B_ADDR,    .Event_Name = "Flash Event Operate    "},
 };
 
 

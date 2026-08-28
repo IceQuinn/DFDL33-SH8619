@@ -8,21 +8,10 @@
 
 
 Inv_ProtoLib_t g_inv_proto_lib = {0};               /* 保存有效标志和最多100条厂家协议配置。 */
-extern Inv_Proto_t g_inv_proto_default_lib[4];       /* 编译期内置的四条默认厂家协议。 */
-
 /* 清空协议库，装载内置默认协议，并保存到Flash A/B区。 */
 void Inv_Proto_Default_Init(void)
 {
-    uint8_t index; /* 内置默认协议数组的复制下标。 */
-
-    /* 先清空整个库，确保没有默认协议的槽位保持无效且不存在Flash残留数据。 */
-    rt_memset(&g_inv_proto_lib, 0, sizeof(g_inv_proto_lib));
-
-    /* 将全部内置默认协议依次复制到协议库前部并置为有效。 */
-    for(index = 0; index < INVERTER_PROTOCOL_DEFAULT_COUNT; ++index) {
-        rt_memcpy(&g_inv_proto_lib.proto[index], &g_inv_proto_default_lib[index], sizeof(Inv_Proto_t));
-        g_inv_proto_lib.valid[index] = INVERTER_PROTOCOL_VALID;
-    }
+    inv_proto_default_lib_init(); /* 按厂家编号从各分项配置表重新组装默认协议库。 */
 
     AB_save(flash_write, /* 将重建后的默认协议库同时保存到Flash A/B区。 */
             PROTO_LIB_ADDR_A,
@@ -52,6 +41,6 @@ void Inv_Proto_Init(void)
        (g_inv_proto_lib.head.ver != INVERTER_PROTOCOL_LIBRARY_VERSION) ||
        (g_inv_proto_lib.head.len != (sizeof(g_inv_proto_lib) - sizeof(rcd_head)))) {
         rt_kprintf("[%08d] protocol library check failed, loading defaults\n", rt_tick_get());
-        Inv_Proto_Default_Init(); /* 持久化数据不可用时恢复四条编译期默认协议。 */
+        Inv_Proto_Default_Init(); /* 持久化数据不可用时按分项配置表重建默认协议。 */
     }
 }

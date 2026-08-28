@@ -192,7 +192,7 @@ static void inv_proto_print_one(uint16_t proto_number, uint16_t valid_number, co
     inv_proto_print_ctrl_reg("reactive_pwr_pct", &proto->ctrl.reactive_pwr_pct_ctrl);
 
     inv_proto_print_read_table_header("[daily]");
-    inv_proto_print_reg("daily_generation", &proto->daily_generation);
+    inv_proto_print_reg("daily_energy", &proto->daily_energy);
 }
 
 /* 打印指定数量的协议槽位，count为0时默认打印前10条。 */
