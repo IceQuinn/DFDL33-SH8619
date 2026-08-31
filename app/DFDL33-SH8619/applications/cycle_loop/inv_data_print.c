@@ -148,6 +148,38 @@ static void inv_data_print_string_row(const char *name,
     inv_data_print_row_end();
 }
 
+/* 打印逆变器运行状态，状态值与对外约定的0、1和0xFF保持一致。 */
+static void inv_data_print_run_state_row(uint8_t first_archive,
+                                         const uint8_t archive_valid[],
+                                         uint8_t archive_count)
+{
+    Inv_Run_State_t states[INV_DATA_PRINT_GROUP_SIZE];
+    uint8_t offset;
+
+    rt_enter_critical();
+    for(offset = 0U; offset < archive_count; ++offset) {
+        states[offset] = g_inv_data[first_archive + offset].run_state;
+    }
+    rt_exit_critical();
+
+    inv_data_print_row_begin("Run state");
+    for(offset = 0U; offset < archive_count; ++offset) {
+        if(archive_valid[offset] != INVERTER_ARCHIVE_VALID) {
+            inv_data_print_cell("--");
+        }
+        else if(states[offset] == INV_RUN_STATE_OFF) {
+            inv_data_print_cell("0(OFF)");
+        }
+        else if(states[offset] == INV_RUN_STATE_ON) {
+            inv_data_print_cell("1(ON)");
+        }
+        else {
+            inv_data_print_cell("0xFF(UNKNOWN)");
+        }
+    }
+    inv_data_print_row_end();
+}
+
 /* 打印当前分组的档案字段。 */
 static void inv_data_print_archive_rows(const Inv_Archive_t archives[],
                                         const uint8_t archive_valid[],
@@ -208,6 +240,8 @@ static void inv_data_print_data_rows(uint8_t first_archive,
     uint8_t offset;
 
     rt_kprintf("\n[DATA]\n");
+
+    inv_data_print_run_state_row(first_archive, archive_valid, archive_count);
 
     for(field = 0U; field < ENUM_PHASE_MAX; ++field) {
         for(offset = 0U; offset < archive_count; ++offset) {

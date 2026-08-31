@@ -81,6 +81,14 @@ typedef struct Inv_RealtimeValue
     uint8_t valid;
 } Inv_RealtimeValue_t;
 
+/* 根据总有功功率推导的逆变器运行状态。 */
+typedef enum Inv_Run_State
+{
+    INV_RUN_STATE_OFF = 0,       /* 总有功功率小于5W，或当前处于07:00～17:00之外。 */
+    INV_RUN_STATE_ON = 1,        /* 总有功功率大于5W。 */
+    INV_RUN_STATE_UNKNOWN = 0xFF /* 数据无效、过期、正好等于5W或无法取得协议。 */
+} Inv_Run_State_t;
+
 /* 设备编号实时数据项，单独保存字符串以兼容协议库中的ASCII或BCD设备编号。 */
 typedef struct Inv_RealtimeString
 {
@@ -134,6 +142,7 @@ typedef struct Inv_Data
     Inv_RealtimeParam_t param;  /* 周期或初始化抄读的参数类实时数据。 */
     Inv_RealtimeCtrl_t ctrl;    /* 最近一次控制类实时数据。 */
     Inv_RealtimeValue_t daily_energy; /* 日发电量实时数据，与协议结构末尾寄存器对应。 */
+    Inv_Run_State_t run_state;  /* 根据总有功功率和工作时间窗口推导的运行状态。 */
 } Inv_Data_t;
 
 /* 实时数据只保存在RAM中，下标与g_inv_archive_lib中的档案槽位一一对应。 */

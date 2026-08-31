@@ -27,6 +27,8 @@
 #define INV_DATA_TIME_CHECK_TICKS        1000U
 #define INV_DATA_START_HOUR                  7
 #define INV_DATA_STOP_HOUR                  17
+#define INV_RUN_POWER_MAX_AGE_TICKS      120000U
+#define INV_RUN_POWER_THRESHOLD_W             5
 #define INV_DATA_RX_FRAME_SIZE            MODBUS_RTU_ADU_MAX
 #define INV_DATA_NUMERIC_BYTE_MAX          8U
 #define INV_DATA_PHASE_COMBINE_MAX         3U
@@ -181,6 +183,62 @@ static rt_bool_t inv_data_work_time_active(void)
 
     return ((local_time.tm_hour >= INV_DATA_START_HOUR) &&
             (local_time.tm_hour < INV_DATA_STOP_HOUR)) ? RT_TRUE : RT_FALSE;
+}
+
+/* 每秒根据总有功功率更新全部档案的运行状态，不额外增加轮询线程。 */
+static void inv_data_update_run_states(rt_tick_t now)
+{
+    uint8_t archive_index;
+
+    for(archive_index = 0U; archive_index < INVERTER_ARCHIVE_MAX_COUNT; ++archive_index) {
+        Inv_Data_t *data = &g_inv_data[archive_index];
+        const Inv_RealtimeValue_t *total_power = &data->data.Px[ENUM_PT];
+        const Inv_Proto_t *protocol;
+        int64_t power_scale = 1;
+        int64_t power_w_left;
+        int64_t threshold_right;
+        uint8_t decimal_index;
+
+        /* 没有有效档案时不存在可判断的逆变器。 */
+        if(g_inv_archive_lib.valid[archive_index] != INVERTER_ARCHIVE_VALID) {
+            data->run_state = INV_RUN_STATE_UNKNOWN;
+            continue;
+        }
+
+        /* 现有周期抄读在07:00前和17:00后停止，夜间按业务规则判定为关机。 */
+        if(g_inv_data_work_enabled != RT_TRUE) {
+            data->run_state = INV_RUN_STATE_OFF;
+            continue;
+        }
+
+        protocol = Inv_Archive_Get_Protocol(archive_index);
+        if((protocol == RT_NULL) ||
+           (protocol->data.Px[ENUM_PT].reg_addr == INVERTER_PROTOCOL_REGISTER_UNUSED) ||
+           (total_power->valid == 0U) ||
+           ((rt_tick_t)(now - total_power->update_tick) > INV_RUN_POWER_MAX_AGE_TICKS)) {
+            data->run_state = INV_RUN_STATE_UNKNOWN;
+            continue;
+        }
+
+        /* 功率点按kW定点数保存：value×1000与5W×10^decimal_places比较，避免浮点误差。 */
+        for(decimal_index = 0U;
+            decimal_index < protocol->data.Px[ENUM_PT].decimal_places;
+            ++decimal_index) {
+            power_scale *= 10;
+        }
+        power_w_left = (int64_t)total_power->value * 1000;
+        threshold_right = (int64_t)INV_RUN_POWER_THRESHOLD_W * power_scale;
+
+        if(power_w_left > threshold_right) {
+            data->run_state = INV_RUN_STATE_ON;
+        }
+        else if(power_w_left < threshold_right) {
+            data->run_state = INV_RUN_STATE_OFF;
+        }
+        else {
+            data->run_state = INV_RUN_STATE_UNKNOWN;
+        }
+    }
 }
 
 /* 更新时间窗口总开关，只在首次检查或运行状态变化时打印一次日志。 */
@@ -1766,6 +1824,11 @@ void Inv_Data_Init(void)
     g_inv_data_work_enabled = RT_FALSE;
     g_inv_data_work_state_initialized = RT_FALSE;
     rt_memset(g_inv_data, 0, sizeof(g_inv_data)); /* 上电时全部实时数据默认为无效。 */
+    for(uint8_t archive_index = 0U;
+        archive_index < INVERTER_ARCHIVE_MAX_COUNT;
+        ++archive_index) {
+        g_inv_data[archive_index].run_state = INV_RUN_STATE_UNKNOWN;
+    }
     rt_memset(g_inv_data_ports, 0, sizeof(g_inv_data_ports)); /* 清除三个端口的游标、队列和接收邮箱。 */
     rt_memset(g_inv_control_results, 0, sizeof(g_inv_control_results)); /* 清除尚未被上层读取的旧结果。 */
     g_inv_control_result_read_index = 0U;
@@ -1814,6 +1877,7 @@ void Inv_Data_Poll_Loop(void)
         if((rt_tick_t)(now - time_check_tick) >= INV_DATA_TIME_CHECK_TICKS) {
             time_check_tick = now;
             inv_data_update_work_state(); /* 处理07:00启动和17:00停止边界及对应日志。 */
+            inv_data_update_run_states(now); /* 使用最新总有功功率更新逆变器运行状态。 */
         }
 
         /* 每次调度分别推进三个端口，不在某个端口内部阻塞等待响应。 */
