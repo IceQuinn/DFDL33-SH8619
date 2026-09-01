@@ -26,6 +26,8 @@ MSH_CMD_EXPORT(Inv_Proto_Default_Init, Inv_Proto_Default_Init);
 /* 从Flash装载协议库，校验失败、版本异常或长度异常时恢复默认协议库。 */
 void Inv_Proto_Init(void)
 {
+    inv_proto_default_lib_init();
+#if 0
     int32_t check_sta; /* Flash A/B区协议库校验接口返回状态。 */
 
     check_sta = AB_check(flash_read,           // 读取Flash的底层接口
@@ -43,4 +45,5 @@ void Inv_Proto_Init(void)
         rt_kprintf("[%08d] protocol library check failed, loading defaults\n", rt_tick_get());
         Inv_Proto_Default_Init(); /* 持久化数据不可用时按分项配置表重建默认协议。 */
     }
+#endif
 }
