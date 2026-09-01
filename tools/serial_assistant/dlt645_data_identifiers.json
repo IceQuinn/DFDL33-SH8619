@@ -1,13 +1,63 @@
 {
   "protocol": "DLT645-2007",
-  "version": 1,
+  "version": 2,
   "description": "DL/T 645-2007数据标识及扩展数据区结构配置",
+  "categories": [
+    {"id": "standard", "description": "标准DL/T 645"},
+    {"id": "extended", "description": "扩展DL/T 645"}
+  ],
   "defaults": {
     "password_permission": "00",
     "password": "000000",
     "operator_code": "00000000",
     "write_include_security": true,
     "preamble_count": 4
+  },
+  "schemas": {
+    "inverter_status": {
+      "fields": [
+        {
+          "name": "status",
+          "description": "逆变器运行状态原始值",
+          "type": "hex",
+          "length": 2
+        }
+      ]
+    },
+    "inverter_archive": {
+      "fields": [
+        {"name": "address", "description": "逆变器地址", "type": "uint", "length": 1, "byte_order": "little"},
+        {"name": "brand", "description": "逆变器品牌", "type": "ascii", "length": 32},
+        {"name": "protocol_version", "description": "逆变器规约版本", "type": "ascii", "length": 2},
+        {
+          "name": "port",
+          "description": "接入端口",
+          "type": "enum",
+          "length": 1,
+          "byte_order": "little",
+          "values": {"1": "端口1（RJ45-I）", "2": "端口2（RJ45-II）", "3": "端口3（RS485-II）"}
+        }
+      ]
+    },
+    "active_power_schedule": {
+      "fields": [
+        {"name": "period1_start", "description": "第1次调节开始时间", "type": "bcd_datetime", "length": 5, "format": "YYMMDDhhmm", "byte_order": "big"},
+        {"name": "period1_end", "description": "第1次调节结束时间", "type": "bcd_datetime", "length": 5, "format": "YYMMDDhhmm", "byte_order": "big"},
+        {"name": "period2_start", "description": "第2次调节开始时间", "type": "bcd_datetime", "length": 5, "format": "YYMMDDhhmm", "byte_order": "big"},
+        {"name": "period2_end", "description": "第2次调节结束时间", "type": "bcd_datetime", "length": 5, "format": "YYMMDDhhmm", "byte_order": "big"},
+        {"name": "period1_power", "description": "第1次调节值", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "unit": "kW"},
+        {"name": "period2_power", "description": "第2次调节值", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "unit": "kW"}
+      ]
+    },
+    "protocol_register_int16": {
+      "fields": [
+        {"name": "register_address", "description": "寄存器地址", "type": "uint", "length": 2, "byte_order": "big"},
+        {"name": "register_count", "description": "寄存器个数", "type": "uint", "length": 1, "byte_order": "big"},
+        {"name": "function_code", "description": "读/写功能码", "type": "uint", "length": 1, "byte_order": "big"},
+        {"name": "type_descriptor", "description": "TTTT类型描述符", "type": "type_descriptor", "length": 2, "byte_order": "big", "default_type": "int_16", "default_order": "ABCD", "default_decimals": 0},
+        {"name": "default_value", "description": "默认值", "type": "int", "length": 2, "byte_order": "big", "default": 0}
+      ]
+    }
   },
   "data_identifiers": [
     {
@@ -106,6 +156,9 @@
     },
     {
       "di": "F0010001",
+      "category": "extended",
+      "group_id": "extended_example",
+      "group_description": "扩展示例",
       "description": "扩展示例：目标电压及工作模式",
       "access": "read_write",
       "read_response": {
@@ -150,6 +203,60 @@
           }
         ]
       }
+    },
+    {
+      "di": "04E60B01",
+      "category": "extended",
+      "group_id": "active_power_schedule",
+      "group_description": "04 E6 0B xx | 有功功率时段调节",
+      "selector": "01",
+      "description": "逆变器1有功功率时段调节",
+      "access": "read_write",
+      "read_schema": "active_power_schedule",
+      "write_schema": "active_power_schedule"
+    },
+    {
+      "di": "04E70103",
+      "category": "extended",
+      "group_id": "protocol_library",
+      "group_description": "04 E7 01 xx | 协议库寄存器",
+      "selector": "03",
+      "description": "特征寄存器",
+      "access": "read_write",
+      "read_schema": "protocol_register_int16",
+      "write_schema": "protocol_register_int16"
+    }
+  ],
+  "data_identifier_groups": [
+    {
+      "id": "inverter_status",
+      "category": "extended",
+      "prefix": "04E604",
+      "display": "04 E6 04 xx | 逆变器运行状态",
+      "description": "逆变器运行状态",
+      "suffixes": {
+        "range": {"from": "01", "to": "0C"},
+        "values": ["FF"],
+        "labels": {"FF": "全部逆变器运行状态"},
+        "label_template": "逆变器{decimal}运行状态"
+      },
+      "access": "read_write",
+      "read_schema": "inverter_status",
+      "write_schema": "inverter_status"
+    },
+    {
+      "id": "inverter_archive",
+      "category": "extended",
+      "prefix": "04E621",
+      "display": "04 E6 21 xx | 逆变器档案",
+      "description": "逆变器档案",
+      "suffixes": {
+        "range": {"from": "01", "to": "0C"},
+        "label_template": "逆变器{decimal}档案"
+      },
+      "access": "read_write",
+      "read_schema": "inverter_archive",
+      "write_schema": "inverter_archive"
     }
   ]
 }

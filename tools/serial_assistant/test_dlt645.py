@@ -14,9 +14,12 @@ from dlt645 import (
     decode_address,
     encode_address,
     encode_di,
+    encode_field,
+    decode_field,
     parse_frame,
     subtract_33,
 )
+from app import load_settings, save_settings, saved_choice
 
 
 CONFIG_PATH = Path(__file__).with_name("dlt645_data_identifiers.json")
@@ -110,6 +113,16 @@ class DLT645Tests(unittest.TestCase):
         frames = parser.feed(first[7:] + second)
         self.assertEqual(frames, [first, second])
 
+    def test_stream_parser_exposes_noise_and_partial_frames(self):
+        parser = DLT645StreamParser()
+        valid = build_frame("123456789012", 0x93)
+        self.assertEqual(parser.feed(b"\x01\x02" + valid), [valid])
+        self.assertEqual(parser.take_unparsed(), b"\x01\x02")
+
+        partial = bytes.fromhex("FE FE 68 12 34")
+        self.assertEqual(parser.feed(partial), [])
+        self.assertEqual(parser.take_unparsed(finalize=True), partial)
+
     def test_follow_up_frame_sequence_is_built_and_parsed(self):
         request = build_read_data("123456789012", "02010100", follow_up=True, sequence=3)
         parsed_request = parse_frame(request)
@@ -128,6 +141,50 @@ class DLT645Tests(unittest.TestCase):
             target.write_text(CONFIG_PATH.read_text(encoding="utf-8"), encoding="utf-8")
             registry = DataIdentifierRegistry.load(target)
             self.assertIsNotNone(registry.get("F0010001"))
+
+    def test_interface_settings_round_trip_and_invalid_choice_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            expected = {"mode": "直接收发", "device_port": "COM8", "parity": "偶"}
+            save_settings(expected, path)
+            self.assertEqual(load_settings(path), expected)
+            self.assertEqual(saved_choice(load_settings(path), "parity", "无", ("无", "奇", "偶")), "偶")
+
+            path.write_text("not json", encoding="utf-8")
+            self.assertEqual(load_settings(path), {})
+            self.assertEqual(saved_choice({"parity": "坏值"}, "parity", "无", ("无", "奇", "偶")), "无")
+
+    def test_extended_identifier_ranges_and_shared_structures(self):
+        first = self.registry.get("04E60401")
+        last = self.registry.get("04E6040C")
+        all_devices = self.registry.get("04E604FF")
+        self.assertEqual(first.description, "逆变器1运行状态")
+        self.assertEqual(last.selector, "0C")
+        self.assertEqual(all_devices.description, "全部逆变器运行状态")
+        self.assertEqual(first.category, "extended")
+        self.assertEqual(first.access, "read_write")
+        self.assertEqual(self.registry.encode("04E60401", {"status": "00 01"}), bytes.fromhex("00 01"))
+
+        archive = self.registry.encode("04E62101", {
+            "address": "1", "brand": "TEST", "protocol_version": "12", "port": "端口2（RJ45-II）",
+        })
+        self.assertEqual(len(archive), 36)
+        decoded = dict((name, value) for name, value, _unit in self.registry.decode("04E62101", archive))
+        self.assertEqual(decoded["逆变器品牌"], "TEST")
+        self.assertEqual(decoded["接入端口"], "端口2（RJ45-II）")
+
+    def test_complex_datetime_and_type_descriptor_fields(self):
+        datetime_field = {"name": "time", "description": "时间", "type": "bcd_datetime", "length": 5,
+                          "format": "YYMMDDhhmm", "byte_order": "big"}
+        encoded_time = encode_field("26-09-01 12:34", datetime_field)
+        self.assertEqual(encoded_time, bytes.fromhex("26 09 01 12 34"))
+        self.assertEqual(decode_field(encoded_time, datetime_field), "26-09-01 12:34")
+
+        descriptor_field = {"name": "type", "description": "TTTT", "type": "type_descriptor",
+                            "length": 2, "byte_order": "big"}
+        descriptor = encode_field({"data_type": "int_16", "byte_order": "CDAB", "decimals": "2"}, descriptor_field)
+        self.assertEqual(descriptor, bytes.fromhex("02 12"))
+        self.assertIn("int_16 / CDAB / 2位小数", decode_field(descriptor, descriptor_field))
 
 
 if __name__ == "__main__":

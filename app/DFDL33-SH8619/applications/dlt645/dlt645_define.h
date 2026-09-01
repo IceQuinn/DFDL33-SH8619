@@ -43,4 +43,13 @@ typedef enum
 
 }E_D07_CTRL_FNC;
 
+// 错误信息字ERR
+typedef enum
+{
+    E_D07_W_OK = 0, // 从站正常应答
+    E_D07_W_ERR = 1 << 0,    // 其他错误
+    E_D07_W_NO_DATA = 1 << 1,    // 无请求数据
+
+}E_D07_W_STA;
+
 #endif

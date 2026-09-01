@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import struct
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -34,6 +35,12 @@ ERROR_BITS = {
     5: "日时段数超",
     6: "费率数超",
 }
+
+DESCRIPTOR_DATA_TYPES = {
+    0: "int_8", 1: "uint_8", 2: "int_16", 3: "uint_16", 4: "int_32", 5: "uint_32",
+    6: "float_32", 7: "float_64", 8: "ASCII", 9: "BCD", 10: "BCD_TIME",
+}
+DESCRIPTOR_BYTE_ORDERS = {0: "ABCD", 1: "CDAB", 2: "BADC", 3: "DCBA"}
 
 
 def hex_bytes(data: bytes) -> str:
@@ -278,6 +285,22 @@ class DLT645StreamParser:
 
     def __init__(self) -> None:
         self.buffer = bytearray()
+        self.unparsed = bytearray()
+
+    def _discard(self, count: int) -> None:
+        """Move bytes that cannot belong to a valid frame into the visible reject buffer."""
+        if count > 0:
+            self.unparsed.extend(self.buffer[:count])
+            del self.buffer[:count]
+
+    def take_unparsed(self, finalize: bool = False) -> bytes:
+        """Return rejected bytes; optionally treat an idle-ended partial frame as rejected."""
+        if finalize and self.buffer:
+            self.unparsed.extend(self.buffer)
+            self.buffer.clear()
+        data = bytes(self.unparsed)
+        self.unparsed.clear()
+        return data
 
     def feed(self, data: bytes) -> list[bytes]:
         self.buffer.extend(data)
@@ -291,28 +314,32 @@ class DLT645StreamParser:
                     if value != 0xFE or suffix >= 16:
                         break
                     suffix += 1
-                self.buffer[:] = b"\xFE" * suffix
+                self._discard(len(self.buffer) - suffix)
                 break
             preamble_start = start
             while preamble_start > 0 and self.buffer[preamble_start - 1] == 0xFE:
                 preamble_start -= 1
             if start + 10 > len(self.buffer):
                 if preamble_start:
-                    del self.buffer[:preamble_start]
+                    self._discard(preamble_start)
                 break
             if self.buffer[start + 7] != 0x68:
-                del self.buffer[:start + 1]
+                self._discard(start + 1)
                 continue
             total_body = 12 + self.buffer[start + 9]
             end = start + total_body
             if end > len(self.buffer):
                 if preamble_start:
-                    del self.buffer[:preamble_start]
+                    self._discard(preamble_start)
                 break
             candidate = bytes(self.buffer[preamble_start:end])
             if self.buffer[end - 1] != 0x16:
-                del self.buffer[:start + 1]
+                self._discard(start + 1)
                 continue
+            if preamble_start:
+                self._discard(preamble_start)
+                end -= preamble_start
+                candidate = bytes(self.buffer[:end])
             frames.append(candidate)
             del self.buffer[:end]
         return frames
@@ -349,6 +376,23 @@ def decode_field(raw_value: bytes, definition: Mapping[str, Any]) -> Any:
     kind = str(definition.get("type", "hex")).lower()
     order = _byte_order(definition)
     logical = raw_value[::-1] if order == "little" else raw_value
+    if kind == "type_descriptor":
+        descriptor = int.from_bytes(raw_value, order, signed=False)
+        data_type = DESCRIPTOR_DATA_TYPES.get(descriptor & 0x0F, f"保留({descriptor & 0x0F})")
+        byte_order = DESCRIPTOR_BYTE_ORDERS.get((descriptor >> 4) & 0x0F, f"保留({(descriptor >> 4) & 0x0F})")
+        decimals = (descriptor >> 8) & 0x0F
+        return f"{data_type} / {byte_order} / {decimals}位小数 (0x{descriptor:04X})"
+    if kind == "bcd_datetime":
+        digits = logical.hex().upper()
+        if not re.fullmatch(r"\d*", digits):
+            raise ValueError(f"字段{definition.get('description', definition.get('name'))}包含非法BCD时间：{digits}")
+        pattern = str(definition.get("format", "YYMMDDhhmm"))
+        if len(pattern) != len(digits):
+            raise ValueError(f"字段{definition.get('description', definition.get('name'))}的时间格式长度不匹配")
+        parts = {token: digits[index:index + 2] for token, index in (("YY", pattern.find("YY")), ("MM", pattern.find("MM")), ("DD", pattern.find("DD")), ("hh", pattern.find("hh")), ("mm", pattern.find("mm")), ("ss", pattern.find("ss"))) if index >= 0}
+        date = "-".join(parts[token] for token in ("YY", "MM", "DD") if token in parts)
+        clock = ":".join(parts[token] for token in ("hh", "mm", "ss") if token in parts)
+        return f"{date} {clock}".strip()
     if kind == "bcd":
         mutable = bytearray(logical)
         negative = _apply_sign_bit(mutable, definition)
@@ -362,6 +406,12 @@ def decode_field(raw_value: bytes, definition: Mapping[str, Any]) -> Any:
         value = int.from_bytes(raw_value, order, signed=False)
     elif kind in ("int", "signed_integer"):
         value = int.from_bytes(raw_value, order, signed=True)
+    elif kind in ("float32", "float_32", "float64", "float_64"):
+        if length := len(raw_value):
+            expected = 4 if kind in ("float32", "float_32") else 8
+            if length != expected:
+                raise ValueError(f"浮点字段长度应为{expected}字节")
+        value = struct.unpack(("<" if order == "little" else ">") + ("f" if len(raw_value) == 4 else "d"), raw_value)[0]
     elif kind == "ascii":
         value = raw_value.decode(str(definition.get("encoding", "ascii"))).rstrip("\x00")
     elif kind in ("hex", "raw_bytes"):
@@ -388,6 +438,35 @@ def encode_field(value: Any, definition: Mapping[str, Any]) -> bytes:
     length = int(definition["length"])
     order = _byte_order(definition)
     label = str(definition.get("description", definition.get("name", "字段")))
+    if kind == "type_descriptor":
+        if isinstance(value, Mapping):
+            data_type_text = str(value.get("data_type", "uint_16"))
+            byte_order_text = str(value.get("byte_order", "ABCD")).upper()
+            decimals = int(value.get("decimals", 0))
+        else:
+            parts = [part.strip() for part in re.split(r"[,|/]", str(value))]
+            if len(parts) != 3:
+                raise ValueError(f"{label}应包含数据类型、字节序和小数位数")
+            data_type_text, byte_order_text, decimals_text = parts
+            byte_order_text = byte_order_text.upper()
+            decimals = int(decimals_text)
+        type_codes = {text.lower(): code for code, text in DESCRIPTOR_DATA_TYPES.items()}
+        order_codes = {text: code for code, text in DESCRIPTOR_BYTE_ORDERS.items()}
+        if data_type_text.lower() not in type_codes:
+            raise ValueError(f"{label}的数据类型无效：{data_type_text}")
+        if byte_order_text not in order_codes:
+            raise ValueError(f"{label}的字节序无效：{byte_order_text}")
+        if not 0 <= decimals <= 5:
+            raise ValueError(f"{label}的小数位必须为0~5")
+        descriptor = type_codes[data_type_text.lower()] | (order_codes[byte_order_text] << 4) | (decimals << 8)
+        return descriptor.to_bytes(length, order, signed=False)
+    if kind == "bcd_datetime":
+        digits = re.sub(r"\D", "", str(value))
+        pattern = str(definition.get("format", "YYMMDDhhmm"))
+        if len(digits) != len(pattern) or len(digits) != length * 2:
+            raise ValueError(f"{label}必须按{pattern}填写")
+        logical = bytes.fromhex(digits)
+        return logical[::-1] if order == "little" else logical
     if kind in ("bcd", "uint", "unsigned_integer", "int", "signed_integer"):
         candidate = _decimal(value, label)
         if "minimum" in definition and candidate < _decimal(definition["minimum"], "minimum"):
@@ -425,6 +504,11 @@ def encode_field(value: Any, definition: Mapping[str, Any]) -> bytes:
         if number != number.to_integral_value():
             raise ValueError(f"{label}不能编码为整数")
         return int(number).to_bytes(length, order, signed=kind in ("int", "signed_integer"))
+    if kind in ("float32", "float_32", "float64", "float_64"):
+        expected = 4 if kind in ("float32", "float_32") else 8
+        if length != expected:
+            raise ValueError(f"{label}长度必须为{expected}字节")
+        return struct.pack(("<" if order == "little" else ">") + ("f" if expected == 4 else "d"), float(value))
     if kind == "ascii":
         raw = str(value).encode(str(definition.get("encoding", "ascii")))
         if len(raw) > length:
@@ -445,12 +529,19 @@ class DataIdentifierDefinition:
     access: str
     read_response: Mapping[str, Any] = field(default_factory=dict)
     write_request: Mapping[str, Any] = field(default_factory=dict)
+    category: str = "standard"
+    category_description: str = "标准DL/T 645"
+    group_id: str = "standard"
+    group_description: str = "标准数据标识"
+    selector: str = ""
 
 
 class DataIdentifierRegistry:
-    def __init__(self, definitions: Iterable[DataIdentifierDefinition], defaults: Optional[Mapping[str, Any]] = None) -> None:
+    def __init__(self, definitions: Iterable[DataIdentifierDefinition], defaults: Optional[Mapping[str, Any]] = None,
+                 categories: Optional[Mapping[str, str]] = None) -> None:
         self.definitions = {item.di: item for item in definitions}
         self.defaults = dict(defaults or {})
+        self.categories = dict(categories or {"standard": "标准DL/T 645", "extended": "扩展DL/T 645"})
 
     @classmethod
     def load(cls, path: Path | str) -> "DataIdentifierRegistry":
@@ -461,6 +552,24 @@ class DataIdentifierRegistry:
             raise ValueError(f"无法加载数据标识配置 {source}：{exc}") from exc
         if document.get("protocol") != "DLT645-2007":
             raise ValueError("配置文件protocol必须为DLT645-2007")
+        category_map = {str(item["id"]): str(item.get("description", item["id"]))
+                        for item in document.get("categories", []) if isinstance(item, dict) and "id" in item}
+        category_map.setdefault("standard", "标准DL/T 645")
+        category_map.setdefault("extended", "扩展DL/T 645")
+        schemas = document.get("schemas", {})
+        if not isinstance(schemas, dict):
+            raise ValueError("schemas必须是对象")
+
+        def section(raw: Mapping[str, Any], direct_name: str, reference_name: str) -> Mapping[str, Any]:
+            value = raw.get(direct_name, raw.get(reference_name, {}))
+            if isinstance(value, str):
+                if value not in schemas or not isinstance(schemas[value], dict):
+                    raise ValueError(f"结构体{value}不存在")
+                return schemas[value]
+            if not isinstance(value, dict):
+                raise ValueError(f"{direct_name}必须是对象或结构体名称")
+            return value
+
         definitions: list[DataIdentifierDefinition] = []
         seen: set[str] = set()
         for index, raw in enumerate(document.get("data_identifiers", []), 1):
@@ -475,20 +584,65 @@ class DataIdentifierRegistry:
             if di in seen:
                 raise ValueError(f"数据标识{di}重复")
             seen.add(di)
-            for section_name in ("read_response", "write_request"):
-                section = raw.get(section_name, {})
+            read_response = section(raw, "read_response", "read_schema")
+            write_request = section(raw, "write_request", "write_schema")
+            for section_name, configured_section in (("read_response", read_response), ("write_request", write_request)):
                 names: set[str] = set()
-                for field_index, field_def in enumerate(section.get("fields", []), 1):
+                for field_index, field_def in enumerate(configured_section.get("fields", []), 1):
                     name = str(field_def.get("name", ""))
                     if not name or name in names:
                         raise ValueError(f"数据标识{di}的{section_name}第{field_index}个字段名称为空或重复")
                     names.add(name)
                     if int(field_def.get("length", 0)) <= 0:
                         raise ValueError(f"数据标识{di}字段{name}的length必须大于0")
+            category = str(raw.get("category", "standard"))
             definitions.append(DataIdentifierDefinition(
-                di, description, access, raw.get("read_response", {}), raw.get("write_request", {})
+                di, description, access, read_response, write_request, category,
+                category_map.get(category, category), str(raw.get("group_id", "standard")),
+                str(raw.get("group_description", "标准数据标识")), str(raw.get("selector", di[-2:])),
             ))
-        return cls(definitions, document.get("defaults", {}))
+
+        for group_index, raw in enumerate(document.get("data_identifier_groups", []), 1):
+            try:
+                prefix = re.sub(r"[\s-]", "", str(raw["prefix"])).upper()
+                if not re.fullmatch(r"[0-9A-F]{6}", prefix):
+                    raise ValueError("prefix必须为3字节十六进制")
+                group_id = str(raw.get("id", prefix))
+                group_description = str(raw["description"])
+                category = str(raw.get("category", "extended"))
+                access = str(raw.get("access", "read")).lower()
+                suffix_config = raw["suffixes"]
+                if not isinstance(suffix_config, dict):
+                    raise ValueError("suffixes必须是对象")
+                suffixes: list[str] = []
+                ranges = suffix_config.get("ranges", [])
+                if "range" in suffix_config:
+                    ranges = [suffix_config["range"], *ranges]
+                for configured_range in ranges:
+                    start = int(str(configured_range["from"]), 16)
+                    end = int(str(configured_range["to"]), 16)
+                    if not 0 <= start <= end <= 255:
+                        raise ValueError("后缀范围必须在00~FF且起点不大于终点")
+                    suffixes.extend(f"{value:02X}" for value in range(start, end + 1))
+                suffixes.extend(f"{int(str(value), 16):02X}" for value in suffix_config.get("values", []))
+                read_response = section(raw, "read_response", "read_schema")
+                write_request = section(raw, "write_request", "write_schema")
+            except (KeyError, ValueError, TypeError) as exc:
+                raise ValueError(f"第{group_index}个数据标识组配置无效：{exc}") from exc
+            labels = {str(key).upper(): str(value) for key, value in suffix_config.get("labels", {}).items()}
+            template = str(suffix_config.get("label_template", group_description + "{decimal}"))
+            for suffix in dict.fromkeys(suffixes):
+                di = prefix + suffix
+                if di in seen:
+                    raise ValueError(f"数据标识{di}重复")
+                seen.add(di)
+                description = labels.get(suffix, template.format(decimal=int(suffix, 16), hex=suffix, suffix=suffix))
+                definitions.append(DataIdentifierDefinition(
+                    di, description, access, read_response, write_request, category,
+                    category_map.get(category, category), group_id,
+                    str(raw.get("display", f"{prefix[:2]} {prefix[2:4]} {prefix[4:]} xx | {group_description}")), suffix,
+                ))
+        return cls(definitions, document.get("defaults", {}), category_map)
 
     def get(self, data_identifier: str) -> Optional[DataIdentifierDefinition]:
         return self.definitions.get(normalize_di(data_identifier))

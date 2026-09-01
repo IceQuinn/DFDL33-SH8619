@@ -31,7 +31,7 @@ const ReadBlockDataTypeDef ReadBlockDataStruct[] =
 /* 单个可读可写数据（表） */
 const R_WDataTypeDef R_WDataStruct[] =
 {
-    {0x04E60401, RT_NULL,                    1,      TYPE_U16,   4, _RW, 1, 1200, INV_CONTROL_POWER_ON, "INV_PWR_STA"},//逆变器控制
+    {0x04E60401, RT_NULL,                    1,      TYPE_U16,   4, _RW, 1, 1200, INV_CONTROL_POWER_ON, "INV_PWR_STA"},//逆变器1控制
     // {0x04E60402, RT_NULL,                    1,      TYPE_U16,   4, _RW, 1, 1200, INV_CONTROL_POWER_ON, "INV_PWR_STA"},//逆变器控制
     // {0x04000309, &relay_cfg.zero_ct_rate,               1,      TYPE_U16,   3, _RW, 1, 2000, RELAY_CFG_SRC, "zero_ct_rate"},//零序电流互感器变比
     // {0x0400030A, &ctu_cfg.show_ctrl,                    1,      TYPE_U16,   1, _RW, 1, 2,    CTU_CFG_SRC, "show ctrl"},//一二次值显示
@@ -211,6 +211,58 @@ rt_err_t dlt645_pack_base_start(uint8_t *buf, uint8_t fun_c, uint32_t id, uint16
 }
 
 /* 645协议基础报文 */
+rt_err_t dlt645_pack_base_start_w(uint8_t *buf, uint8_t fun_c, uint32_t id, uint16_t fun_len, uint32_t *len, uint8_t err_code)
+{
+    /* 先导字节 */
+    buf[(*len)++] = 0xFE;
+    buf[(*len)++] = 0xFE;
+    buf[(*len)++] = 0xFE;
+    buf[(*len)++] = 0xFE;
+    /* 帧起始符 */
+    buf[(*len)++] = 0x68;
+    int i;
+    /* 地址域 */
+    for (i=0;i<6;i++)
+    {
+        buf[(*len)++] = sg_dl645_addr_bcd[i];
+    }
+    /* 帧起始符 */
+    buf[(*len)++] = 0x68;
+    /* 控制码 */
+    if(E_D07_W_OK == err_code){
+        buf[(*len)++] = fun_c | 0x80;
+    }
+    else {
+        buf[(*len)++] = fun_c | 0xC0;
+    }
+
+    if(E_D07_CTRL_WRITE_DATA == fun_c)
+    {
+        if(E_D07_W_OK == err_code)
+        {
+            buf[(*len)++] = 0x00;
+        }
+        else
+        {
+            buf[(*len)++] = 0x01;
+            buf[(*len)++] = err_code + 0x33;
+        }
+    }
+    else if (E_D07_CTRL_READ_DATA == fun_c)
+    {
+        /* 数据域长度(包含标识符) */
+        buf[(*len)++] = 0x04+fun_len;
+
+        /* 数据域 */
+        buf[(*len)++] = (uint8_t)id + 0x33;
+        buf[(*len)++] = (uint8_t)(id >> 8) + 0x33;
+        buf[(*len)++] = (uint8_t)(id >> 16) + 0x33;
+        buf[(*len)++] = (uint8_t)(id >> 24) + 0x33;
+    }
+    return RT_EOK;
+}
+
+/* 645协议基础报文 */
 rt_err_t dlt645_pack_base_end(uint8_t *buf, uint32_t *len)
 {
     uint8_t  cs = 0;
@@ -227,13 +279,50 @@ rt_err_t dlt645_pack_base_end(uint8_t *buf, uint32_t *len)
     return RT_EOK;
 }
 
+int dfdl33_dltl645_r_w_data_do(uint32_t id, int32_t Val)
+{
+    uint32_t DI3_1 = id & 0xFFFFFF00;
+    uint8_t DI0 = id & 0xFF;
 
-int dltl645_r_w_data_ack(const R_WDataTypeDef *PReadDate, uint8_t fun_c, uint8_t *p_buf, uint16_t len, uint8_t uart_no)
+    Inv_Control_Request_t request;   /* 本次MSH测试提交的开机控制请求。 */
+    Inv_Control_Result_Info_t result; /* 等待信号量后取得的异步控制结果。 */
+    rt_err_t control_result;          /* 控制提交或等待结果接口的返回码。 */
+
+    request.request_id = id;                    // 将数据标识作为执行ID
+    request.archive_index = DI0 - 1;            // 需要执行的档案号
+
+    if(0x04E60400 == DI3_1){    // 逆变器运行状态
+        if(Val){
+            request.type = INV_CONTROL_POWER_ON;
+        }
+        else{
+            request.type = INV_CONTROL_POWER_OFF;
+        }
+        control_result = Inv_Control_Submit(&request);
+        if(control_result != RT_EOK){
+            return E_D07_W_ERR;
+        }
+
+        control_result = Inv_Control_Get_Result(&result, 1000);
+        if((control_result != RT_EOK) ||
+           (result.result != INV_CONTROL_RESULT_OK)) {
+            return E_D07_W_ERR;
+        }
+    }
+//    else if (0x04E60500) {  // 逆变器有功功率调节
+//        request.type = PReadDate->data_type
+//    }
+    return E_D07_W_OK;
+}
+
+
+int dltl645_r_w_data_ack(const R_WDataTypeDef *PReadDate, uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t len, uint8_t uart_no)
 {
     uint8_t dl645_power_bcd[64] = {0};
     uint32_t packlen = 0;
+    uint8_t err_code = 0;
 
-    dlt645_pack_base_start(g_packBuf, fun_c, PReadDate->DataIdf, PReadDate->ReplyDataLen, &packlen);
+//    dlt645_pack_base_start_w(g_packBuf, fun_c, PReadDate->DataIdf, PReadDate->ReplyDataLen, &packlen, 0);
 
     if(E_D07_CTRL_WRITE_DATA == fun_c)
     {
@@ -252,52 +341,7 @@ int dltl645_r_w_data_ack(const R_WDataTypeDef *PReadDate, uint8_t fun_c, uint8_t
                 DataVal = Little_BCD_Buf_To_DEC(dlt645_w_temp->data, PReadDate->ReplyDataLen);
                 DataVal = DataVal/PReadDate->DateRate;
 
-                Inv_Control_Request_t request;   /* 本次MSH测试提交的开机控制请求。 */
-                Inv_Control_Result_Info_t result; /* 等待信号量后取得的异步控制结果。 */
-                rt_err_t control_result;          /* 控制提交或等待结果接口的返回码。 */
-
-                request.request_id = PReadDate->DataIdf;
-                request.archive_index = (PReadDate->DataIdf & 0x0FU) - 1;
-                if(0x04E60401 == PReadDate->DataIdf){
-                    if(DataVal){
-                        request.type = INV_CONTROL_POWER_ON;
-                    }
-                    else{
-                        request.type = INV_CONTROL_POWER_OFF;
-                    }
-                }
-                else{
-                    request.type = PReadDate->data_type;
-                }
-                request.value = DataVal;    
-                
-                control_result = Inv_Control_Submit(&request);
-                if(control_result != RT_EOK){
-                    return RT_ERROR;
-                }
-
-                control_result = Inv_Control_Get_Result(&result, 1000);
-                if(control_result != RT_EOK){
-                    return RT_ERROR;
-                }
-                // if((PReadDate->w_min <= DataVal) && (DataVal <= PReadDate->w_max))
-                // {
-                //     SetDataFromAddr(PReadDate->DataType, PReadDate->DataBuff, DataVal);
-                //     // if(CTU_CFG_SRC == PReadDate->data_src)
-                //     // {
-                //     //     ctu_cfg_save();
-                //     // }
-                //     // else if (RELAY_CFG_SRC == PReadDate->data_src)
-                //     // {
-                //     //     relay_cfg_save();
-                //     // }
-                // }
-                // else
-                // {
-                //     return RT_ERROR;
-                // }
-//            } else return RT_ERROR;
-//        } else return RT_ERROR;
+                return dfdl33_dltl645_r_w_data_do(id, DataVal);
 
     }
     else if (E_D07_CTRL_READ_DATA == fun_c)
@@ -324,12 +368,12 @@ int dltl645_r_w_data_ack(const R_WDataTypeDef *PReadDate, uint8_t fun_c, uint8_t
         }
     }
 
-    dlt645_pack_base_end(g_packBuf, &packlen);
+//    dlt645_pack_base_end(g_packBuf, &packlen);
 
     show_rtc_time();
-    show_arr("ctu power ack : ", g_packBuf, packlen);
 
-    uart_mgmt_write(uart_no, g_packBuf, packlen);
+
+
     return RT_EOK;
 }
 
@@ -533,7 +577,7 @@ void dlt645_ctrl_read_data(uint8_t fun_c, uint32_t id,  uint8_t uart_no)
         {
             LOG_I("recv dlt645 read %s ", R_WDataStruct[i].DescribeType);
             ReadData_Support_flg = 1;
-            dltl645_r_w_data_ack(&R_WDataStruct[i], fun_c, RT_NULL, 0, uart_no);
+            dltl645_r_w_data_ack(&R_WDataStruct[i], fun_c, id, RT_NULL, 0, uart_no);
             break;
         }
     }
@@ -571,22 +615,22 @@ void dlt645_ctrl_read_data(uint8_t fun_c, uint32_t id,  uint8_t uart_no)
 
 void dlt645_ctrl_write_data(uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t len, uint8_t uart_no)
 {
+    uint32_t DataIdf = 0;
+    uint32_t DataIdf_len = 0;
+    uint8_t err_code = E_D07_W_NO_DATA;
+    uint32_t packlen = 0;
+
     uint8_t write_data_support_flg = 0;    /* 装置是否支持该数据标识，支持:1，不支持:0 */
     /* 基本可读可写数据标识 */
     for(int i=0; i<countof(R_WDataStruct); i++)
     {
-        if(id == R_WDataStruct[i].DataIdf)
+        if((id & 0xFFFFFF00) == (R_WDataStruct[i].DataIdf & 0xFFFFFF00))
         {
             LOG_I("recv dlt645 write %s ", R_WDataStruct[i].DescribeType);
+            DataIdf = id;
+            DataIdf_len = R_WDataStruct[i].ReplyDataLen;
+            err_code = dltl645_r_w_data_ack(&R_WDataStruct[i], fun_c, id, p_buf, len, uart_no);
 
-            if(RT_EOK == dltl645_r_w_data_ack(&R_WDataStruct[i], fun_c, p_buf, len, uart_no))
-            {
-                write_data_support_flg = 1;
-            }
-            else
-            {
-                write_data_support_flg = 0;
-            }
             break;
         }
     }
@@ -613,10 +657,16 @@ void dlt645_ctrl_write_data(uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t
         write_data_support_flg = 1;
     }
 
-    if(write_data_support_flg == 0)
-    {
-        /* 不支持该数据标识 */
-        LOG_I("Dlt645 write data failed: Not support");
-        translayerdl645_no_data_requested_ack(fun_c, uart_no);
-    }
+    dlt645_pack_base_start_w(g_packBuf, fun_c, DataIdf, DataIdf_len, &packlen, err_code);
+    dlt645_pack_base_end(g_packBuf, &packlen);
+    show_arr("dlt645 tx : ", g_packBuf, packlen);
+
+    uart_mgmt_write(uart_no, g_packBuf, packlen);
+
+//    if(write_data_support_flg == 0)
+//    {
+//        /* 不支持该数据标识 */
+//        LOG_I("Dlt645 write data failed: Not support");
+//        translayerdl645_no_data_requested_ack(fun_c, uart_no);
+//    }
 }
