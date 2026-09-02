@@ -1,4 +1,5 @@
 #include "dlt645_data_center.h"
+#include "dlt645_data_api.h"
 #include <rtthread.h>
 #include <math.h>
 #include <string.h>
@@ -35,6 +36,32 @@ const R_WDataTypeDef R_WDataStruct[] =
     // {0x04E60402, RT_NULL,                    1,      TYPE_U16,   4, _RW, 1, 1200, INV_CONTROL_POWER_ON, "INV_PWR_STA"},//逆变器控制
     // {0x04000309, &relay_cfg.zero_ct_rate,               1,      TYPE_U16,   3, _RW, 1, 2000, RELAY_CFG_SRC, "zero_ct_rate"},//零序电流互感器变比
     // {0x0400030A, &ctu_cfg.show_ctrl,                    1,      TYPE_U16,   1, _RW, 1, 2,    CTU_CFG_SRC, "show ctrl"},//一二次值显示
+};
+
+#define DLT645_DATA_ID_LEN              4U  /* DL/T 645-2007数据标识DI0～DI3固定占4字节。 */
+#define DLT645_WRITE_SECURITY_LEN       8U  /* 写数据命令中密码和操作者代码各占4字节。 */
+#define DLT645_POINT_DATA_MAX_LEN       (D07_DATA_MAX_NR - DLT645_DATA_ID_LEN) /* 单帧扣除数据标识后的最大业务数据长度。 */
+
+/* 645处理由串口管理线程串行调用，使用静态数据区避免在接收线程栈上放置252字节数组。 */
+static uint8_t g_dlt645_point_data[DLT645_POINT_DATA_MAX_LEN]; /* 保存读取回调生成的未加0x33业务数据。 */
+
+/* 第一阶段先迁移已有的运行状态点，后续变量类和参数类只需继续扩展此表。 */
+static const Dlt645PointTypeDef g_dlt645_points[] =
+{
+    {
+        0x04E60400U,                                  /* DI3～DI1为04E604，DI0由请求选择逆变器。 */
+        0xFFFFFF00U,                                  /* 忽略DI0后匹配同一类12台逆变器运行状态点。 */
+        DLT645_ACCESS_READ | DLT645_ACCESS_WRITE,     /* 规范允许读取和写入运行状态。 */
+        DLT645_CODEC_BCD,                             /* 运行状态使用一字节无符号BCD传输。 */
+        DLT645_SELECTOR_DEVICE,                       /* 仅接受DI0为01～0C，不接受FF聚合写入。 */
+        1U,                                           /* 实际运行状态数据固定占1字节。 */
+        1,                                            /* 状态是枚举值，不需要小数倍率换算。 */
+        0,                                            /* 规范定义写入值最小为0，即开机。 */
+        1,                                            /* 规范定义写入值最大为1，即关机。 */
+        dlt645_read_run_state,                        /* 读取时从g_inv_data取得推导后的运行状态。 */
+        dlt645_write_run_state,                       /* 写入时提交开机或关机控制请求。 */
+        "inverter run state",                        /* 日志中显示的点表名称。 */
+    },
 };
 
 // const ReadDataTypeDef ReadDataStruct[] = 
@@ -279,102 +306,75 @@ rt_err_t dlt645_pack_base_end(uint8_t *buf, uint32_t *len)
     return RT_EOK;
 }
 
-int dfdl33_dltl645_r_w_data_do(uint32_t id, int32_t Val)
+/* 按点表掩码查找请求数据标识，找到时返回静态描述项地址，未找到时返回RT_NULL。 */
+static const Dlt645PointTypeDef *dlt645_point_find(uint32_t id)
 {
-    uint32_t DI3_1 = id & 0xFFFFFF00;
-    uint8_t DI0 = id & 0xFF;
+    uint16_t index; /* 当前遍历的统一点表下标。 */
 
-    Inv_Control_Request_t request;   /* 本次MSH测试提交的开机控制请求。 */
-    Inv_Control_Result_Info_t result; /* 等待信号量后取得的异步控制结果。 */
-    rt_err_t control_result;          /* 控制提交或等待结果接口的返回码。 */
-
-    request.request_id = id;                    // 将数据标识作为执行ID
-    request.archive_index = DI0 - 1;            // 需要执行的档案号
-
-    if(0x04E60400 == DI3_1){    // 逆变器运行状态
-        if(Val){
-            request.type = INV_CONTROL_POWER_ON;
-        }
-        else{
-            request.type = INV_CONTROL_POWER_OFF;
-        }
-        control_result = Inv_Control_Submit(&request);
-        if(control_result != RT_EOK){
-            return E_D07_W_ERR;
-        }
-
-        control_result = Inv_Control_Get_Result(&result, 1000);
-        if((control_result != RT_EOK) ||
-           (result.result != INV_CONTROL_RESULT_OK)) {
-            return E_D07_W_ERR;
+    for(index = 0U; index < countof(g_dlt645_points); ++index)
+    {
+        const Dlt645PointTypeDef *point = &g_dlt645_points[index]; /* 当前参与掩码匹配的点描述。 */
+        if((id & point->mask) == (point->id & point->mask)) /* 请求标识的有效位与点表基准标识一致。 */
+        {
+            return point;
         }
     }
-//    else if (0x04E60500) {  // 逆变器有功功率调节
-//        request.type = PReadDate->data_type
-//    }
-    return E_D07_W_OK;
+
+    return RT_NULL;
 }
 
-
-int dltl645_r_w_data_ack(const R_WDataTypeDef *PReadDate, uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t len, uint8_t uart_no)
+/* 根据点描述检查DI0选择器，固定点直接通过，设备点仅允许01～0C，聚合点可允许FF。 */
+static rt_bool_t dlt645_point_selector_valid(const Dlt645PointTypeDef *point, uint32_t id)
 {
-    uint8_t dl645_power_bcd[64] = {0};
-    uint32_t packlen = 0;
-    uint8_t err_code = 0;
+    uint8_t selector = (uint8_t)id; /* uint32_t数据标识最低字节对应协议中的DI0。 */
 
-//    dlt645_pack_base_start_w(g_packBuf, fun_c, PReadDate->DataIdf, PReadDate->ReplyDataLen, &packlen, 0);
-
-    if(E_D07_CTRL_WRITE_DATA == fun_c)
+    if(point->selector == DLT645_SELECTOR_NONE) /* 固定数据标识不需要解释或限制DI0。 */
     {
-        for(uint8_t i=0; i<len; ++i)
-        {
-            dl645_power_bcd[i] = p_buf[i];
-        }
-        struct dlt645_w *dlt645_w_temp = (void *)dl645_power_bcd;
-        //密码判断
-//        if(0 == rt_memcmp(&dlt645_w_temp->PA_P2[1], &ctu_cfg.dlt645_user_pw, 3))
-//        {
-//            /* 操作者代码判断 */
-//            if(0 == rt_memcmp(&dlt645_w_temp->C0_C4, &ctu_cfg.dlt645_ctrl_code, 4))
-//            {
-                int32_t DataVal = 0;
-                DataVal = Little_BCD_Buf_To_DEC(dlt645_w_temp->data, PReadDate->ReplyDataLen);
-                DataVal = DataVal/PReadDate->DateRate;
-
-                return dfdl33_dltl645_r_w_data_do(id, DataVal);
-
+        return RT_TRUE;
     }
-    else if (E_D07_CTRL_READ_DATA == fun_c)
+    if(((point->selector & DLT645_SELECTOR_DEVICE) != 0U) &&
+       (selector >= 1U) && (selector <= INVERTER_ARCHIVE_MAX_COUNT)) /* 01～0C分别映射12个档案槽位。 */
     {
-        int32_t DataVal = 0;
-
-        // if(PReadDate->DataType != TYPE_NONE)
-        // {
-        //     DataVal = GetDataFromAddr(PReadDate->DataType, PReadDate->DataBuff);
-        // }
-        // else
-        {
-            rt_memcpy(&DataVal, PReadDate->DataBuff, PReadDate->ReplyDataLen);
-        }
-        DataVal = DataVal * PReadDate->DateRate;
-
-        dl645_BufToBCD(DataVal, PReadDate->ReplyDataLen, dl645_power_bcd);
-
-
-        int i;
-        for (i=0; i<PReadDate->ReplyDataLen; i++)
-        {
-            g_packBuf[packlen++] = dl645_power_bcd[i] + 0x33;
-        }
+        return RT_TRUE;
+    }
+    if(((point->selector & DLT645_SELECTOR_ALL) != 0U) && (selector == 0xFFU)) /* 仅声明聚合能力的点接受FF。 */
+    {
+        return RT_TRUE;
     }
 
-//    dlt645_pack_base_end(g_packBuf, &packlen);
+    return RT_FALSE;
+}
 
-    show_rtc_time();
+/* 把读取回调生成的纯数据域统一加0x33、补齐帧头校验和结束符并提交指定串口。 */
+static rt_err_t dlt645_send_read_response(uint32_t id,
+                                          const uint8_t *data,
+                                          uint16_t data_len,
+                                          uint8_t uart_no)
+{
+    uint32_t packlen = 0U; /* 当前应答帧已经写入g_packBuf的字节数。 */
+    uint16_t index;        /* 当前复制并加0x33的业务数据下标。 */
 
+    dlt645_pack_base_start(g_packBuf, E_D07_CTRL_READ_DATA, id, data_len, &packlen); /* 生成读应答帧头及已加0x33的数据标识。 */
+    for(index = 0U; index < data_len; ++index)
+    {
+        g_packBuf[packlen++] = data[index] + 0x33U; /* DL/T 645要求数据域每个字节发送前加0x33。 */
+    }
+    dlt645_pack_base_end(g_packBuf, &packlen); /* 根据完整帧内容计算CS并追加0x16。 */
+    show_arr("dlt645 tx : ", g_packBuf, packlen); /* 发送前输出完整十六进制报文便于联调。 */
 
+    return (uart_mgmt_write(uart_no, g_packBuf, packlen) == packlen) ? RT_EOK : -RT_ERROR; /* 仅完整提交全部字节才返回成功。 */
+}
 
-    return RT_EOK;
+/* 根据处理结果统一生成正常或异常状态应答，当前主要用于写数据命令的最终回复。 */
+static rt_err_t dlt645_send_status_response(uint8_t fun_c, uint8_t err_code, uint8_t uart_no)
+{
+    uint32_t packlen = 0U; /* 当前状态应答帧已经写入g_packBuf的字节数。 */
+
+    dlt645_pack_base_start_w(g_packBuf, fun_c, 0U, 0U, &packlen, err_code); /* 根据错误码选择正常控制码或异常控制码。 */
+    dlt645_pack_base_end(g_packBuf, &packlen); /* 计算校验和并追加结束符。 */
+    show_arr("dlt645 tx : ", g_packBuf, packlen); /* 输出最终应答报文用于确认长度字段和错误码。 */
+
+    return (uart_mgmt_write(uart_no, g_packBuf, packlen) == packlen) ? RT_EOK : -RT_ERROR; /* 串口完整接收待发送数据才视为成功。 */
 }
 
 /* 块数据请求函数 */
@@ -567,106 +567,87 @@ int translayerdl645_no_data_requested_ack(uint8_t fun_c, uint8_t uart_no)
     return 1;
 }
 
+/* 查找并执行读数据标识；新点使用统一回调组帧，未迁移旧点暂时保留原读取入口。 */
 void dlt645_ctrl_read_data(uint8_t fun_c, uint32_t id,  uint8_t uart_no)
 {
-    uint8_t ReadData_Support_flg = 0;    /* 装置是否支持该数据标识，支持:1，不支持:0 */
-    /* 基本可读可写数据标识 */
-    for(int i=0; i<countof(R_WDataStruct); i++)
+    const Dlt645PointTypeDef *point = dlt645_point_find(id); /* 统一点表中与请求数据标识匹配的描述项。 */
+    uint16_t data_len = 0U; /* 读取回调实际写入静态业务数据缓冲区的字节数。 */
+
+    RT_UNUSED(fun_c); /* 调用入口当前固定传入读数据功能码，统一应答层直接使用协议常量。 */
+    if(point != RT_NULL) /* 新点表匹配成功后不再进入旧点表兼容分支。 */
     {
-        if(id == R_WDataStruct[i].DataIdf)
+        LOG_I("recv dlt645 read %s", point->name);
+        if(((point->access & DLT645_ACCESS_READ) == 0U) ||
+           (point->read == RT_NULL) ||
+           !dlt645_point_selector_valid(point, id) ||
+           (point->read(point, id, g_dlt645_point_data,
+                        sizeof(g_dlt645_point_data), &data_len) != RT_EOK) ||
+           (data_len > DLT645_POINT_DATA_MAX_LEN)) /* 权限、回调、DI0、取数结果和输出长度必须全部有效。 */
         {
-            LOG_I("recv dlt645 read %s ", R_WDataStruct[i].DescribeType);
-            ReadData_Support_flg = 1;
-            dltl645_r_w_data_ack(&R_WDataStruct[i], fun_c, id, RT_NULL, 0, uart_no);
-            break;
+            translayerdl645_no_data_requested_ack(E_D07_CTRL_READ_DATA, uart_no); /* 无法提供合法数据时返回无请求数据异常。 */
+            return;
         }
+
+        dlt645_send_read_response(id, g_dlt645_point_data, data_len, uart_no); /* 顶层统一执行加0x33、组帧和单次发送。 */
+        return;
     }
-    /* 基本数据块标识 */
-    for(int i=0; i<countof(ReadBlockDataStruct); i++)
+
+    /* 尚未迁移到统一点表的旧数据块只保留读兼容，写入口不再调用。 */
+    for(uint16_t i = 0U; i < countof(ReadBlockDataStruct); ++i)
     {
-        if(id == ReadBlockDataStruct[i].DataIdf)
+        if(id == ReadBlockDataStruct[i].DataIdf) /* 旧数据块使用完整数据标识精确匹配。 */
         {
             LOG_I("recv dlt645 %s ", ReadBlockDataStruct[i].DescribeType);
-            ReadData_Support_flg = 1;
-            dltl645_block_bcd_data_ack(&ReadBlockDataStruct[i], fun_c, RT_NULL, 0, uart_no);
-            break;
+            dltl645_block_bcd_data_ack(&ReadBlockDataStruct[i], E_D07_CTRL_READ_DATA,
+                                       RT_NULL, 0, uart_no); /* 旧函数内部仍负责读取、组帧和发送。 */
+            return;
         }
     }
 
-    if(id == 0x04000101)    //年月日星期
+    if(id == 0x04000101) /* 日期及星期暂时通过原专用读取函数回复。 */
     {
-        dltl645_ymdw_ack(fun_c, id, RT_NULL, 0, uart_no);
-        ReadData_Support_flg = 1;
+        dltl645_ymdw_ack(E_D07_CTRL_READ_DATA, id, RT_NULL, 0, uart_no);
+        return;
     }
-    if(id == 0x04000102)    //时分秒
+    if(id == 0x04000102) /* 时分秒暂时通过原专用读取函数回复。 */
     {
-        dltl645_hms_ack(fun_c, id, RT_NULL, 0, uart_no);
-        ReadData_Support_flg = 1;
+        dltl645_hms_ack(E_D07_CTRL_READ_DATA, id, RT_NULL, 0, uart_no);
+        return;
     }
 
-
-    if(ReadData_Support_flg == 0)
-    {
-        /* 不支持该数据标识 */
-        LOG_I("Dlt645 read data failed: Not support");
-        translayerdl645_no_data_requested_ack(fun_c, uart_no);
-    }
+    LOG_I("Dlt645 read data failed: Not support"); /* 新旧点表和专用点均未匹配时记录不支持日志。 */
+    translayerdl645_no_data_requested_ack(E_D07_CTRL_READ_DATA, uart_no); /* 对未知数据标识返回无请求数据异常。 */
 }
 
+/* 查找并执行写数据标识，统一完成权限、DI0、报文长度、业务回调和最终状态应答。 */
 void dlt645_ctrl_write_data(uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t len, uint8_t uart_no)
 {
-    uint32_t DataIdf = 0;
-    uint32_t DataIdf_len = 0;
-    uint8_t err_code = E_D07_W_NO_DATA;
-    uint32_t packlen = 0;
+    const Dlt645PointTypeDef *point = dlt645_point_find(id); /* 统一点表中与请求数据标识匹配的描述项。 */
+    uint8_t err_code = E_D07_W_NO_DATA; /* 默认按未知点或无写权限回复无请求数据。 */
 
-    uint8_t write_data_support_flg = 0;    /* 装置是否支持该数据标识，支持:1，不支持:0 */
-    /* 基本可读可写数据标识 */
-    for(int i=0; i<countof(R_WDataStruct); i++)
+    RT_UNUSED(fun_c); /* 调用入口当前固定传入写数据功能码，状态应答层直接使用协议常量。 */
+    if(point != RT_NULL) /* 仅匹配到已登记点后才检查权限并调用写处理函数。 */
     {
-        if((id & 0xFFFFFF00) == (R_WDataStruct[i].DataIdf & 0xFFFFFF00))
+        LOG_I("recv dlt645 write %s", point->name);
+        if(((point->access & DLT645_ACCESS_WRITE) != 0U) &&
+           (point->write != RT_NULL) &&
+           dlt645_point_selector_valid(point, id)) /* 点必须具备写权限、有效写回调和合法DI0选择器。 */
         {
-            LOG_I("recv dlt645 write %s ", R_WDataStruct[i].DescribeType);
-            DataIdf = id;
-            DataIdf_len = R_WDataStruct[i].ReplyDataLen;
-            err_code = dltl645_r_w_data_ack(&R_WDataStruct[i], fun_c, id, p_buf, len, uart_no);
+            uint16_t expected_len = DLT645_WRITE_SECURITY_LEN + point->data_len; /* p_buf应包含8字节安全字段和固定长度业务数据。 */
 
-            break;
-        }
-    }
-    /* 基本数据块标识 */
-    for(int i=0; i<countof(ReadBlockDataStruct); i++)
-    {
-        if(id == ReadBlockDataStruct[i].DataIdf)
-        {
-            LOG_I("recv dlt645 %s ", ReadBlockDataStruct[i].DescribeType);
-            write_data_support_flg = 1;
-            dltl645_block_bcd_data_ack(&ReadBlockDataStruct[i], fun_c, p_buf, len, uart_no);
-            break;
+            /* p_buf由解析层完成减0x33，内容为密码、操作者代码和实际写数据。 */
+            if((p_buf != RT_NULL) && (len == expected_len) &&
+               (point->write(point, id, &p_buf[DLT645_WRITE_SECURITY_LEN],
+                             point->data_len) == RT_EOK)) /* 指针、总长度和业务写入结果全部有效才正常应答。 */
+            {
+                err_code = E_D07_W_OK; /* 设备已返回成功结果，回复正常写数据应答。 */
+            }
+            else
+            {
+                err_code = E_D07_W_ERR; /* 报文非法或控制执行失败，回复其他错误。 */
+            }
         }
     }
 
-    if(id == 0x04000101)    //年月日星期
-    {
-        dltl645_ymdw_ack(fun_c, id, p_buf, len, uart_no);
-        write_data_support_flg = 1;
-    }
-    if(id == 0x04000102)    //时分秒
-    {
-        dltl645_hms_ack(fun_c, id, p_buf, len, uart_no);
-        write_data_support_flg = 1;
-    }
-
-    dlt645_pack_base_start_w(g_packBuf, fun_c, DataIdf, DataIdf_len, &packlen, err_code);
-    dlt645_pack_base_end(g_packBuf, &packlen);
-    show_arr("dlt645 tx : ", g_packBuf, packlen);
-
-    uart_mgmt_write(uart_no, g_packBuf, packlen);
-
-//    if(write_data_support_flg == 0)
-//    {
-//        /* 不支持该数据标识 */
-//        LOG_I("Dlt645 write data failed: Not support");
-//        translayerdl645_no_data_requested_ack(fun_c, uart_no);
-//    }
+    dlt645_send_status_response(E_D07_CTRL_WRITE_DATA, err_code, uart_no); /* 每个写请求只在顶层发送一次最终状态。 */
 }

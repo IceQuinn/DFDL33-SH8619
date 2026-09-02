@@ -24,6 +24,13 @@
         }
       ]
     },
+    "inverter_three_phase_voltage": {
+      "fields": [
+        {"name": "voltage_a", "description": "A相电压", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "unit": "V"},
+        {"name": "voltage_b", "description": "B相电压", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "unit": "V"},
+        {"name": "voltage_c", "description": "C相电压", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "unit": "V"}
+      ]
+    },
     "inverter_archive": {
       "fields": [
         {"name": "address", "description": "逆变器地址", "type": "uint", "length": 1, "byte_order": "little"},
@@ -228,6 +235,21 @@
     }
   ],
   "data_identifier_groups": [
+    {
+      "id": "inverter_three_phase_voltage",
+      "category": "extended",
+      "prefix": "02E601",
+      "display": "02 E6 01 xx | 逆变器三相电压块",
+      "description": "逆变器三相电压块",
+      "suffixes": {
+        "range": {"from": "01", "to": "0C"},
+        "values": ["FF"],
+        "labels": {"FF": "全部逆变器三相电压块"},
+        "label_template": "逆变器{decimal}三相电压块"
+      },
+      "access": "read",
+      "read_schema": "inverter_three_phase_voltage"
+    },
     {
       "id": "inverter_status",
       "category": "extended",

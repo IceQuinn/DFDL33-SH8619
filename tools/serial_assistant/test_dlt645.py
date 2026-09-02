@@ -155,6 +155,15 @@ class DLT645Tests(unittest.TestCase):
             self.assertEqual(saved_choice({"parity": "坏值"}, "parity", "无", ("无", "奇", "偶")), "无")
 
     def test_extended_identifier_ranges_and_shared_structures(self):
+        voltage = self.registry.get("02E60101")
+        self.assertEqual(voltage.description, "逆变器1三相电压块")
+        self.assertEqual(voltage.access, "read")
+        voltage_values = self.registry.decode("02E60101", bytes.fromhex("05 22 01 23 00 24"))
+        self.assertEqual(voltage_values, [
+            ("A相电压", "220.5", "V"), ("B相电压", "230.1", "V"), ("C相电压", "240", "V"),
+        ])
+        self.assertEqual(self.registry.get("02E601FF").description, "全部逆变器三相电压块")
+
         first = self.registry.get("04E60401")
         last = self.registry.get("04E6040C")
         all_devices = self.registry.get("04E604FF")

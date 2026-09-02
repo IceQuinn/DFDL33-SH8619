@@ -2,6 +2,8 @@
 #define __DLT645_DATA_CENTER__
 
 #include <stdint.h>
+#include <rtthread.h>
+#include "dlt645_data_api.h"
 
 /* 645报文下行报文结构体 */
 struct dlt645_w
