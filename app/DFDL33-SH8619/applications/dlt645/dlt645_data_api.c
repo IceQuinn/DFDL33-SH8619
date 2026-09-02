@@ -4,6 +4,256 @@
 #include <rtthread.h>
 
 #include "inv_data.h"
+#include "inverter_protocol_library.h"
+
+#define DLT645_VARIABLE_ALL_SELECTOR  0xFFU /* DI0等于FF时按档案顺序返回全部12台逆变器。 */
+#define DLT645_VOLTAGE_LEN            6U    /* 三相电压各占2字节，单台合计6字节。 */
+#define DLT645_CURRENT_LEN            9U    /* 三相电流各占3字节，单台合计9字节。 */
+#define DLT645_POWER_LEN              16U   /* 总、A、B、C相功率各占4字节，单台合计16字节。 */
+#define DLT645_POWER_FACTOR_LEN       8U    /* 总、A、B、C相功率因数各占2字节，单台合计8字节。 */
+#define DLT645_ALL_VARIABLE_LEN       55U   /* 五组变量按规范顺序拼接后的单台总长度。 */
+
+typedef enum Dlt645VariableType
+{
+    DLT645_VARIABLE_VOLTAGE = 0, /* 三相电压，目标格式XXX.X。 */
+    DLT645_VARIABLE_CURRENT,     /* 三相电流，目标格式XXXX.XX。 */
+    DLT645_VARIABLE_ACTIVE,      /* 总、A、B、C相有功功率，目标格式XXXX.XXXX。 */
+    DLT645_VARIABLE_REACTIVE,    /* 总、A、B、C相无功功率，目标格式XXXX.XXXX。 */
+    DLT645_VARIABLE_FACTOR,      /* 总、A、B、C相功率因数，目标格式X.XXX。 */
+    DLT645_VARIABLE_ALL          /* 单台逆变器全部变量的组合数据块。 */
+} Dlt645VariableTypeDef;
+
+/* 计算10的指定次幂，协议配置小数位超过9时返回0表示配置不可转换。 */
+static uint32_t dlt645_decimal_scale(uint8_t decimal_places)
+{
+    uint8_t index;       /* 当前已经累计的小数位数。 */
+    uint32_t scale = 1U; /* 从10的0次幂开始逐位扩大倍率。 */
+
+    if(decimal_places > 9U) /* int32_t定点数据不支持超过9位的小数倍率。 */
+    {
+        return 0U;
+    }
+    for(index = 0U; index < decimal_places; ++index)
+    {
+        scale *= 10U; /* 每增加一位小数，定点整数倍率扩大10倍。 */
+    }
+    return scale;
+}
+
+/* 将协议实时值的小数位统一换算为645点表要求的小数位，缩小时直接舍去最低位。 */
+static rt_err_t dlt645_rescale_value(int32_t source, uint8_t source_decimals, uint8_t target_decimals, int32_t *target)
+{
+    uint32_t scale;       /* 源与目标小数位差对应的10次幂。 */
+    int64_t scaled_value; /* 使用64位中间值防止扩大倍率时发生32位溢出。 */
+
+    if(source_decimals == target_decimals) /* 小数位一致时不重复执行乘除运算。 */
+    {
+        *target = source;
+        return RT_EOK;
+    }
+    scale = dlt645_decimal_scale((source_decimals > target_decimals) ?
+                                 (source_decimals - target_decimals) :
+                                 (target_decimals - source_decimals)); /* 只计算小数位差所需的倍率。 */
+    if(scale == 0U) /* 非法协议小数位不能生成可信的645数据。 */
+    {
+        return -RT_EINVAL;
+    }
+    scaled_value = source;
+    if(source_decimals > target_decimals) /* 源精度更高时缩小到点表规定的小数位。 */
+    {
+        scaled_value /= scale;
+    }
+    else /* 源精度更低时扩大定点整数以补足点表小数位。 */
+    {
+        scaled_value *= scale;
+    }
+    if((scaled_value > INT32_MAX) || (scaled_value < INT32_MIN)) /* 换算结果超出实时值表示范围时判定无效。 */
+    {
+        return -RT_EINVAL;
+    }
+    *target = (int32_t)scaled_value; /* 完成范围确认后再输出换算结果。 */
+    return RT_EOK;
+}
+
+/* 将已按目标小数位缩放的整数编码为低字节在前的BCD，signed_value为真时最高位表示负号。 */
+static rt_err_t dlt645_encode_bcd(int32_t value, uint8_t *data, uint8_t byte_len, rt_bool_t signed_value)
+{
+    uint8_t index;       /* 当前写入的BCD字节下标。 */
+    uint64_t magnitude;  /* 数值绝对值，使用64位兼容INT32_MIN。 */
+    uint64_t limit = 1U; /* 当前BCD字节数能够表达的十进制上限加1。 */
+
+    if((!signed_value) && (value < 0)) /* 电压、电流和功率因数不允许编码负数。 */
+    {
+        return -RT_EINVAL;
+    }
+    magnitude = (value < 0) ? (uint64_t)(-(int64_t)value) : (uint64_t)value; /* 避免直接对INT32_MIN取负。 */
+    for(index = 0U; index < byte_len; ++index)
+    {
+        limit *= 100U; /* 每个BCD字节增加两位十进制表示能力。 */
+    }
+    if((magnitude >= limit) || (signed_value && (magnitude >= (limit * 8U / 10U)))) /* 有符号BCD最高数字只能为0～7。 */
+    {
+        return -RT_EINVAL;
+    }
+    for(index = 0U; index < byte_len; ++index)
+    {
+        data[index] = (uint8_t)((magnitude % 10U) | (((magnitude / 10U) % 10U) << 4)); /* 每字节依次写入低位两位数字。 */
+        magnitude /= 100U; /* 移除已经写入的两位十进制数字。 */
+    }
+    if(signed_value && (value < 0)) /* 负功率使用最高有效字节bit7携带符号。 */
+    {
+        data[byte_len - 1U] |= 0x80U;
+    }
+    return RT_EOK;
+}
+
+/* 编码一个实时数值，无效、溢出或格式不支持时按点表约定将该字段全部填FF。 */
+static void dlt645_append_value(const Inv_RealtimeValue_t *source, uint8_t source_decimals,
+                                uint8_t target_decimals, uint8_t byte_len, rt_bool_t signed_value, uint8_t *data)
+{
+    int32_t scaled_value; /* 完成源协议到645目标精度换算后的定点整数。 */
+
+    if((source->valid == 0U) ||
+       (dlt645_rescale_value(source->value, source_decimals, target_decimals, &scaled_value) != RT_EOK) ||
+       (dlt645_encode_bcd(scaled_value, data, byte_len, signed_value) != RT_EOK)) /* 任一有效性或编码检查失败都不能返回旧值。 */
+    {
+        rt_memset(data, 0xFF, byte_len); /* FF明确表示本字段当前无有效数据。 */
+    }
+}
+
+/* 按变量类型生成单台逆变器的数据块，调用前已经确认实时数据和协议配置有效。 */
+static uint16_t dlt645_build_device_variables(Dlt645VariableTypeDef type, const Inv_Data_t *inv,
+                                               const Inv_Proto_t *protocol, uint8_t *data)
+{
+    static const uint8_t power_index[4] = {ENUM_PT, ENUM_PA, ENUM_PB, ENUM_PC}; /* 645功率字段固定按总、A、B、C顺序。 */
+    static const uint8_t reactive_index[4] = {ENUM_QT, ENUM_QA, ENUM_QB, ENUM_QC}; /* 无功字段固定按总、A、B、C顺序。 */
+    static const uint8_t factor_index[4] = {ENUM_PFT, ENUM_PFA, ENUM_PFB, ENUM_PFC}; /* 功率因数字段固定按总、A、B、C顺序。 */
+    uint8_t index;   /* 当前相或当前总/分相字段下标。 */
+    uint16_t offset = 0U; /* 当前数据块已经写入的字节数。 */
+
+    if((type == DLT645_VARIABLE_VOLTAGE) || (type == DLT645_VARIABLE_ALL)) /* 电压块位于全部变量块首部。 */
+    {
+        for(index = 0U; index < ENUM_PHASE_MAX; ++index)
+        {
+            dlt645_append_value(&inv->data.Ux[index], protocol->data.Ux[index].decimal_places, 1U, 2U, RT_FALSE, &data[offset]);
+            offset += 2U; /* 每相电压格式XXX.X固定占2字节。 */
+        }
+        if(type != DLT645_VARIABLE_ALL) return offset; /* 单项读取完成后直接返回，避免继续拼接其他变量。 */
+    }
+    if((type == DLT645_VARIABLE_CURRENT) || (type == DLT645_VARIABLE_ALL)) /* 电流块紧随电压块。 */
+    {
+        for(index = 0U; index < ENUM_PHASE_MAX; ++index)
+        {
+            dlt645_append_value(&inv->data.Ix[index], protocol->data.Ix[index].decimal_places, 2U, 3U, RT_FALSE, &data[offset]);
+            offset += 3U; /* 每相电流格式XXXX.XX固定占3字节。 */
+        }
+        if(type != DLT645_VARIABLE_ALL) return offset; /* 单项读取只生成当前变量块。 */
+    }
+    if((type == DLT645_VARIABLE_ACTIVE) || (type == DLT645_VARIABLE_ALL)) /* 有功功率块按总、A、B、C排列。 */
+    {
+        for(index = 0U; index < 4U; ++index)
+        {
+            uint8_t item = power_index[index]; /* 将645字段顺序转换为实时数据数组下标。 */
+            dlt645_append_value(&inv->data.Px[item], protocol->data.Px[item].decimal_places, 4U, 4U, RT_TRUE, &data[offset]);
+            offset += 4U; /* 每项有功功率格式XXXX.XXXX固定占4字节。 */
+        }
+        if(type != DLT645_VARIABLE_ALL) return offset; /* 单项读取只生成当前变量块。 */
+    }
+    if((type == DLT645_VARIABLE_REACTIVE) || (type == DLT645_VARIABLE_ALL)) /* 无功功率块按总、A、B、C排列。 */
+    {
+        for(index = 0U; index < 4U; ++index)
+        {
+            uint8_t item = reactive_index[index]; /* 将645字段顺序转换为实时数据数组下标。 */
+            dlt645_append_value(&inv->data.Qx[item], protocol->data.Qx[item].decimal_places, 4U, 4U, RT_TRUE, &data[offset]);
+            offset += 4U; /* 每项无功功率格式XXXX.XXXX固定占4字节。 */
+        }
+        if(type != DLT645_VARIABLE_ALL) return offset; /* 单项读取只生成当前变量块。 */
+    }
+    for(index = 0U; index < 4U; ++index) /* 功率因数是单项或全部变量块的最后一组。 */
+    {
+        uint8_t item = factor_index[index]; /* 将645字段顺序转换为实时数据数组下标。 */
+        dlt645_append_value(&inv->data.PFx[item], protocol->data.PFx[item].decimal_places, 3U, 2U, RT_FALSE, &data[offset]);
+        offset += 2U; /* 每项功率因数格式X.XXX固定占2字节。 */
+    }
+    return offset;
+}
+
+/* 统一处理变量类单台及DI0=FF聚合读取，公共入口只在此处检查一次重要参数。 */
+static rt_err_t dlt645_read_variables(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data,
+                                      uint16_t capacity, uint16_t *data_len, Dlt645VariableTypeDef type)
+{
+    uint8_t selector = (uint8_t)id; /* 数据标识最低字节用于选择档案或全部档案。 */
+    uint8_t first_archive;          /* 本次读取的首个档案下标。 */
+    uint8_t archive_count;          /* 本次需要依次生成的数据块数量。 */
+    uint8_t archive_offset;         /* 当前处理相对首档案的偏移。 */
+    uint16_t required_len;          /* 当前选择器对应的完整返回长度。 */
+    uint16_t offset = 0U;           /* 已经写入输出缓冲区的数据字节数。 */
+
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL)) /* 公共接口的重要指针必须有效。 */
+    {
+        return -RT_EINVAL;
+    }
+    first_archive = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? 0U : (uint8_t)(selector - 1U); /* DI0已由分发层验证后转换为档案下标。 */
+    archive_count = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? INVERTER_ARCHIVE_MAX_COUNT : 1U; /* FF固定聚合全部档案槽位。 */
+    required_len = point->data_len * archive_count; /* 点描述保存单台长度，聚合时按12台计算。 */
+    if(capacity < required_len) /* 组帧缓存不足时不能生成截断数据。 */
+    {
+        return -RT_EINVAL;
+    }
+    for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
+    {
+        uint8_t archive_index = first_archive + archive_offset; /* 当前需要读取的实际档案下标。 */
+        Inv_Data_t *inv = Inv_Data_Get(archive_index); /* 通过档案公共接口取得实时数据。 */
+        const Inv_Proto_t *protocol = Inv_Archive_Get_Protocol(archive_index); /* 取得源定点值对应的小数位配置。 */
+
+        if((inv == RT_NULL) || (protocol == RT_NULL)) /* 聚合读取需保留槽位，失效档案整块填FF。 */
+        {
+            if(archive_count == 1U) return -RT_ERROR; /* 单台档案无效时由上层返回无请求数据异常。 */
+            rt_memset(&data[offset], 0xFF, point->data_len); /* 聚合块使用FF保持每台固定偏移。 */
+            offset += point->data_len;
+            continue;
+        }
+        offset += dlt645_build_device_variables(type, inv, protocol, &data[offset]); /* 有效档案按规范字段顺序编码。 */
+    }
+    *data_len = offset; /* 所有档案处理完成后一次性返回实际长度。 */
+    return (offset == required_len) ? RT_EOK : -RT_ERROR; /* 防止点表长度和编码实现不一致时发送错误报文。 */
+}
+
+/* 读取三相电压变量数据。 */
+rt_err_t dlt645_read_voltage(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    return dlt645_read_variables(point, id, data, capacity, data_len, DLT645_VARIABLE_VOLTAGE);
+}
+
+/* 读取三相电流变量数据。 */
+rt_err_t dlt645_read_current(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    return dlt645_read_variables(point, id, data, capacity, data_len, DLT645_VARIABLE_CURRENT);
+}
+
+/* 读取总、A、B、C相有功功率变量数据。 */
+rt_err_t dlt645_read_active_power(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    return dlt645_read_variables(point, id, data, capacity, data_len, DLT645_VARIABLE_ACTIVE);
+}
+
+/* 读取总、A、B、C相无功功率变量数据。 */
+rt_err_t dlt645_read_reactive_power(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    return dlt645_read_variables(point, id, data, capacity, data_len, DLT645_VARIABLE_REACTIVE);
+}
+
+/* 读取总、A、B、C相功率因数变量数据。 */
+rt_err_t dlt645_read_power_factor(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    return dlt645_read_variables(point, id, data, capacity, data_len, DLT645_VARIABLE_FACTOR);
+}
+
+/* 按规范顺序读取指定逆变器的全部变量数据。 */
+rt_err_t dlt645_read_all_variables(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    return dlt645_read_variables(point, id, data, capacity, data_len, DLT645_VARIABLE_ALL);
+}
 
 /* 检查无符号压缩BCD每个半字节是否位于0～9，发现A～F立即判定数据非法。 */
 static rt_bool_t dlt645_bcd_is_valid(const uint8_t *data, uint16_t data_len)

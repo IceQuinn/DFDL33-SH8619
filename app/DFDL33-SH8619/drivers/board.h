@@ -145,6 +145,7 @@ extern "C"
 /*#define BSP_USING_SPI1*/
 #define BSP_USING_SPI2
 /*#define BSP_USING_SPI3*/
+#define BSP_USING_SPI4
 
 /*-------------------------- SPI CONFIG END --------------------------*/
 

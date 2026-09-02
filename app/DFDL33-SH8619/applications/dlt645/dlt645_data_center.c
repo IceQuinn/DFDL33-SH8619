@@ -26,7 +26,6 @@ uint8_t sg_dl645_addr_bcd[DL645_ADDR_SIZE] = {0};
 const ReadBlockDataTypeDef ReadBlockDataStruct[] =
 {
     {0x0400040F, 4, 8, {&ctu_cfg.longitude, &ctu_cfg.latitude, RT_NULL},       1, TYPE_U32, "long lat"},//经纬度
-    {0x02E60101, 2, 6, {&g_inv_data[0].data.Ux[ENUM_PHASE_A].value, &g_inv_data[0].data.Ux[ENUM_PHASE_B].value, &g_inv_data[0].data.Ux[ENUM_PHASE_C].value},       1, TYPE_I32, "Ux"},//逆变器1电压数据块
 };
 
 /* 单个可读可写数据（表） */
@@ -45,9 +44,22 @@ const R_WDataTypeDef R_WDataStruct[] =
 /* 645处理由串口管理线程串行调用，使用静态数据区避免在接收线程栈上放置252字节数组。 */
 static uint8_t g_dlt645_point_data[DLT645_POINT_DATA_MAX_LEN]; /* 保存读取回调生成的未加0x33业务数据。 */
 
-/* 第一阶段先迁移已有的运行状态点，后续变量类和参数类只需继续扩展此表。 */
+/* 统一点表集中描述变量类和已经迁移的运行状态点，业务取数函数统一位于dlt645_data_api.c。 */
 static const Dlt645PointTypeDef g_dlt645_points[] =
 {
+    //DI3～DI1    DI0           读写权限            编码方式            DI0选择器                                    数据长度 定点数倍率 写入值下限 写入值上限 读取回调函数 写入回调函数 点表名称
+    // 三相电压数据库块
+    {0x02E60100U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_BCD,    DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 6U,  10,    0, 0, dlt645_read_voltage,        RT_NULL, "inverter voltage"}, /* DI0支持01～0C单台及FF全部，数据格式为3×XXX.X。 */
+    // 三相电流数据库块
+    {0x02E60200U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_BCD,    DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 9U,  1000,   0, 0, dlt645_read_current,        RT_NULL, "inverter current"}, /* DI0支持01～0C单台及FF全部，数据格式为3×XXXX.XX。 */
+    // 有功功率数据库块
+    {0x02E60300U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_SBCD,   DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 16U, 10000, 0, 0, dlt645_read_active_power,   RT_NULL, "inverter active power"}, /* 数据按总、A、B、C排列，最高位表示符号。 */
+    // 无功功率数据库块
+    {0x02E60400U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_SBCD,   DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 16U, 10000, 0, 0, dlt645_read_reactive_power, RT_NULL, "inverter reactive power"}, /* 数据按总、A、B、C排列，最高位表示符号。 */
+    // 功率因数数据库块
+    {0x02E60500U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_BCD,    DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 8U,  1000,  0, 0, dlt645_read_power_factor,   RT_NULL, "inverter power factor"}, /* 数据按总、A、B、C排列，格式为4×X.XXX。 */
+    // 全部变量数据库块
+    {0x02E60F00U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_DEVICE,                       55U, 1,     0, 0, dlt645_read_all_variables,  RT_NULL, "inverter all variables"}, /* 规范仅允许01～0C，不接受DI0=FF聚合读取。 */
     {
         0x04E60400U,                                  /* DI3～DI1为04E604，DI0由请求选择逆变器。 */
         0xFFFFFF00U,                                  /* 忽略DI0后匹配同一类12台逆变器运行状态点。 */

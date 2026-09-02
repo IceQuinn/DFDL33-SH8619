@@ -102,7 +102,9 @@ class SerialAssistant(tk.Tk):
             "MASTER": DLT645StreamParser(), "SLAVE": DLT645StreamParser(),
             "RX": DLT645StreamParser(), "TX": DLT645StreamParser(),
         }
+        self.dlt_flush_jobs: dict[str, str] = {}
         self.dlt_field_vars: dict[str, tk.StringVar] = {}
+        self.dlt_decoded_vars: dict[str, tk.StringVar] = {}
         self.dlt_followup_payloads: dict[tuple[str, str], bytearray] = {}
         self.dlt_pending_writes: dict[str, str] = {}
         self._build_ui()
@@ -187,10 +189,10 @@ class SerialAssistant(tk.Tk):
 
         rx_frame = ttk.LabelFrame(upper, text="收发记录（接收报文自动解析）", padding=8)
         rx_frame.pack(fill="both", expand=True)
-        columns = ("time", "dir", "raw", "device", "action", "address", "count", "crc", "detail")
+        columns = ("time", "dir", "bytes", "raw", "device", "action", "address", "count", "crc", "detail")
         self.tree = ttk.Treeview(rx_frame, columns=columns, show="headings")
-        headings = ("时间", "方向", "原始报文 (HEX)", "设备/表地址", "操作/功能", "寄存器/数据标识", "数量/数据", "校验", "解析详情")
-        widths = (85, 85, 255, 105, 135, 130, 100, 155, 340)
+        headings = ("时间", "方向", "字节数", "原始报文 (HEX)", "设备/表地址", "操作/功能", "寄存器/数据标识", "数量/数据", "校验", "解析详情")
+        widths = (85, 85, 60, 255, 105, 135, 130, 100, 155, 340)
         for name, heading, width in zip(columns, headings, widths):
             self.tree.heading(name, text=heading)
             self.tree.column(name, width=width, minwidth=45, stretch=name in ("raw", "detail"))
@@ -257,35 +259,54 @@ class SerialAssistant(tk.Tk):
         choose = ttk.Frame(parent)
         choose.pack(fill="x", pady=(9, 5))
         self.dlt_action_var = tk.StringVar(value="读")
-        ttk.Label(choose, text="操作").pack(side="left")
+        ttk.Label(choose, text="操作").grid(row=0, column=0, sticky="w")
         action = ttk.Combobox(choose, textvariable=self.dlt_action_var, values=("读", "写"), width=6, state="readonly")
-        action.pack(side="left", padx=(4, 12))
+        action.grid(row=0, column=1, padx=(4, 12), sticky="w")
         action.bind("<<ComboboxSelected>>", self._dlt_action_changed)
-        ttk.Label(choose, text="类别").pack(side="left")
+        ttk.Label(choose, text="类别").grid(row=0, column=2, sticky="w")
         self.dlt_category_var = tk.StringVar()
         self.dlt_category_combo = ttk.Combobox(choose, textvariable=self.dlt_category_var, width=18, state="readonly")
-        self.dlt_category_combo.pack(side="left", padx=(4, 10))
+        self.dlt_category_combo.grid(row=0, column=3, padx=(4, 12), sticky="w")
         self.dlt_category_combo.bind("<<ComboboxSelected>>", self._dlt_category_changed)
-        ttk.Label(choose, text="标识组").pack(side="left")
+        ttk.Label(choose, text="标识组").grid(row=0, column=4, sticky="w")
         self.dlt_group_var = tk.StringVar()
         self.dlt_group_combo = ttk.Combobox(choose, textvariable=self.dlt_group_var, width=29, state="readonly")
-        self.dlt_group_combo.pack(side="left", padx=(4, 10))
+        self.dlt_group_combo.grid(row=0, column=5, padx=(4, 0), sticky="ew")
         self.dlt_group_combo.bind("<<ComboboxSelected>>", self._dlt_group_changed)
-        ttk.Label(choose, text="具体标识").pack(side="left")
+        ttk.Label(choose, text="具体标识").grid(row=1, column=0, pady=(7, 0), sticky="w")
         self.dlt_di_var = tk.StringVar()
-        self.dlt_di_combo = ttk.Combobox(choose, textvariable=self.dlt_di_var, width=31, state="normal")
-        self.dlt_di_combo.pack(side="left", padx=(4, 10))
+        self.dlt_di_combo = ttk.Combobox(choose, textvariable=self.dlt_di_var, width=50, state="normal")
+        self.dlt_di_combo.grid(row=1, column=1, columnspan=5, padx=(4, 10), pady=(7, 0), sticky="ew")
         self.dlt_di_combo.bind("<<ComboboxSelected>>", self._dlt_selection_changed)
-        ttk.Button(choose, text="生成报文", command=self.generate_dlt_operation).pack(side="left", padx=4)
-        ttk.Button(choose, text="生成并发送", command=lambda: self.generate_dlt_operation(send=True)).pack(side="left", padx=4)
+        ttk.Button(choose, text="生成报文", command=self.generate_dlt_operation).grid(row=1, column=6, padx=4, pady=(7, 0))
+        ttk.Button(choose, text="生成并发送", command=lambda: self.generate_dlt_operation(send=True)).grid(row=1, column=7, padx=4, pady=(7, 0))
+        choose.columnconfigure(5, weight=1)
 
-        self.dlt_fields_frame = ttk.LabelFrame(parent, text="数据区结构", padding=7)
-        self.dlt_fields_frame.pack(fill="x", pady=(3, 6))
+        content_paned = ttk.Panedwindow(parent, orient="vertical")
+        content_paned.pack(fill="both", expand=True, pady=(3, 0))
+
+        fields_container = ttk.LabelFrame(content_paned, text="数据区结构（可滚动）", padding=4)
+        fields_canvas = tk.Canvas(fields_container, highlightthickness=0)
+        fields_scroll = ttk.Scrollbar(fields_container, orient="vertical", command=fields_canvas.yview)
+        fields_canvas.configure(yscrollcommand=fields_scroll.set)
+        fields_canvas.grid(row=0, column=0, sticky="nsew")
+        fields_scroll.grid(row=0, column=1, sticky="ns")
+        fields_container.rowconfigure(0, weight=1)
+        fields_container.columnconfigure(0, weight=1)
+        self.dlt_fields_frame = ttk.Frame(fields_canvas, padding=3)
+        fields_window = fields_canvas.create_window((0, 0), window=self.dlt_fields_frame, anchor="nw")
+        self.dlt_fields_frame.bind(
+            "<Configure>", lambda _event: fields_canvas.configure(scrollregion=fields_canvas.bbox("all"))
+        )
+        fields_canvas.bind(
+            "<Configure>", lambda event: fields_canvas.itemconfigure(fields_window, width=event.width)
+        )
         self.dlt_fields_hint = ttk.Label(self.dlt_fields_frame, text="选择数据标识后显示结构")
         self.dlt_fields_hint.grid(row=0, column=0, sticky="w")
 
-        output = ttk.LabelFrame(parent, text="生成的645报文", padding=6)
-        output.pack(fill="both", expand=True)
+        output = ttk.LabelFrame(content_paned, text="生成的645报文", padding=6)
+        content_paned.add(fields_container, weight=3)
+        content_paned.add(output, weight=1)
         self.dlt_frame_text = tk.Text(output, height=3, font=("Consolas", 11), undo=True)
         self.dlt_frame_text.pack(fill="both", expand=True)
         ttk.Button(output, text="发送此报文", command=self.send_dlt_generated).pack(side="right", pady=(5, 0))
@@ -366,7 +387,7 @@ class SerialAssistant(tk.Tk):
             if item.category == category and item.group_id == group:
                 spaced = " ".join(item.di[index:index + 2] for index in range(0, 8, 2))
                 selector = f"{item.selector} | " if item.group_id != "standard" else ""
-                self.dlt_di_value_map[f"{selector}{item.description} | {spaced}"] = item.di
+                self.dlt_di_value_map[f"{selector}{spaced} | {item.description}"] = item.di
         values = list(self.dlt_di_value_map)
         self.dlt_di_combo["values"] = values
         if self._selected_di(silent=True) not in self.dlt_di_value_map.values():
@@ -397,6 +418,7 @@ class SerialAssistant(tk.Tk):
         for child in self.dlt_fields_frame.winfo_children():
             child.destroy()
         self.dlt_field_vars.clear()
+        self.dlt_decoded_vars.clear()
         data_identifier = self._selected_di(silent=True)
         definition = self.dlt_registry.get(data_identifier) if data_identifier else None
         if not definition:
@@ -446,6 +468,12 @@ class SerialAssistant(tk.Tk):
                 format_hint = f" / {field_def.get('format')}" if field_def.get("format") else ""
                 ttk.Label(self.dlt_fields_frame, text=f"{kind} / {field_def.get('length')}字节{format_hint}").grid(row=row, column=1, padx=4, pady=2, sticky="w")
             ttk.Label(self.dlt_fields_frame, text=unit).grid(row=row, column=2, padx=4, pady=2, sticky="w")
+            if self.dlt_action_var.get() == "读":
+                decoded_var = tk.StringVar(value="解析值：--")
+                self.dlt_decoded_vars[label] = decoded_var
+                ttk.Label(self.dlt_fields_frame, textvariable=decoded_var, foreground="#1565c0").grid(
+                    row=row, column=3, padx=(18, 4), pady=2, sticky="w"
+                )
 
     def reload_dlt_config(self) -> None:
         try:
@@ -623,6 +651,13 @@ class SerialAssistant(tk.Tk):
         self.create_pair_button.configure(state="disabled")
 
     def close_port(self) -> None:
+        for job in self.dlt_flush_jobs.values():
+            self.after_cancel(job)
+        self.dlt_flush_jobs.clear()
+        for direction, parser in self.dlt_parsers.items():
+            unparsed = parser.take_unparsed(finalize=True)
+            if unparsed:
+                self._add_dlt_unparsed(direction, unparsed)
         self.stop_event.set()
         self._close_serial_objects()
         self.reader_threads.clear()
@@ -720,20 +755,36 @@ class SerialAssistant(tk.Tk):
             frames = parser.feed(data)
             for frame in frames:
                 self.add_frame(direction, frame, "DL/T 645-2007")
-            unparsed = parser.take_unparsed(finalize=True)
+            unparsed = parser.take_unparsed()
             if unparsed:
                 self._add_dlt_unparsed(direction, unparsed)
+            self._schedule_dlt_flush(direction, parser)
             return
-        if protocol == "自动识别" and looks_like_frame(data):
-            parser = self.dlt_parsers.setdefault(direction, DLT645StreamParser())
+        parser = self.dlt_parsers.setdefault(direction, DLT645StreamParser())
+        if protocol == "自动识别" and (looks_like_frame(data) or bool(parser.buffer)):
             frames = parser.feed(data)
             for frame in frames:
                 self.add_frame(direction, frame, "DL/T 645-2007")
-            unparsed = parser.take_unparsed(finalize=True)
+            unparsed = parser.take_unparsed()
             if unparsed:
                 self._add_dlt_unparsed(direction, unparsed)
+            self._schedule_dlt_flush(direction, parser)
             return
         self.add_frame(direction, data, "Modbus RTU")
+
+    def _schedule_dlt_flush(self, direction: str, parser: DLT645StreamParser) -> None:
+        previous = self.dlt_flush_jobs.pop(direction, None)
+        if previous:
+            self.after_cancel(previous)
+        if parser.buffer:
+            self.dlt_flush_jobs[direction] = self.after(200, self._flush_dlt_pending, direction)
+
+    def _flush_dlt_pending(self, direction: str) -> None:
+        self.dlt_flush_jobs.pop(direction, None)
+        parser = self.dlt_parsers.setdefault(direction, DLT645StreamParser())
+        unparsed = parser.take_unparsed(finalize=True)
+        if unparsed:
+            self._add_dlt_unparsed(direction, unparsed)
 
     def add_frame(self, direction: str, frame: bytes, protocol: str | None = None) -> None:
         selected = protocol or self.protocol_var.get()
@@ -746,7 +797,7 @@ class SerialAssistant(tk.Tk):
         now = datetime.now().strftime("%H:%M:%S.%f")[:-3]
         if direction in ("RX", "MASTER", "MANUAL"):
             result = parse_master_request(frame)
-            device = "—" if result.device_address is None else f"{result.device_address} (0x{result.device_address:02X})"
+            device = "—" if result.device_address is None else str(result.device_address)
             action = f"{result.operation} / {result.function_name} (0x{result.function_code:02X})" if result.function_code is not None else "未知"
             if result.operation == "读/写":
                 address = f"读 0x{result.read_address:04X} / 写 0x{result.register_address:04X}"
@@ -758,13 +809,13 @@ class SerialAssistant(tk.Tk):
             if result.received_crc is not None and result.calculated_crc is not None:
                 crc_text += f" (接收 {result.received_crc:04X} / 计算 {result.calculated_crc:04X})"
             direction_text = "主机→设备" if direction == "MASTER" else "接收"
-            values = (now, direction_text, hex_bytes(frame), device, action, address, count, crc_text, result.detail)
+            values = (now, direction_text, len(frame), hex_bytes(frame), device, action, address, count, crc_text, result.detail)
             tag = () if result.crc_ok and result.valid else ("bad",)
             self.tree.insert("", "end", values=values, tags=tag)
         else:
             direction_text = "设备→主机" if direction == "SLAVE" else "发送"
             tag = ("slave",) if direction == "SLAVE" else ("tx",)
-            values = (now, direction_text, hex_bytes(frame), "—", "—", "—", "—", "—", "透明转发" if direction == "SLAVE" else "")
+            values = (now, direction_text, len(frame), hex_bytes(frame), "—", "—", "—", "—", "—", "透明转发" if direction == "SLAVE" else "")
             self.tree.insert("", "end", values=values, tags=tag)
         self._scroll_to_last()
 
@@ -802,7 +853,7 @@ class SerialAssistant(tk.Tk):
             direction_text = "发送"
         else:
             direction_text = result.direction
-        address = f"表号 {result.address}" if result.address else "—"
+        address = result.address if result.address else "—"
         action = result.operation
         if result.control is not None:
             action += f" (0x{result.control:02X})"
@@ -822,8 +873,14 @@ class SerialAssistant(tk.Tk):
         if definition:
             details.append(definition.description)
         if decoded_values:
-            details.extend(f"{name}={value}{unit}" for name, value, unit in decoded_values)
-            data_summary = ", ".join(f"{name}={value}{unit}" for name, value, unit in decoded_values)
+            display_value = lambda value, unit: str(value) if value == "--" else f"{value}{unit}"
+            details.extend(f"{name}={display_value(value, unit)}" for name, value, unit in decoded_values)
+            data_summary = ", ".join(f"{name}={display_value(value, unit)}" for name, value, unit in decoded_values)
+            if result.data_identifier == self._selected_di(silent=True):
+                for name, value, unit in decoded_values:
+                    variable = self.dlt_decoded_vars.get(name)
+                    if variable is not None:
+                        variable.set(f"解析值：{value}{unit if value != '--' else ''}")
         elif combined_payload is not None:
             data_summary = f"累计{len(combined_payload)}字节"
             details.append(f"累计数据={hex_bytes(combined_payload)}")
@@ -837,7 +894,7 @@ class SerialAssistant(tk.Tk):
             details.append(result_detail)
         if result.detail:
             details.append(result.detail)
-        values = (now, direction_text, hex_bytes(frame), address, action, target, data_summary, check, "；".join(details))
+        values = (now, direction_text, len(frame), hex_bytes(frame), address, action, target, data_summary, check, "；".join(details))
         if not result.valid:
             tags = ("bad",)
         elif result.direction == "从机→主机":
@@ -862,7 +919,7 @@ class SerialAssistant(tk.Tk):
         else:
             direction_text = "接收"
         values = (
-            now, direction_text, hex_bytes(data), "—", "未解析报文", "—", "—", "—",
+            now, direction_text, len(data), hex_bytes(data), "—", "未解析报文", "—", "—", "—",
             "未能组成完整的DL/T 645帧（原始数据已显示）",
         )
         self.tree.insert("", "end", values=values, tags=("bad",))
@@ -925,7 +982,12 @@ class SerialAssistant(tk.Tk):
             return
         dialog = tk.Toplevel(self)
         dialog.title("DL/T 645结构化数据详情")
-        dialog.geometry("720x360")
+        dialog.transient(self)
+        width, height = 720, 360
+        self.update_idletasks()
+        x = self.winfo_rootx() + max(0, (self.winfo_width() - width) // 2)
+        y = self.winfo_rooty() + max(0, (self.winfo_height() - height) // 2)
+        dialog.geometry(f"{width}x{height}+{x}+{y}")
         detail_tree = ttk.Treeview(dialog, columns=("field", "value", "unit"), show="headings")
         for name, heading, width in (("field", "字段", 240), ("value", "解析值", 360), ("unit", "单位", 80)):
             detail_tree.heading(name, text=heading)
@@ -933,6 +995,8 @@ class SerialAssistant(tk.Tk):
         for field_name, value, unit in self.dlt_row_details[selection[0]]:
             detail_tree.insert("", "end", values=(field_name, value, unit))
         detail_tree.pack(fill="both", expand=True, padx=10, pady=10)
+        dialog.lift()
+        dialog.focus_force()
 
     def _update_counter(self) -> None:
         if self.mode_var.get() == "代理监听":

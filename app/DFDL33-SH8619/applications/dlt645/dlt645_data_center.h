@@ -51,6 +51,7 @@ typedef struct
     uint8_t  DescribeType[16];//该类型的描述
 }ReadBlockDataTypeDef;
 
+
 extern uint8_t sg_dl645_addr_bcd[];
 
 uint8_t BCD2DEC(uint8_t ch);

@@ -15,7 +15,7 @@ typedef enum
 typedef enum
 {
     DLT645_CODEC_BCD = 0,       /* 无符号压缩BCD，低地址字节表示低位十进制数。 */
-    DLT645_CODEC_SIGNED_BCD,    /* 最高有效字节的最高位携带正负符号的压缩BCD。 */
+    DLT645_CODEC_SBCD,          /* 最高有效字节的最高位携带正负符号的压缩BCD。 */
     DLT645_CODEC_ASCII,         /* 按规范规定长度传输的ASCII字符数据。 */
     DLT645_CODEC_RAW,           /* 不做数值转换、按原始字节组织的数据。 */
     DLT645_CODEC_CUSTOM,        /* 日期、档案或混合数据块等由点处理函数自行编解码。 */
@@ -59,6 +59,19 @@ typedef struct Dlt645PointTypeDef
     Dlt645WriteHandler write;  /* 写入处理函数，负责校验业务值并提交实际控制。 */
     const char *name;          /* 用于运行日志和问题定位的点表英文名称。 */
 } Dlt645PointTypeDef;
+
+/* 读取指定逆变器或全部逆变器的三相电压数据块。 */
+rt_err_t dlt645_read_voltage(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+/* 读取指定逆变器或全部逆变器的三相电流数据块。 */
+rt_err_t dlt645_read_current(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+/* 读取指定逆变器或全部逆变器的总、A、B、C相有功功率数据块。 */
+rt_err_t dlt645_read_active_power(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+/* 读取指定逆变器或全部逆变器的总、A、B、C相无功功率数据块。 */
+rt_err_t dlt645_read_reactive_power(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+/* 读取指定逆变器或全部逆变器的总、A、B、C相功率因数数据块。 */
+rt_err_t dlt645_read_power_factor(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+/* 按电压、电流、有功、无功和功率因数顺序读取指定逆变器的全部变量。 */
+rt_err_t dlt645_read_all_variables(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
 
 /* 从实时数据中心读取指定逆变器运行状态并编码为规范规定的单字节BCD。 */
 rt_err_t dlt645_read_run_state(const Dlt645PointTypeDef *point,

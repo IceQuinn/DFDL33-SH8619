@@ -20,7 +20,7 @@
           "name": "status",
           "description": "逆变器运行状态原始值",
           "type": "hex",
-          "length": 2
+          "length": 1
         }
       ]
     },
@@ -29,6 +29,59 @@
         {"name": "voltage_a", "description": "A相电压", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "unit": "V"},
         {"name": "voltage_b", "description": "B相电压", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "unit": "V"},
         {"name": "voltage_c", "description": "C相电压", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "unit": "V"}
+      ]
+    },
+    "inverter_three_phase_current": {
+      "fields": [
+        {"name": "current_a", "description": "A相电流", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 2, "unit": "A"},
+        {"name": "current_b", "description": "B相电流", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 2, "unit": "A"},
+        {"name": "current_c", "description": "C相电流", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 2, "unit": "A"}
+      ]
+    },
+    "inverter_active_power": {
+      "fields": [
+        {"name": "active_total", "description": "瞬时总有功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "kW"},
+        {"name": "active_a", "description": "瞬时A相有功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "kW"},
+        {"name": "active_b", "description": "瞬时B相有功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "kW"},
+        {"name": "active_c", "description": "瞬时C相有功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "kW"}
+      ]
+    },
+    "inverter_reactive_power": {
+      "fields": [
+        {"name": "reactive_total", "description": "瞬时总无功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "unit": "kvar"},
+        {"name": "reactive_a", "description": "瞬时A相无功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "unit": "kvar"},
+        {"name": "reactive_b", "description": "瞬时B相无功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "unit": "kvar"},
+        {"name": "reactive_c", "description": "瞬时C相无功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "unit": "kvar"}
+      ]
+    },
+    "inverter_power_factor": {
+      "fields": [
+        {"name": "factor_total", "description": "总功率因数", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 3},
+        {"name": "factor_a", "description": "A相功率因数", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 3},
+        {"name": "factor_b", "description": "B相功率因数", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 3},
+        {"name": "factor_c", "description": "C相功率因数", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 3}
+      ]
+    },
+    "inverter_all_variables": {
+      "fields": [
+        {"name": "voltage_a", "description": "A相电压", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "unit": "V"},
+        {"name": "voltage_b", "description": "B相电压", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "unit": "V"},
+        {"name": "voltage_c", "description": "C相电压", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "unit": "V"},
+        {"name": "current_a", "description": "A相电流", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 2, "unit": "A"},
+        {"name": "current_b", "description": "B相电流", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 2, "unit": "A"},
+        {"name": "current_c", "description": "C相电流", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 2, "unit": "A"},
+        {"name": "active_total", "description": "瞬时总有功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "kW"},
+        {"name": "active_a", "description": "瞬时A相有功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "kW"},
+        {"name": "active_b", "description": "瞬时B相有功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "kW"},
+        {"name": "active_c", "description": "瞬时C相有功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "kW"},
+        {"name": "reactive_total", "description": "瞬时总无功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "unit": "kvar"},
+        {"name": "reactive_a", "description": "瞬时A相无功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "unit": "kvar"},
+        {"name": "reactive_b", "description": "瞬时B相无功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "unit": "kvar"},
+        {"name": "reactive_c", "description": "瞬时C相无功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "unit": "kvar"},
+        {"name": "factor_total", "description": "总功率因数", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 3},
+        {"name": "factor_a", "description": "A相功率因数", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 3},
+        {"name": "factor_b", "description": "B相功率因数", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 3},
+        {"name": "factor_c", "description": "C相功率因数", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 3}
       ]
     },
     "inverter_archive": {
@@ -249,6 +302,56 @@
       },
       "access": "read",
       "read_schema": "inverter_three_phase_voltage"
+    },
+    {
+      "id": "inverter_three_phase_current",
+      "category": "extended",
+      "prefix": "02E602",
+      "display": "02 E6 02 xx | 逆变器三相电流块",
+      "description": "逆变器三相电流块",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器三相电流块"}, "label_template": "逆变器{decimal}三相电流块"},
+      "access": "read",
+      "read_schema": "inverter_three_phase_current"
+    },
+    {
+      "id": "inverter_active_power",
+      "category": "extended",
+      "prefix": "02E603",
+      "display": "02 E6 03 xx | 逆变器瞬时有功功率块",
+      "description": "逆变器瞬时有功功率块",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器瞬时有功功率块"}, "label_template": "逆变器{decimal}瞬时有功功率块"},
+      "access": "read",
+      "read_schema": "inverter_active_power"
+    },
+    {
+      "id": "inverter_reactive_power",
+      "category": "extended",
+      "prefix": "02E604",
+      "display": "02 E6 04 xx | 逆变器瞬时无功功率块",
+      "description": "逆变器瞬时无功功率块",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器瞬时无功功率块"}, "label_template": "逆变器{decimal}瞬时无功功率块"},
+      "access": "read",
+      "read_schema": "inverter_reactive_power"
+    },
+    {
+      "id": "inverter_power_factor",
+      "category": "extended",
+      "prefix": "02E605",
+      "display": "02 E6 05 xx | 逆变器功率因数块",
+      "description": "逆变器功率因数块",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器功率因数块"}, "label_template": "逆变器{decimal}功率因数块"},
+      "access": "read",
+      "read_schema": "inverter_power_factor"
+    },
+    {
+      "id": "inverter_all_variables",
+      "category": "extended",
+      "prefix": "02E60F",
+      "display": "02 E6 0F xx | 逆变器所有变量数据块",
+      "description": "逆变器所有变量数据块",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "label_template": "逆变器{decimal}所有变量数据块"},
+      "access": "read",
+      "read_schema": "inverter_all_variables"
     },
     {
       "id": "inverter_status",

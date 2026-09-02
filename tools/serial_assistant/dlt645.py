@@ -373,6 +373,9 @@ def _apply_sign_bit(raw: bytearray, field: Mapping[str, Any]) -> bool:
 
 
 def decode_field(raw_value: bytes, definition: Mapping[str, Any]) -> Any:
+    # The 645 point table uses an all-FF field to mean unavailable/invalid data.
+    if raw_value and all(value == 0xFF for value in raw_value):
+        return "--"
     kind = str(definition.get("type", "hex")).lower()
     order = _byte_order(definition)
     logical = raw_value[::-1] if order == "little" else raw_value

@@ -135,7 +135,7 @@ int hw_adc_dma_tmr_init(void)
     wk_tmr3_init();
     return RT_EOK;
 }
-INIT_BOARD_EXPORT(hw_adc_dma_tmr_init);  // 板级初始化阶段执行
+INIT_BOARD_EXPORT(hw_adc_dma_tmr_init);
 
 
 

@@ -110,6 +110,7 @@ class DLT645Tests(unittest.TestCase):
         second = build_frame("123456789012", 0x93)
         parser = DLT645StreamParser()
         self.assertEqual(parser.feed(first[:7]), [])
+        self.assertEqual(parser.take_unparsed(), b"")
         frames = parser.feed(first[7:] + second)
         self.assertEqual(frames, [first, second])
 
@@ -164,6 +165,24 @@ class DLT645Tests(unittest.TestCase):
         ])
         self.assertEqual(self.registry.get("02E601FF").description, "全部逆变器三相电压块")
 
+        expected_variable_groups = {
+            "02E60201": ("逆变器1三相电流块", 9),
+            "02E60301": ("逆变器1瞬时有功功率块", 16),
+            "02E60401": ("逆变器1瞬时无功功率块", 16),
+            "02E60501": ("逆变器1功率因数块", 8),
+            "02E60F01": ("逆变器1所有变量数据块", 55),
+        }
+        for di, (description, payload_length) in expected_variable_groups.items():
+            definition = self.registry.get(di)
+            self.assertEqual(definition.description, description)
+            self.assertEqual(definition.access, "read")
+            self.assertEqual(sum(int(field["length"]) for field in definition.read_response["fields"]), payload_length)
+
+        signed_power = self.registry.decode("02E60301", bytes.fromhex(
+            "34 12 00 80 00 00 00 00 00 00 00 00 00 00 00 00"
+        ))
+        self.assertEqual(signed_power[0], ("瞬时总有功功率", "-0.1234", "kW"))
+
         first = self.registry.get("04E60401")
         last = self.registry.get("04E6040C")
         all_devices = self.registry.get("04E604FF")
@@ -172,7 +191,7 @@ class DLT645Tests(unittest.TestCase):
         self.assertEqual(all_devices.description, "全部逆变器运行状态")
         self.assertEqual(first.category, "extended")
         self.assertEqual(first.access, "read_write")
-        self.assertEqual(self.registry.encode("04E60401", {"status": "00 01"}), bytes.fromhex("00 01"))
+        self.assertEqual(self.registry.encode("04E60401", {"status": "01"}), bytes.fromhex("01"))
 
         archive = self.registry.encode("04E62101", {
             "address": "1", "brand": "TEST", "protocol_version": "12", "port": "端口2（RJ45-II）",
@@ -194,6 +213,13 @@ class DLT645Tests(unittest.TestCase):
         descriptor = encode_field({"data_type": "int_16", "byte_order": "CDAB", "decimals": "2"}, descriptor_field)
         self.assertEqual(descriptor, bytes.fromhex("02 12"))
         self.assertIn("int_16 / CDAB / 2位小数", decode_field(descriptor, descriptor_field))
+
+    def test_all_ff_field_is_displayed_as_invalid(self):
+        bcd_field = {"name": "voltage", "description": "电压", "type": "bcd", "length": 2,
+                     "byte_order": "little", "decimals": 1}
+        ascii_field = {"name": "brand", "description": "品牌", "type": "ascii", "length": 4}
+        self.assertEqual(decode_field(bytes.fromhex("FF FF"), bcd_field), "--")
+        self.assertEqual(decode_field(bytes.fromhex("FF FF FF FF"), ascii_field), "--")
 
 
 if __name__ == "__main__":
