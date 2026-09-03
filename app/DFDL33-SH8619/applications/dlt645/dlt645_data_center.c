@@ -48,10 +48,6 @@ static uint8_t g_dlt645_point_data[DLT645_POINT_DATA_MAX_LEN]; /* 保存读取�
 static const Dlt645PointTypeDef g_dlt645_points[] =
 {
     //DI3～DI1    DI0           读写权限            编码方式            DI0选择器                                    数据长度 定点数倍率 写入值下限 写入值上限 读取回调函数 写入回调函数 点表名称
-    // 额定有功功率Pn
-    {0x04E60100U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_BCD,    DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 4U,  10000, 0, 0, dlt645_read_Pn,             RT_NULL, "inverter Pn"}, /* DI0支持01～0C单台及FF全部，数据格式为XXXX.XXXX kW。 */
-    // 额定无功功率Qn
-    {0x04E60200U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_BCD,    DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 4U,  10000, 0, 0, dlt645_read_Qn,             RT_NULL, "inverter Qn"}, /* DI0支持01～0C单台及FF全部，数据格式为XXXX.XXXX kvar。 */
     // 三相电压数据库块
     {0x02E60100U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_BCD,    DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 6U,  10,    0, 0, dlt645_read_voltage,        RT_NULL, "inverter voltage"}, /* DI0支持01～0C单台及FF全部，数据格式为3×XXX.X。 */
     // 三相电流数据库块
@@ -64,20 +60,16 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
     {0x02E60500U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_BCD,    DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 8U,  1000,  0, 0, dlt645_read_power_factor,   RT_NULL, "inverter power factor"}, /* 数据按总、A、B、C排列，格式为4×X.XXX。 */
     // 全部变量数据库块
     {0x02E60F00U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_DEVICE,                       55U, 1,     0, 0, dlt645_read_all_variables,  RT_NULL, "inverter all variables"}, /* 规范仅允许01～0C，不接受DI0=FF聚合读取。 */
-    {
-        0x04E60400U,                                  /* DI3～DI1为04E604，DI0由请求选择逆变器。 */
-        0xFFFFFF00U,                                  /* 忽略DI0后匹配同一类12台逆变器运行状态点。 */
-        DLT645_ACCESS_READ | DLT645_ACCESS_WRITE,     /* 规范允许读取和写入运行状态。 */
-        DLT645_CODEC_BCD,                             /* 运行状态使用一字节无符号BCD传输。 */
-        DLT645_SELECTOR_DEVICE,                       /* 仅接受DI0为01～0C，不接受FF聚合写入。 */
-        1U,                                           /* 实际运行状态数据固定占1字节。 */
-        1,                                            /* 状态是枚举值，不需要小数倍率换算。 */
-        0,                                            /* 规范定义写入值最小为0，即开机。 */
-        1,                                            /* 规范定义写入值最大为1，即关机。 */
-        dlt645_read_run_state,                        /* 读取时从g_inv_data取得推导后的运行状态。 */
-        dlt645_write_run_state,                       /* 写入时提交开机或关机控制请求。 */
-        "inverter run state",                        /* 日志中显示的点表名称。 */
-    },
+
+    // 参数类
+    // 额定有功功率Pn
+    {0x04E60100U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_BCD,    DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 4U,  10000, 0, 0, dlt645_read_Pn,             RT_NULL, "inverter Pn"}, /* DI0支持01～0C单台及FF全部，数据格式为XXXX.XXXX kW。 */
+    // 额定无功功率Qn
+    {0x04E60200U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_BCD,    DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 4U,  10000, 0, 0, dlt645_read_Qn,             RT_NULL, "inverter Qn"}, /* DI0支持01～0C单台及FF全部，数据格式为XXXX.XXXX kvar。 */
+    // 光伏逆变器输出类型
+    {0x04E60300U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_RAW,    DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 1U,  1,     0, 0, dlt645_read_output_type,    RT_NULL, "inverter output type"}, /* DI0支持01～0C单台及FF全部，00表示单相、01表示三相。 */
+    // 运行状态读写
+    {0x04E60400U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE,DLT645_CODEC_BCD, DLT645_SELECTOR_DEVICE, 1U, 1, 0, 1, dlt645_read_run_state, dlt645_write_run_state, "inverter run state", },
 };
 
 // const ReadDataTypeDef ReadDataStruct[] = 

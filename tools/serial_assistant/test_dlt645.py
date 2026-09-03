@@ -167,6 +167,16 @@ class DLT645Tests(unittest.TestCase):
         self.assertEqual(len(self.registry.get("04E601FF").read_response["fields"]), 12)
         self.assertEqual(len(self.registry.get("04E602FF").read_response["fields"]), 12)
 
+        output_type = self.registry.get("04E60301")
+        daily_energy = self.registry.get("04E60A01")
+        self.assertEqual(output_type.description, "逆变器1输出类型")
+        self.assertEqual(self.registry.decode("04E60301", b"\x00"), [("输出类型", "单相", "")])
+        self.assertEqual(self.registry.decode("04E60301", b"\x01"), [("输出类型", "三相", "")])
+        self.assertEqual(self.registry.decode("04E60A01", bytes.fromhex("78 56 34 12")),
+                         [("日发电量", "123456.78", "kWh")])
+        self.assertEqual(len(self.registry.get("04E603FF").read_response["fields"]), 12)
+        self.assertEqual(len(self.registry.get("04E60AFF").read_response["fields"]), 12)
+
         voltage = self.registry.get("02E60101")
         self.assertEqual(voltage.description, "逆变器1三相电压块")
         self.assertEqual(voltage.access, "read")

@@ -322,6 +322,47 @@ rt_err_t dlt645_read_Qn(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *d
     return dlt645_read_nominal_power(point, id, data, capacity, data_len, DLT645_NOMINAL_POWER_QN);
 }
 
+/* 读取逆变器输出类型，协议不支持、档案为空、数据无效或数值超出规范范围时返回FF。 */
+rt_err_t dlt645_read_output_type(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data,
+                                 uint16_t capacity, uint16_t *data_len)
+{
+    uint8_t selector = (uint8_t)id; /* 数据标识最低字节用于选择单台逆变器或全部逆变器。 */
+    uint8_t first_archive;          /* 本次读取的首个档案槽位下标。 */
+    uint8_t archive_count;          /* 本次需要返回的输出类型字节数量。 */
+    uint8_t archive_offset;         /* 当前处理相对首档案的槽位偏移。 */
+
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL)) /* 公共接口的重要指针只在入口检查一次。 */
+    {
+        return -RT_EINVAL;
+    }
+    first_archive = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? 0U : (uint8_t)(selector - 1U); /* DI0已由分发层验证后转换为槽位下标。 */
+    archive_count = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? INVERTER_ARCHIVE_MAX_COUNT : 1U; /* FF读取全部12个槽位，其他选择器读取单台。 */
+    if(capacity < archive_count) /* 每台固定占1字节，缓冲区不足时禁止生成截断应答。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
+    {
+        uint8_t archive_index = first_archive + archive_offset; /* 当前读取的实际档案槽位下标。 */
+        Inv_Data_t *inv = Inv_Data_Get(archive_index); /* 取得输出类型实时数据缓存。 */
+        const Inv_Proto_t *protocol = Inv_Archive_Get_Protocol(archive_index); /* 取得输出类型寄存器支持信息。 */
+
+        if((inv == RT_NULL) || (protocol == RT_NULL) ||
+           (protocol->param.output_type.reg_addr == INVERTER_PROTOCOL_REGISTER_UNUSED) ||
+           (inv->param.output_type.valid == 0U) ||
+           ((inv->param.output_type.value != 0) && (inv->param.output_type.value != 1))) /* 仅完整有效且符合00/01定义的数据可以返回。 */
+        {
+            data[archive_offset] = 0xFFU; /* 不支持或无有效数据时按规范返回FF。 */
+            continue;
+        }
+        data[archive_offset] = (uint8_t)inv->param.output_type.value; /* 00表示单相，01表示三相。 */
+    }
+
+    *data_len = archive_count; /* 单台实际长度为1，全部逆变器实际长度为12。 */
+    return RT_EOK;
+}
+
 /* 检查无符号压缩BCD每个半字节是否位于0～9，发现A～F立即判定数据非法。 */
 static rt_bool_t dlt645_bcd_is_valid(const uint8_t *data, uint16_t data_len)
 {

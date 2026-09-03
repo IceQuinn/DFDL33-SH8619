@@ -34,6 +34,16 @@
         {"name": "rated_reactive_power", "description": "额定无功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "unit": "kvar"}
       ]
     },
+    "inverter_output_type": {
+      "fields": [
+        {"name": "output_type", "description": "输出类型", "type": "enum", "length": 1, "byte_order": "little", "values": {"0": "单相", "1": "三相"}}
+      ]
+    },
+    "inverter_daily_energy": {
+      "fields": [
+        {"name": "daily_energy", "description": "日发电量", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kWh"}
+      ]
+    },
     "inverter_three_phase_voltage": {
       "fields": [
         {"name": "voltage_a", "description": "A相电压", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "unit": "V"},
@@ -319,6 +329,28 @@
       "access": "read",
       "repeat_suffixes": {"FF": 12},
       "read_schema": "inverter_rated_reactive_power"
+    },
+    {
+      "id": "inverter_output_type",
+      "category": "extended",
+      "prefix": "04E603",
+      "display": "04 E6 03 xx | 逆变器输出类型",
+      "description": "逆变器输出类型",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器输出类型数据块"}, "label_template": "逆变器{decimal}输出类型"},
+      "access": "read",
+      "repeat_suffixes": {"FF": 12},
+      "read_schema": "inverter_output_type"
+    },
+    {
+      "id": "inverter_daily_energy",
+      "category": "extended",
+      "prefix": "04E60A",
+      "display": "04 E6 0A xx | 逆变器日发电量",
+      "description": "逆变器日发电量",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器日发电量数据块"}, "label_template": "逆变器{decimal}日发电量"},
+      "access": "read",
+      "repeat_suffixes": {"FF": 12},
+      "read_schema": "inverter_daily_energy"
     },
     {
       "id": "inverter_three_phase_voltage",
