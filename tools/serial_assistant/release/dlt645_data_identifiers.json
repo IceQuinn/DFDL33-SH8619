@@ -301,6 +301,7 @@
         "label_template": "逆变器{decimal}三相电压块"
       },
       "access": "read",
+      "repeat_suffixes": {"FF": 12},
       "read_schema": "inverter_three_phase_voltage"
     },
     {
@@ -311,6 +312,7 @@
       "description": "逆变器三相电流块",
       "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器三相电流块"}, "label_template": "逆变器{decimal}三相电流块"},
       "access": "read",
+      "repeat_suffixes": {"FF": 12},
       "read_schema": "inverter_three_phase_current"
     },
     {
@@ -321,6 +323,7 @@
       "description": "逆变器瞬时有功功率块",
       "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器瞬时有功功率块"}, "label_template": "逆变器{decimal}瞬时有功功率块"},
       "access": "read",
+      "repeat_suffixes": {"FF": 12},
       "read_schema": "inverter_active_power"
     },
     {
@@ -331,6 +334,7 @@
       "description": "逆变器瞬时无功功率块",
       "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器瞬时无功功率块"}, "label_template": "逆变器{decimal}瞬时无功功率块"},
       "access": "read",
+      "repeat_suffixes": {"FF": 12},
       "read_schema": "inverter_reactive_power"
     },
     {
@@ -341,6 +345,7 @@
       "description": "逆变器功率因数块",
       "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器功率因数块"}, "label_template": "逆变器{decimal}功率因数块"},
       "access": "read",
+      "repeat_suffixes": {"FF": 12},
       "read_schema": "inverter_power_factor"
     },
     {

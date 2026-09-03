@@ -321,11 +321,11 @@ rt_err_t dlt645_pack_base_end(uint8_t *buf, uint32_t *len)
 /* 按点表掩码查找请求数据标识，找到时返回静态描述项地址，未找到时返回RT_NULL。 */
 static const Dlt645PointTypeDef *dlt645_point_find(uint32_t id)
 {
-    uint16_t index; /* 当前遍历的统一点表下标。 */
+    uint16_t i; /* 当前遍历的统一点表下标。 */
 
-    for(index = 0U; index < countof(g_dlt645_points); ++index)
+    for(i = 0U; i < countof(g_dlt645_points); ++i)
     {
-        const Dlt645PointTypeDef *point = &g_dlt645_points[index]; /* 当前参与掩码匹配的点描述。 */
+        const Dlt645PointTypeDef *point = &g_dlt645_points[i]; /* 当前参与掩码匹配的点描述。 */
         if((id & point->mask) == (point->id & point->mask)) /* 请求标识的有效位与点表基准标识一致。 */
         {
             return point;
@@ -585,7 +585,6 @@ void dlt645_ctrl_read_data(uint8_t fun_c, uint32_t id,  uint8_t uart_no)
     const Dlt645PointTypeDef *point = dlt645_point_find(id); /* 统一点表中与请求数据标识匹配的描述项。 */
     uint16_t data_len = 0U; /* 读取回调实际写入静态业务数据缓冲区的字节数。 */
 
-    RT_UNUSED(fun_c); /* 调用入口当前固定传入读数据功能码，统一应答层直接使用协议常量。 */
     if(point != RT_NULL) /* 新点表匹配成功后不再进入旧点表兼容分支。 */
     {
         LOG_I("recv dlt645 read %s", point->name);

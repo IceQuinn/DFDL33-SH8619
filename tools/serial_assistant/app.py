@@ -289,6 +289,7 @@ class SerialAssistant(tk.Tk):
         fields_canvas = tk.Canvas(fields_container, highlightthickness=0)
         fields_scroll = ttk.Scrollbar(fields_container, orient="vertical", command=fields_canvas.yview)
         fields_canvas.configure(yscrollcommand=fields_scroll.set)
+        self.dlt_fields_canvas = fields_canvas
         fields_canvas.grid(row=0, column=0, sticky="nsew")
         fields_scroll.grid(row=0, column=1, sticky="ns")
         fields_container.rowconfigure(0, weight=1)
@@ -301,6 +302,9 @@ class SerialAssistant(tk.Tk):
         fields_canvas.bind(
             "<Configure>", lambda event: fields_canvas.itemconfigure(fields_window, width=event.width)
         )
+        self.bind_all("<MouseWheel>", self._scroll_fields_canvas, add="+")
+        self.bind_all("<Button-4>", lambda event: self._scroll_fields_canvas(event, -1), add="+")
+        self.bind_all("<Button-5>", lambda event: self._scroll_fields_canvas(event, 1), add="+")
         self.dlt_fields_hint = ttk.Label(self.dlt_fields_frame, text="选择数据标识后显示结构")
         self.dlt_fields_hint.grid(row=0, column=0, sticky="w")
 
@@ -310,6 +314,18 @@ class SerialAssistant(tk.Tk):
         self.dlt_frame_text = tk.Text(output, height=3, font=("Consolas", 11), undo=True)
         self.dlt_frame_text.pack(fill="both", expand=True)
         ttk.Button(output, text="发送此报文", command=self.send_dlt_generated).pack(side="right", pady=(5, 0))
+
+    def _scroll_fields_canvas(self, event, linux_units: int | None = None) -> str | None:
+        canvas = self.dlt_fields_canvas
+        inside = (
+            canvas.winfo_rootx() <= event.x_root < canvas.winfo_rootx() + canvas.winfo_width()
+            and canvas.winfo_rooty() <= event.y_root < canvas.winfo_rooty() + canvas.winfo_height()
+        )
+        if not inside:
+            return None
+        units = linux_units if linux_units is not None else (-1 if event.delta > 0 else 1)
+        canvas.yview_scroll(units, "units")
+        return "break"
 
     def refresh_ports(self) -> None:
         ports = [p.device for p in list_ports.comports()] if list_ports else []

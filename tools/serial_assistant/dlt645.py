@@ -573,6 +573,20 @@ class DataIdentifierRegistry:
                 raise ValueError(f"{direct_name}必须是对象或结构体名称")
             return value
 
+        def repeated_section(schema: Mapping[str, Any], count: int) -> Mapping[str, Any]:
+            if count <= 1:
+                return schema
+            expanded = dict(schema)
+            fields: list[dict[str, Any]] = []
+            for inverter_index in range(1, count + 1):
+                for original in schema.get("fields", []):
+                    copied = dict(original)
+                    copied["name"] = f"inverter{inverter_index}_{original['name']}"
+                    copied["description"] = f"逆变器{inverter_index}{original.get('description', original['name'])}"
+                    fields.append(copied)
+            expanded["fields"] = fields
+            return expanded
+
         definitions: list[DataIdentifierDefinition] = []
         seen: set[str] = set()
         for index, raw in enumerate(document.get("data_identifiers", []), 1):
@@ -633,6 +647,7 @@ class DataIdentifierRegistry:
             except (KeyError, ValueError, TypeError) as exc:
                 raise ValueError(f"第{group_index}个数据标识组配置无效：{exc}") from exc
             labels = {str(key).upper(): str(value) for key, value in suffix_config.get("labels", {}).items()}
+            repeat_suffixes = {str(key).upper(): int(value) for key, value in raw.get("repeat_suffixes", {}).items()}
             template = str(suffix_config.get("label_template", group_description + "{decimal}"))
             for suffix in dict.fromkeys(suffixes):
                 di = prefix + suffix
@@ -640,8 +655,10 @@ class DataIdentifierRegistry:
                     raise ValueError(f"数据标识{di}重复")
                 seen.add(di)
                 description = labels.get(suffix, template.format(decimal=int(suffix, 16), hex=suffix, suffix=suffix))
+                item_read_response = repeated_section(read_response, repeat_suffixes.get(suffix, 1))
+                item_write_request = repeated_section(write_request, repeat_suffixes.get(suffix, 1))
                 definitions.append(DataIdentifierDefinition(
-                    di, description, access, read_response, write_request, category,
+                    di, description, access, item_read_response, item_write_request, category,
                     category_map.get(category, category), group_id,
                     str(raw.get("display", f"{prefix[:2]} {prefix[2:4]} {prefix[4:]} xx | {group_description}")), suffix,
                 ))

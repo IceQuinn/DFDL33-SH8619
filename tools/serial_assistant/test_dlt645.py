@@ -164,6 +164,13 @@ class DLT645Tests(unittest.TestCase):
             ("A相电压", "220.5", "V"), ("B相电压", "230.1", "V"), ("C相电压", "240", "V"),
         ])
         self.assertEqual(self.registry.get("02E601FF").description, "全部逆变器三相电压块")
+        all_voltage = self.registry.get("02E601FF")
+        self.assertEqual(sum(int(field["length"]) for field in all_voltage.read_response["fields"]), 72)
+        all_voltage_payload = bytes.fromhex("05 22 01 23 00 24") + b"\xFF" * 66
+        all_voltage_values = self.registry.decode("02E601FF", all_voltage_payload)
+        self.assertEqual(all_voltage_values[0], ("逆变器1A相电压", "220.5", "V"))
+        self.assertEqual(all_voltage_values[3], ("逆变器2A相电压", "--", "V"))
+        self.assertEqual(len(all_voltage_values), 36)
 
         expected_variable_groups = {
             "02E60201": ("逆变器1三相电流块", 9),

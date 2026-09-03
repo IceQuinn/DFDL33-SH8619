@@ -206,10 +206,9 @@ static rt_err_t dlt645_read_variables(const Dlt645PointTypeDef *point, uint32_t 
         Inv_Data_t *inv = Inv_Data_Get(archive_index); /* 通过档案公共接口取得实时数据。 */
         const Inv_Proto_t *protocol = Inv_Archive_Get_Protocol(archive_index); /* 取得源定点值对应的小数位配置。 */
 
-        if((inv == RT_NULL) || (protocol == RT_NULL)) /* 聚合读取需保留槽位，失效档案整块填FF。 */
+        if((inv == RT_NULL) || (protocol == RT_NULL)) /* 下挂逆变器为空或未匹配协议时，当前逆变器的全部读取数据统一填FF。 */
         {
-            if(archive_count == 1U) return -RT_ERROR; /* 单台档案无效时由上层返回无请求数据异常。 */
-            rt_memset(&data[offset], 0xFF, point->data_len); /* 聚合块使用FF保持每台固定偏移。 */
+            rt_memset(&data[offset], 0xFF, point->data_len); /* 单台和聚合读取都返回固定长度，避免空档案触发645异常应答。 */
             offset += point->data_len;
             continue;
         }

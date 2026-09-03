@@ -177,8 +177,8 @@ Inv_Mfr_Id_t g_inv_mfr[] = {    // 厂家信息
     {INV_MFR_HUAWEI_2,  {"HUAWEI",                  0x0200}},   // 华为V2.0
     {INV_MFR_GOODWE_1,  {"GOODWE_SMT/GT",           0x0100}},   // 固德威SMT60K G2/SMT80K/GT系列
     {INV_MFR_GOODWE_2,  {"GOODWE_SDT",              0x0100}},   // 固德威XS G3/DNS G3/MS G3/SDT G3/SDT G4系列
-    {INV_MFR_GROWATT_1, {"GROWATT",                 0x0100}},   // 古瑞瓦特 MAX/MID/MAC系列
-    {INV_MFR_GROWATT_2, {"GROWATT",                 0x0100}},
+    {INV_MFR_GROWATT_1, {"GROWATT1",                0x0100}},   // 古瑞瓦特 MAX/MID/MAC系列
+    {INV_MFR_GROWATT_2, {"GROWATT2",                0x0100}},
     {INV_MFR_SAJ_1,     {"SAJ_R5 PLUS",             0x0100}},   // 三晶R5 PLUS系列
     {INV_MFR_SAJ_2,     {"SAJ_R6/C6",               0x0100}},   // 三晶R6 17-50K和C6系列
     {INV_MFR_SAJ_3,     {"SAJ_R6",                  0x0100}},   // 三晶R6 3-15K系列
