@@ -69,7 +69,7 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
     // 光伏逆变器输出类型
     {0x04E60300U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_RAW,    DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 1U,  1,     0, 0, dlt645_read_output_type,    RT_NULL, "inverter output type"}, /* DI0支持01～0C单台及FF全部，00表示单相、01表示三相。 */
     // 运行状态读写
-    {0x04E60400U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE,DLT645_CODEC_BCD, DLT645_SELECTOR_DEVICE, 1U, 1, 0, 1, dlt645_read_run_state, dlt645_write_run_state, "inverter run state", },
+    {0x04E60400U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE,DLT645_CODEC_BCD, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 1U, 1, 0, 1, dlt645_read_run_state, dlt645_write_run_state, "inverter run state", }, /* DI0为FF时读取或逐个写入全部12台运行状态。 */
 };
 
 // const ReadDataTypeDef ReadDataStruct[] = 
@@ -640,12 +640,19 @@ void dlt645_ctrl_write_data(uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t
            (point->write != RT_NULL) &&
            dlt645_point_selector_valid(point, id)) /* 点必须具备写权限、有效写回调和合法DI0选择器。 */
         {
-            uint16_t expected_len = DLT645_WRITE_SECURITY_LEN + point->data_len; /* p_buf应包含8字节安全字段和固定长度业务数据。 */
+            uint16_t business_len = point->data_len; /* 普通设备点使用点表中配置的单台业务长度。 */
+            uint16_t expected_len;                  /* 包含8字节安全字段后的完整写数据长度。 */
+
+            if(((point->selector & DLT645_SELECTOR_ALL) != 0U) && ((uint8_t)id == 0xFFU)) /* 聚合写入按12个固定档案槽位扩展业务长度。 */
+            {
+                business_len *= INVERTER_ARCHIVE_MAX_COUNT;
+            }
+            expected_len = DLT645_WRITE_SECURITY_LEN + business_len;
 
             /* p_buf由解析层完成减0x33，内容为密码、操作者代码和实际写数据。 */
             if((p_buf != RT_NULL) && (len == expected_len) &&
                (point->write(point, id, &p_buf[DLT645_WRITE_SECURITY_LEN],
-                             point->data_len) == RT_EOK)) /* 指针、总长度和业务写入结果全部有效才正常应答。 */
+                             business_len) == RT_EOK)) /* 指针、总长度和全部业务写入结果有效才正常应答。 */
             {
                 err_code = E_D07_W_OK; /* 设备已返回成功结果，回复正常写数据应答。 */
             }

@@ -79,7 +79,6 @@ static Time_Ctrl_Context_t g_time_ctrl_contexts[INVERTER_ARCHIVE_MAX_COUNT];
 static volatile rt_bool_t g_time_ctrl_initialized;
 
 /* 线程生成的控制流水号，所有档案共用且只在线程中递增。 */
-static uint32_t g_time_ctrl_request_id;
 
 /* 读取并检查一台逆变器指定有功控制方式的协议配置。 */
 static rt_bool_t time_ctrl_get_control_config(uint8_t archive_index,
@@ -602,7 +601,7 @@ static rt_err_t time_ctrl_submit(uint8_t archive_index,
     }
 
     rt_memset(&request, 0, sizeof(request));             /* 清零请求中未显式赋值的保留字段。 */
-    request.request_id = ++g_time_ctrl_request_id;      /* 为本次异步控制分配递增请求编号。 */
+    request.request_id = Inv_Control_Allocate_Request_Id(); /* 从公共分配器取得跨控制来源唯一的请求编号。 */
     request.archive_index = archive_index;              /* 指定本次控制对应的档案。 */
 
     /* 恢复动作根据原控制方式优先选择额定功率数值恢复或100%百分比恢复。 */

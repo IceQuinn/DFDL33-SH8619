@@ -406,67 +406,111 @@ static rt_err_t dlt645_bcd_decode_u32(const uint8_t *data, uint16_t data_len, in
     return RT_EOK;
 }
 
-/* 读取DI0指定逆变器的推导运行状态，按规范编码为00开机或01关机。 */
+/* 读取DI0指定逆变器或全部逆变器的推导运行状态，空档案和未知状态使用FF占位。 */
 rt_err_t dlt645_read_run_state(const Dlt645PointTypeDef *point,
                                uint32_t id,
                                uint8_t *data,
                                uint16_t capacity,
                                uint16_t *data_len)
 {
-    uint8_t archive_index = (uint8_t)id - 1U;       /* 已校验的DI0从1起始，减1转换为0～11档案下标。 */
-    Inv_Data_t *inv_data = Inv_Data_Get(archive_index); /* 通过公共接口取得对应档案实时数据，避免直接索引全局数组。 */
+    uint8_t selector = (uint8_t)id; /* 数据标识最低字节用于选择单台逆变器或全部逆变器。 */
+    uint8_t first_archive;          /* 本次读取的首个档案槽位下标。 */
+    uint8_t archive_count;          /* 本次需要返回的运行状态字节数量。 */
+    uint8_t archive_offset;         /* 当前处理相对首档案的槽位偏移。 */
 
-    RT_UNUSED(point); /* 当前运行状态读取不需要倍率等描述字段，保留参数以统一回调签名。 */
-    if((inv_data == RT_NULL) || (inv_data->run_state == INV_RUN_STATE_UNKNOWN)) /* 档案无效或状态无法推导时不返回伪造值。 */
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL)) /* 公共接口的重要指针只在入口检查一次。 */
     {
-        return -RT_ERROR;
+        return -RT_EINVAL;
     }
-    if(capacity < 1U) /* 输出缓冲区必须能容纳规范规定的一字节状态。 */
+    first_archive = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? 0U : (uint8_t)(selector - 1U); /* DI0已由分发层验证后转换为槽位下标。 */
+    archive_count = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? INVERTER_ARCHIVE_MAX_COUNT : 1U; /* FF返回全部12台，普通DI0只返回单台。 */
+    if(capacity < archive_count) /* 每台运行状态固定占1字节，缓冲区不足时禁止截断返回。 */
     {
         return -RT_EINVAL;
     }
 
-    data[0] = (inv_data->run_state == INV_RUN_STATE_ON) ? 0x00U : 0x01U; /* 规范定义0为开机、1为关机。 */
-    *data_len = 1U; /* 告知统一组帧层本次生成一个业务数据字节。 */
+    for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
+    {
+        Inv_Data_t *inv_data = Inv_Data_Get(first_archive + archive_offset); /* 通过公共接口取得当前档案实时数据。 */
+
+        if((inv_data == RT_NULL) || (inv_data->run_state == INV_RUN_STATE_UNKNOWN)) /* 空档案或无法推导状态时返回FF。 */
+        {
+            data[archive_offset] = 0xFFU;
+        }
+        else if(inv_data->run_state == INV_RUN_STATE_ON) /* 规范定义00表示开机。 */
+        {
+            data[archive_offset] = 0x00U;
+        }
+        else /* 剩余有效枚举为关机状态，规范编码为01。 */
+        {
+            data[archive_offset] = 0x01U;
+        }
+    }
+    *data_len = archive_count; /* 单台返回1字节，DI0为FF时返回12字节。 */
     return RT_EOK;
 }
 
-/* 解码并校验运行状态写数据，提交对应档案的开关机控制并等待最终执行结果。 */
+/* 提交一台逆变器的开关机请求并按唯一流水号等待其最终结果。 */
+static rt_err_t dlt645_control_run_state(uint8_t archive_index, int32_t value)
+{
+    Inv_Control_Request_t request;    /* 即将提交到目标档案所在端口的控制请求。 */
+    Inv_Control_Result_Info_t result; /* 与本次唯一流水号对应的最终控制结果。 */
+    rt_err_t control_result;          /* 控制提交或等待结果接口的返回码。 */
+
+    request.request_id = Inv_Control_Allocate_Request_Id(); /* 使用公共分配器避免与其他控制来源发生流水号冲突。 */
+    request.archive_index = archive_index; /* 保存当前需要控制的固定档案槽位。 */
+    request.value = value; /* 保存645状态值，便于控制结果日志关联。 */
+    request.type = (value == 0) ? INV_CONTROL_POWER_ON : INV_CONTROL_POWER_OFF; /* 0执行开机，1执行关机。 */
+
+    control_result = Inv_Control_Submit(&request); /* 将请求提交到档案所属下行端口。 */
+    if(control_result != RT_EOK) /* 无效档案、非工作时段开机或队列不可用时直接失败。 */
+    {
+        return control_result;
+    }
+    control_result = Inv_Control_Get_Result_By_Id(request.request_id, &result, 1000); /* 暂按现有要求最多等待1000个系统tick。 */
+    if((control_result != RT_EOK) || (result.result != INV_CONTROL_RESULT_OK)) /* 超时或设备最终控制失败均返回错误。 */
+    {
+        return -RT_ERROR;
+    }
+    return RT_EOK;
+}
+
+/* 解码并校验单台或12台运行状态写数据，全部目标控制成功后才返回成功。 */
 rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
                                 uint32_t id,
                                 const uint8_t *data,
                                 uint16_t data_len)
 {
-    int32_t value;                    /* 从一字节BCD解码得到的运行状态枚举值。 */
-    Inv_Control_Request_t request;    /* 即将提交到逆变器控制队列的完整请求。 */
-    Inv_Control_Result_Info_t result; /* 控制队列返回的最终执行结果和关联请求信息。 */
-    rt_err_t control_result;          /* 控制提交或等待结果接口的直接返回码。 */
+    uint8_t selector = (uint8_t)id; /* DI0等于FF时数据内包含12台控制值，否则只包含单台控制值。 */
+    uint8_t first_archive;          /* 本次控制的首个档案槽位下标。 */
+    uint8_t archive_count;          /* 本次需要逐个执行的控制数量。 */
+    uint8_t archive_offset;         /* 当前校验或控制相对首档案的偏移。 */
+    int32_t values[INVERTER_ARCHIVE_MAX_COUNT]; /* 先完整校验后保存的12个状态值，避免格式错误时产生部分控制。 */
+    rt_bool_t all_success = RT_TRUE; /* 只有每个档案最终控制成功时才保持为真。 */
 
-    if((data_len != point->data_len) ||
-       (dlt645_bcd_decode_u32(data, data_len, &value) != RT_EOK) ||
-       (value < point->write_min) || (value > point->write_max)) /* 长度、BCD格式和值域任一非法都拒绝执行控制。 */
+    first_archive = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? 0U : (uint8_t)(selector - 1U); /* DI0已由上层验证后转换为槽位下标。 */
+    archive_count = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? INVERTER_ARCHIVE_MAX_COUNT : 1U; /* FF要求逐个控制全部12个档案。 */
+    if(data_len != (uint16_t)(point->data_len * archive_count)) /* 单台必须1字节，全部控制必须包含12字节。 */
     {
         return -RT_EINVAL;
     }
 
-    request.request_id = id; /* 使用完整数据标识关联异步控制请求和返回结果。 */
-    request.archive_index = (uint8_t)id - 1U; /* 已校验的DI0转换为0～11档案下标。 */
-    request.value = value; /* 保存原始状态值，便于结果日志和后续扩展使用。 */
-    request.type = (value == 0) ? INV_CONTROL_POWER_ON : INV_CONTROL_POWER_OFF; /* 严格遵循规范0开机、1关机。 */
-
-    control_result = Inv_Control_Submit(&request); /* 将请求提交到目标下行端口的高优先级控制队列。 */
-    if(control_result != RT_EOK) /* 提交失败说明档案、协议或控制队列当前不可用。 */
+    for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
-        return control_result;
+        if((dlt645_bcd_decode_u32(&data[archive_offset], point->data_len, &values[archive_offset]) != RT_EOK) ||
+           (values[archive_offset] < point->write_min) ||
+           (values[archive_offset] > point->write_max)) /* 12个值必须全部为合法BCD且只能取0或1。 */
+        {
+            return -RT_EINVAL;
+        }
     }
 
-    control_result = Inv_Control_Get_Result(&result, 1000); /* 最多等待1000个系统tick取得设备最终应答。 */
-    if((control_result != RT_EOK) ||
-       (result.request.request_id != request.request_id) ||
-       (result.result != INV_CONTROL_RESULT_OK)) /* 超时、结果不匹配或设备控制失败均生成645异常应答。 */
+    for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
-        return -RT_ERROR;
+        if(dlt645_control_run_state(first_archive + archive_offset, values[archive_offset]) != RT_EOK) /* 无效档案或控制失败会使最终645应答为错误。 */
+        {
+            all_success = RT_FALSE;
+        }
     }
-
-    return RT_EOK;
+    return (all_success == RT_TRUE) ? RT_EOK : -RT_ERROR; /* 仅全部12台或目标单台成功时正常应答。 */
 }

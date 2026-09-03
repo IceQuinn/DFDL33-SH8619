@@ -220,6 +220,21 @@ class DLT645Tests(unittest.TestCase):
         self.assertEqual(first.category, "extended")
         self.assertEqual(first.access, "read_write")
         self.assertEqual(self.registry.encode("04E60401", {"status": "01"}), bytes.fromhex("01"))
+        self.assertEqual(self.registry.decode("04E60401", b"\x00"), [("运行状态", "开机", "")])
+        self.assertEqual(self.registry.decode("04E60401", b"\x01"), [("运行状态", "关机", "")])
+        all_status = self.registry.decode("04E604FF", b"\x00\x01" + b"\xFF" * 10)
+        self.assertEqual(len(all_status), 12)
+        self.assertEqual(all_status[0], ("逆变器1运行状态", "开机", ""))
+        self.assertEqual(all_status[1], ("逆变器2运行状态", "关机", ""))
+        self.assertEqual(all_status[2], ("逆变器3运行状态", "--", ""))
+        all_status_write = {
+            f"inverter{index}_status": "开机" if index % 2 else "关机"
+            for index in range(1, 13)
+        }
+        self.assertEqual(
+            self.registry.encode("04E604FF", all_status_write),
+            bytes.fromhex("00 01 00 01 00 01 00 01 00 01 00 01"),
+        )
 
         archive = self.registry.encode("04E62101", {
             "address": "1", "brand": "TEST", "protocol_version": "12", "port": "端口2（RJ45-II）",

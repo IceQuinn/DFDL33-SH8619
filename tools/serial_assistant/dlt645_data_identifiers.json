@@ -18,9 +18,11 @@
       "fields": [
         {
           "name": "status",
-          "description": "逆变器运行状态原始值",
-          "type": "hex",
-          "length": 1
+          "description": "运行状态",
+          "type": "enum",
+          "length": 1,
+          "byte_order": "little",
+          "values": {"0": "开机", "1": "关机"}
         }
       ]
     },
@@ -435,6 +437,8 @@
         "label_template": "逆变器{decimal}运行状态"
       },
       "access": "read_write",
+      "repeat_read_suffixes": {"FF": 12},
+      "repeat_write_suffixes": {"FF": 12},
       "read_schema": "inverter_status",
       "write_schema": "inverter_status"
     },

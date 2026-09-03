@@ -437,7 +437,7 @@ void Inv_Control_Test(void)
     Inv_Control_Result_Info_t result; /* 等待信号量后取得的异步控制结果。 */
     rt_err_t control_result;          /* 控制提交或等待结果接口的返回码。 */
 
-    request.request_id = 2U;
+    request.request_id = Inv_Control_Allocate_Request_Id(); /* 调试控制也使用公共唯一流水号，避免与645及时段控制结果混淆。 */
     request.archive_index = 0U;
     request.type = INV_CONTROL_POWER_ON;
     request.value = 0; /* 开机使用协议库默认写入值，该字段不会参与组帧。 */
@@ -451,7 +451,7 @@ void Inv_Control_Test(void)
     }
 
     /* MSH测试线程最多等待3秒，结果生成后信号量会立即唤醒本线程。 */
-    control_result = Inv_Control_Get_Result(&result, 3000); /* 最多等待3秒取得最早完成的控制结果。 */
+    control_result = Inv_Control_Get_Result_By_Id(request.request_id, &result, 3000); /* 最多等待3秒取得本次调试控制结果。 */
     /* 等待超时、信号量错误或结果接口失败时结束本次测试。 */
     if(control_result != RT_EOK) {
         rt_kprintf("%s request[%d] wait failed, result[%d]\n", get_char_time(), request.request_id, control_result);

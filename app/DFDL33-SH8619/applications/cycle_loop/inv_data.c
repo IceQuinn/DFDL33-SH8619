@@ -138,6 +138,7 @@ static Inv_Control_Result_Info_t g_inv_control_results[INV_CONTROL_RESULT_QUEUE_
 static uint8_t g_inv_control_result_read_index;  /* 下一项待取控制结果下标。 */
 static uint8_t g_inv_control_result_write_index; /* 下一项待写控制结果下标。 */
 static uint8_t g_inv_control_result_count;       /* 当前结果队列中的有效结果数量。 */
+static uint32_t g_inv_control_request_id;        /* 所有控制请求共用的递增唯一流水号。 */
 static struct rt_semaphore g_inv_control_result_sem; /* 控制结果到达时唤醒等待结果的上层线程。 */
 static rt_bool_t g_inv_control_result_sem_initialized; /* RT_TRUE表示结果信号量已经初始化。 */
 static volatile rt_bool_t g_inv_data_initialized; /* RT_TRUE表示端口上下文已经完成初始化。 */
@@ -236,7 +237,7 @@ static void inv_data_update_run_states(rt_tick_t now)
             data->run_state = INV_RUN_STATE_OFF;
         }
         else {
-            data->run_state = INV_RUN_STATE_UNKNOWN;
+            data->run_state = INV_RUN_STATE_OFF; /* 总有功功率等于5W时归入关机状态，避免产生不连续的未知点。 */
         }
     }
 }
@@ -1957,9 +1958,9 @@ rt_err_t Inv_Control_Submit(const Inv_Control_Request_t *request)
     level = rt_hw_interrupt_disable(); /* 防止提交线程同时修改队列计数和读写下标。 */
 
     /* 非工作时段拒绝新的控制请求，调用方收到错误后不需要等待异步控制结果。 */
-    if(g_inv_data_work_enabled != RT_TRUE) {
+    if((g_inv_data_work_enabled != RT_TRUE) && (request->type != INV_CONTROL_POWER_OFF)) {
         rt_hw_interrupt_enable(level);
-        return -RT_EBUSY;
+        return -RT_EBUSY; /* 非工作时段仅允许关机，开机及功率调节仍拒绝提交。 */
     }
 
     /* 每个端口最多暂存4项控制请求，队列满时由调用方稍后重试。 */
@@ -2016,6 +2017,97 @@ rt_err_t Inv_Control_Get_Result(Inv_Control_Result_Info_t *result, int32_t timeo
     --g_inv_control_result_count;
     rt_hw_interrupt_enable(level);
     return RT_EOK;
+}
+
+/* 在临界区内分配唯一请求流水号，发生uint32_t回绕时跳过保留值0。 */
+uint32_t Inv_Control_Allocate_Request_Id(void)
+{
+    rt_base_t level;   /* 更新跨线程流水号前保存的中断级别。 */
+    uint32_t request_id; /* 本次分配给调用方的非零请求流水号。 */
+
+    level = rt_hw_interrupt_disable(); /* 防止多个控制来源取得相同流水号。 */
+    ++g_inv_control_request_id;
+    if(g_inv_control_request_id == 0U) /* 回绕后的0不作为有效流水号使用。 */
+    {
+        ++g_inv_control_request_id;
+    }
+    request_id = g_inv_control_request_id;
+    rt_hw_interrupt_enable(level);
+    return request_id;
+}
+
+/* 按流水号等待控制结果，查找过程中保留队列内其他调用方的结果及原有先后顺序。 */
+rt_err_t Inv_Control_Get_Result_By_Id(uint32_t request_id, Inv_Control_Result_Info_t *result, int32_t timeout)
+{
+    rt_tick_t start_tick = rt_tick_get(); /* 有限等待时用于计算已经消耗的总等待tick。 */
+
+    if((request_id == 0U) || (result == RT_NULL) || (timeout < RT_WAITING_FOREVER)) /* 流水号、输出指针和等待参数必须有效。 */
+    {
+        return -RT_EINVAL;
+    }
+    if(g_inv_control_result_sem_initialized != RT_TRUE) /* 结果信号量尚未初始化时不能阻塞等待。 */
+    {
+        return -RT_EBUSY;
+    }
+
+    while(1)
+    {
+        int32_t wait_ticks = timeout; /* 本轮等待结果信号量允许使用的剩余tick。 */
+        rt_err_t wait_result;         /* 本轮等待结果信号量的RT-Thread返回码。 */
+        rt_base_t level;              /* 搜索及移动公共结果队列前保存的中断级别。 */
+        uint8_t logical_index;        /* 从结果队列读位置开始计算的逻辑下标。 */
+        uint8_t found_index = INV_CONTROL_RESULT_QUEUE_SIZE; /* 匹配结果的逻辑下标，初值表示未找到。 */
+
+        if(timeout > 0) /* 大于0的有限等待需要扣除前几轮搜索消耗的时间，0保留为非阻塞查询。 */
+        {
+            rt_tick_t elapsed = rt_tick_get() - start_tick; /* RT-Thread无符号tick差支持正常回绕。 */
+            if(elapsed >= (rt_tick_t)timeout) /* 总等待时间达到上限后不再继续搜索。 */
+            {
+                return -RT_ETIMEOUT;
+            }
+            wait_ticks = (int32_t)((rt_tick_t)timeout - elapsed);
+        }
+
+        wait_result = rt_sem_take(&g_inv_control_result_sem, wait_ticks); /* 每个队列结果对应一个信号量计数。 */
+        if(wait_result != RT_EOK)
+        {
+            return wait_result;
+        }
+
+        level = rt_hw_interrupt_disable(); /* 保证搜索和删除指定结果期间队列不会变化。 */
+        for(logical_index = 0U; logical_index < g_inv_control_result_count; ++logical_index)
+        {
+            uint8_t physical_index = (g_inv_control_result_read_index + logical_index) % INV_CONTROL_RESULT_QUEUE_SIZE; /* 将逻辑位置转换为环形数组下标。 */
+            if(g_inv_control_results[physical_index].request.request_id == request_id) /* 只取当前调用方等待的结果。 */
+            {
+                found_index = logical_index;
+                *result = g_inv_control_results[physical_index];
+                break;
+            }
+        }
+
+        if(found_index < g_inv_control_result_count) /* 找到结果后将后续元素前移一位以保持其他结果顺序。 */
+        {
+            for(logical_index = found_index; (uint8_t)(logical_index + 1U) < g_inv_control_result_count; ++logical_index)
+            {
+                uint8_t destination = (g_inv_control_result_read_index + logical_index) % INV_CONTROL_RESULT_QUEUE_SIZE; /* 当前需要填补的环形位置。 */
+                uint8_t source = (g_inv_control_result_read_index + logical_index + 1U) % INV_CONTROL_RESULT_QUEUE_SIZE; /* 后一项结果的环形位置。 */
+                g_inv_control_results[destination] = g_inv_control_results[source];
+            }
+            g_inv_control_result_write_index = (g_inv_control_result_write_index + INV_CONTROL_RESULT_QUEUE_SIZE - 1U) % INV_CONTROL_RESULT_QUEUE_SIZE; /* 写位置随队尾前移一格。 */
+            --g_inv_control_result_count;
+            rt_hw_interrupt_enable(level);
+            return RT_EOK;
+        }
+        rt_hw_interrupt_enable(level);
+
+        rt_sem_release(&g_inv_control_result_sem); /* 本次取得的是其他请求的信号，归还计数供对应调用方消费。 */
+        if(timeout == 0) /* 非阻塞查询没有匹配结果时立即返回。 */
+        {
+            return -RT_ETIMEOUT;
+        }
+        rt_thread_mdelay(1U); /* 避免其他结果长期存在时当前线程持续空转占用CPU。 */
+    }
 }
 
 /* 按档案槽位获取实时数据，无效档案或越界时返回RT_NULL。 */

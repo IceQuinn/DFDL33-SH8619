@@ -648,6 +648,10 @@ class DataIdentifierRegistry:
                 raise ValueError(f"第{group_index}个数据标识组配置无效：{exc}") from exc
             labels = {str(key).upper(): str(value) for key, value in suffix_config.get("labels", {}).items()}
             repeat_suffixes = {str(key).upper(): int(value) for key, value in raw.get("repeat_suffixes", {}).items()}
+            repeat_read_suffixes = dict(repeat_suffixes)
+            repeat_read_suffixes.update({str(key).upper(): int(value) for key, value in raw.get("repeat_read_suffixes", {}).items()})
+            repeat_write_suffixes = dict(repeat_suffixes)
+            repeat_write_suffixes.update({str(key).upper(): int(value) for key, value in raw.get("repeat_write_suffixes", {}).items()})
             template = str(suffix_config.get("label_template", group_description + "{decimal}"))
             for suffix in dict.fromkeys(suffixes):
                 di = prefix + suffix
@@ -655,8 +659,8 @@ class DataIdentifierRegistry:
                     raise ValueError(f"数据标识{di}重复")
                 seen.add(di)
                 description = labels.get(suffix, template.format(decimal=int(suffix, 16), hex=suffix, suffix=suffix))
-                item_read_response = repeated_section(read_response, repeat_suffixes.get(suffix, 1))
-                item_write_request = repeated_section(write_request, repeat_suffixes.get(suffix, 1))
+                item_read_response = repeated_section(read_response, repeat_read_suffixes.get(suffix, 1))
+                item_write_request = repeated_section(write_request, repeat_write_suffixes.get(suffix, 1))
                 definitions.append(DataIdentifierDefinition(
                     di, description, access, item_read_response, item_write_request, category,
                     category_map.get(category, category), group_id,
