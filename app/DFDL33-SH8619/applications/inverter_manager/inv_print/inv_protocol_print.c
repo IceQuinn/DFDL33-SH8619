@@ -177,8 +177,8 @@ static void inv_proto_print_one(uint16_t proto_number, uint16_t valid_number, co
 
     inv_proto_print_read_table_header("[parameter]");
     inv_proto_print_reg("device_no", &proto->param.dev_no);
-    inv_proto_print_reg("pv_rated_p", &proto->param.pv_rated_active_pwr);
-    inv_proto_print_reg("pv_rated_q", &proto->param.pv_rated_reactive_pwr);
+    inv_proto_print_reg("Pn", &proto->param.Pn);
+    inv_proto_print_reg("Qn", &proto->param.Qn);
     inv_proto_print_reg("set_voltage", &proto->param.set_volt);
     inv_proto_print_reg("output_type", &proto->param.output_type);
 

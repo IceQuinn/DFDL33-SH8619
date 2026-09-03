@@ -123,8 +123,8 @@ typedef struct Inv_Data_Port_Context {
 /* 三个物理串口与档案接入端口保持固定映射，运行上下文只需保存本表下标。 */
 static const Inv_Data_Port_Config_t g_inv_data_port_configs[INV_DATA_PORT_COUNT] = {
         {UART6_NO, INV_PORT_RS485_2},       /* UART1连接RS485-II。 */
-        {UART7_NO, INV_PORT_RJ45_1},        /* UART3连接RJ45-I。 */
-        {UART4_NO, INV_PORT_RJ45_2},        /* UART5连接RJ45-II。 */
+        {UART4_NO, INV_PORT_RJ45_1},        /* UART3连接RJ45-I。 */
+        {UART7_NO, INV_PORT_RJ45_2},        /* UART5连接RJ45-II。 */
 };
 
 /* 实时数据数组下标与档案槽位下标固定对应，数据不写入Flash。 */
@@ -662,15 +662,15 @@ static rt_bool_t inv_data_get_point(uint8_t archive_index,
             break;
 
         case 19U:
-            inv_data_copy_read_config(point, &protocol->param.pv_rated_active_pwr);
-            point->number_target = &data->param.pv_rated_active_pwr;
-            point->name = "pv_rated_p";
+            inv_data_copy_read_config(point, &protocol->param.Pn);
+            point->number_target = &data->param.Pn;
+            point->name = "Pn";
             break;
 
         case 20U:
-            inv_data_copy_read_config(point, &protocol->param.pv_rated_reactive_pwr);
-            point->number_target = &data->param.pv_rated_reactive_pwr;
-            point->name = "pv_rated_q";
+            inv_data_copy_read_config(point, &protocol->param.Qn);
+            point->number_target = &data->param.Qn;
+            point->name = "Qn";
             break;
 
         case 21U:

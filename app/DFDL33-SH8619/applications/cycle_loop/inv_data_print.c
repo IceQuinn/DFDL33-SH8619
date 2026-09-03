@@ -301,14 +301,14 @@ static void inv_data_print_param_rows(uint8_t first_archive,
     inv_data_print_string_row("Device number", string_sources, archive_valid, archive_count);
 
     for(offset = 0U; offset < archive_count; ++offset) {
-        number_sources[offset] = &g_inv_data[first_archive + offset].param.pv_rated_active_pwr;
+        number_sources[offset] = &g_inv_data[first_archive + offset].param.Pn;
     }
-    inv_data_print_value_row("PV rated active P", number_sources, archive_valid, archive_count);
+    inv_data_print_value_row("Pn", number_sources, archive_valid, archive_count); /* 额定有功功率打印名称与协议库字段Pn保持一致。 */
 
     for(offset = 0U; offset < archive_count; ++offset) {
-        number_sources[offset] = &g_inv_data[first_archive + offset].param.pv_rated_reactive_pwr;
+        number_sources[offset] = &g_inv_data[first_archive + offset].param.Qn;
     }
-    inv_data_print_value_row("PV rated reactive P", number_sources, archive_valid, archive_count);
+    inv_data_print_value_row("Qn", number_sources, archive_valid, archive_count); /* 额定无功功率打印名称与协议库字段Qn保持一致。 */
 
     for(offset = 0U; offset < archive_count; ++offset) {
         number_sources[offset] = &g_inv_data[first_archive + offset].param.set_volt;

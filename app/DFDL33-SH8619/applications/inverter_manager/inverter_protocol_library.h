@@ -205,10 +205,10 @@ typedef struct Inv_ProtoParam
     Inv_RegBlk_t dev_no;
 
     /* PV额定有功功率。 */
-    Inv_RegBlk_t pv_rated_active_pwr;
+    Inv_RegBlk_t Pn; /* 逆变器额定有功功率寄存器配置。 */
 
     /* PV额定无功功率。 */
-    Inv_RegBlk_t pv_rated_reactive_pwr;
+    Inv_RegBlk_t Qn; /* 逆变器额定无功功率寄存器配置。 */
 
     /* 逆变器设定电压。 */
     Inv_RegBlk_t set_volt;

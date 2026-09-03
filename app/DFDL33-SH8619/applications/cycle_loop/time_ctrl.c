@@ -501,11 +501,11 @@ static rt_bool_t time_ctrl_restore_value(uint8_t archive_index, int32_t *value)
 }
 
 /* 将本地额定有功功率调整到数值控制寄存器的小数位后作为恢复值。 */
-static rt_bool_t time_ctrl_rated_power_restore_value(uint8_t archive_index, int32_t *value)
+static rt_bool_t time_ctrl_Pn_restore_value(uint8_t archive_index, int32_t *value)
 {
     const Inv_Proto_t *protocol;           /* 目标档案当前关联的协议对象。 */
-    const Inv_RegBlk_t *rated_config;      /* 协议库中的额定有功功率读取配置。 */
-    const Inv_RealtimeValue_t *rated_data; /* 周期抄读保存的本地额定有功功率。 */
+    const Inv_RegBlk_t *Pn_config;         /* 协议库中的额定有功功率Pn读取配置。 */
+    const Inv_RealtimeValue_t *Pn_data;    /* 周期抄读保存的本地额定有功功率Pn。 */
     Inv_CtrlRegBlk_t control;              /* 有功功率数值控制寄存器配置。 */
     int32_t scaled_value;                  /* 已换算成控制寄存器小数位的额定功率。 */
     uint8_t decimal_places;                /* 换算过程中当前数值的小数位数。 */
@@ -520,15 +520,15 @@ static rt_bool_t time_ctrl_rated_power_restore_value(uint8_t archive_index, int3
         return RT_FALSE;
     }
 
-    rated_config = &protocol->param.pv_rated_active_pwr; /* 取得额定有功功率的协议寄存器配置。 */
-    rated_data = &g_inv_data[archive_index].param.pv_rated_active_pwr; /* 取得最近一次周期抄读的额定功率。 */
+    Pn_config = &protocol->param.Pn; /* 取得额定有功功率Pn的协议寄存器配置。 */
+    Pn_data = &g_inv_data[archive_index].param.Pn; /* 取得最近一次周期抄读的额定有功功率Pn。 */
 
     /* 额定功率读取寄存器未配置、功能码不支持或本地尚无有效值时改用百分比恢复。 */
-    if((rated_config->reg_addr == INVERTER_PROTOCOL_REGISTER_UNUSED) ||
-       (rated_config->reg_cnt == 0U) ||
-       ((rated_config->read_func_code != MODBUS_FUNC_READ_HOLDING) &&
-        (rated_config->read_func_code != MODBUS_FUNC_READ_INPUT)) ||
-       (rated_data->valid == 0U) || (rated_data->value <= 0)) {
+    if((Pn_config->reg_addr == INVERTER_PROTOCOL_REGISTER_UNUSED) ||
+       (Pn_config->reg_cnt == 0U) ||
+       ((Pn_config->read_func_code != MODBUS_FUNC_READ_HOLDING) &&
+        (Pn_config->read_func_code != MODBUS_FUNC_READ_INPUT)) ||
+       (Pn_data->valid == 0U) || (Pn_data->value <= 0)) {
         return RT_FALSE;
     }
 
@@ -539,8 +539,8 @@ static rt_bool_t time_ctrl_rated_power_restore_value(uint8_t archive_index, int3
         return RT_FALSE;
     }
 
-    scaled_value = rated_data->value;                  /* 从读取寄存器使用的小数位开始换算。 */
-    decimal_places = rated_config->decimal_places;    /* 记录当前scaled_value对应的小数位。 */
+    scaled_value = Pn_data->value;                 /* 从Pn读取寄存器使用的小数位开始换算。 */
+    decimal_places = Pn_config->decimal_places;    /* 记录当前scaled_value对应的小数位。 */
 
     /* 控制寄存器小数位更多时放大本地定点值，并在每一步检查int32_t溢出。 */
     while(decimal_places < control.decimal_places) {
@@ -579,7 +579,7 @@ static rt_bool_t time_ctrl_prepare_restore_request(uint8_t archive_index,
 
     /* 只有原时段使用数值控且额定功率配置、本地值和数值寄存器均有效时才按数值恢复。 */
     if((mode == TIME_CTRL_ACTIVE_POWER_VALUE) &&
-       (time_ctrl_rated_power_restore_value(archive_index, &request->value) == RT_TRUE)) {
+       (time_ctrl_Pn_restore_value(archive_index, &request->value) == RT_TRUE)) {
         request->type = INV_CONTROL_ACTIVE_POWER;
         return RT_TRUE;
     }

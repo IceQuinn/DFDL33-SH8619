@@ -48,6 +48,10 @@ static uint8_t g_dlt645_point_data[DLT645_POINT_DATA_MAX_LEN]; /* 保存读取�
 static const Dlt645PointTypeDef g_dlt645_points[] =
 {
     //DI3～DI1    DI0           读写权限            编码方式            DI0选择器                                    数据长度 定点数倍率 写入值下限 写入值上限 读取回调函数 写入回调函数 点表名称
+    // 额定有功功率Pn
+    {0x04E60100U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_BCD,    DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 4U,  10000, 0, 0, dlt645_read_Pn,             RT_NULL, "inverter Pn"}, /* DI0支持01～0C单台及FF全部，数据格式为XXXX.XXXX kW。 */
+    // 额定无功功率Qn
+    {0x04E60200U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_BCD,    DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 4U,  10000, 0, 0, dlt645_read_Qn,             RT_NULL, "inverter Qn"}, /* DI0支持01～0C单台及FF全部，数据格式为XXXX.XXXX kvar。 */
     // 三相电压数据库块
     {0x02E60100U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_BCD,    DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 6U,  10,    0, 0, dlt645_read_voltage,        RT_NULL, "inverter voltage"}, /* DI0支持01～0C单台及FF全部，数据格式为3×XXX.X。 */
     // 三相电流数据库块

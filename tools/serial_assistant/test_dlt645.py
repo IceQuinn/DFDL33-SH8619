@@ -156,6 +156,17 @@ class DLT645Tests(unittest.TestCase):
             self.assertEqual(saved_choice({"parity": "坏值"}, "parity", "无", ("无", "奇", "偶")), "无")
 
     def test_extended_identifier_ranges_and_shared_structures(self):
+        rated_active = self.registry.get("04E60101")
+        rated_reactive = self.registry.get("04E60201")
+        self.assertEqual(rated_active.description, "逆变器1额定有功功率")
+        self.assertEqual(rated_reactive.description, "逆变器1额定无功功率")
+        self.assertEqual(self.registry.decode("04E60101", bytes.fromhex("34 12 00 00")),
+                         [("额定有功功率", "0.1234", "kW")])
+        self.assertEqual(self.registry.decode("04E60201", bytes.fromhex("78 56 00 00")),
+                         [("额定无功功率", "0.5678", "kvar")])
+        self.assertEqual(len(self.registry.get("04E601FF").read_response["fields"]), 12)
+        self.assertEqual(len(self.registry.get("04E602FF").read_response["fields"]), 12)
+
         voltage = self.registry.get("02E60101")
         self.assertEqual(voltage.description, "逆变器1三相电压块")
         self.assertEqual(voltage.access, "read")

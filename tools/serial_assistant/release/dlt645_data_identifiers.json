@@ -24,6 +24,16 @@
         }
       ]
     },
+    "inverter_rated_active_power": {
+      "fields": [
+        {"name": "rated_active_power", "description": "额定有功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "unit": "kW"}
+      ]
+    },
+    "inverter_rated_reactive_power": {
+      "fields": [
+        {"name": "rated_reactive_power", "description": "额定无功功率", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "unit": "kvar"}
+      ]
+    },
     "inverter_three_phase_voltage": {
       "fields": [
         {"name": "voltage_a", "description": "A相电压", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "unit": "V"},
@@ -288,6 +298,28 @@
     }
   ],
   "data_identifier_groups": [
+    {
+      "id": "inverter_rated_active_power",
+      "category": "extended",
+      "prefix": "04E601",
+      "display": "04 E6 01 xx | 逆变器额定有功功率",
+      "description": "逆变器额定有功功率",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器额定有功功率数据块"}, "label_template": "逆变器{decimal}额定有功功率"},
+      "access": "read",
+      "repeat_suffixes": {"FF": 12},
+      "read_schema": "inverter_rated_active_power"
+    },
+    {
+      "id": "inverter_rated_reactive_power",
+      "category": "extended",
+      "prefix": "04E602",
+      "display": "04 E6 02 xx | 逆变器额定无功功率",
+      "description": "逆变器额定无功功率",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器额定无功功率数据块"}, "label_template": "逆变器{decimal}额定无功功率"},
+      "access": "read",
+      "repeat_suffixes": {"FF": 12},
+      "read_schema": "inverter_rated_reactive_power"
+    },
     {
       "id": "inverter_three_phase_voltage",
       "category": "extended",

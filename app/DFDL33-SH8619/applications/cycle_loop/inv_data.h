@@ -119,8 +119,8 @@ typedef struct Inv_RealtimeData
 typedef struct Inv_RealtimeParam
 {
     Inv_RealtimeString_t dev_no;                  /* 设备编号或序列号。 */
-    Inv_RealtimeValue_t pv_rated_active_pwr;      /* PV额定有功功率。 */
-    Inv_RealtimeValue_t pv_rated_reactive_pwr;    /* PV额定无功功率。 */
+    Inv_RealtimeValue_t Pn;                       /* 逆变器额定有功功率。 */
+    Inv_RealtimeValue_t Qn;                       /* 逆变器额定无功功率。 */
     Inv_RealtimeValue_t set_volt;                 /* 逆变器设定电压。 */
     Inv_RealtimeValue_t output_type;              /* 逆变器输出类型。 */
 } Inv_RealtimeParam_t;

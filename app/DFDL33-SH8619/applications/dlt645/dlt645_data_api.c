@@ -23,6 +23,12 @@ typedef enum Dlt645VariableType
     DLT645_VARIABLE_ALL          /* 单台逆变器全部变量的组合数据块。 */
 } Dlt645VariableTypeDef;
 
+typedef enum Dlt645NominalPowerType
+{
+    DLT645_NOMINAL_POWER_PN = 0, /* 额定有功功率Pn。 */
+    DLT645_NOMINAL_POWER_QN      /* 额定无功功率Qn。 */
+} Dlt645NominalPowerTypeDef;
+
 /* 计算10的指定次幂，协议配置小数位超过9时返回0表示配置不可转换。 */
 static uint32_t dlt645_decimal_scale(uint8_t decimal_places)
 {
@@ -252,6 +258,68 @@ rt_err_t dlt645_read_power_factor(const Dlt645PointTypeDef *point, uint32_t id, 
 rt_err_t dlt645_read_all_variables(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len)
 {
     return dlt645_read_variables(point, id, data, capacity, data_len, DLT645_VARIABLE_ALL);
+}
+
+/* 统一读取Pn或Qn，支持DI0选择单台及FF聚合全部12个固定档案槽位。 */
+static rt_err_t dlt645_read_nominal_power(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data,
+                                          uint16_t capacity, uint16_t *data_len, Dlt645NominalPowerTypeDef type)
+{
+    uint8_t selector = (uint8_t)id; /* 数据标识最低字节用于选择单台逆变器或全部逆变器。 */
+    uint8_t first_archive;          /* 本次读取的首个档案槽位下标。 */
+    uint8_t archive_count;          /* 本次需要生成的固定长度Pn或Qn数据块数量。 */
+    uint8_t archive_offset;         /* 当前处理相对首档案的槽位偏移。 */
+    uint16_t required_len;          /* 单台或聚合读取所需的完整输出长度。 */
+    uint16_t offset = 0U;           /* 当前已经写入输出缓冲区的字节数。 */
+
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL)) /* 公共接口的重要指针只在统一入口检查一次。 */
+    {
+        return -RT_EINVAL;
+    }
+    first_archive = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? 0U : (uint8_t)(selector - 1U); /* DI0已由分发层验证后转换为槽位下标。 */
+    archive_count = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? INVERTER_ARCHIVE_MAX_COUNT : 1U; /* FF固定返回12台，单台只返回一个数据块。 */
+    required_len = point->data_len * archive_count; /* 点表data_len保存单台Pn或Qn的4字节长度。 */
+    if(capacity < required_len) /* 缓冲区不足时禁止生成截断的645应答数据。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
+    {
+        uint8_t archive_index = first_archive + archive_offset; /* 当前读取的实际档案槽位下标。 */
+        Inv_Data_t *inv = Inv_Data_Get(archive_index); /* 取得Pn和Qn的实时数据缓存。 */
+        const Inv_Proto_t *protocol = Inv_Archive_Get_Protocol(archive_index); /* 取得Pn和Qn源数据的小数位配置。 */
+
+        if((inv == RT_NULL) || (protocol == RT_NULL)) /* 下挂逆变器为空或未匹配协议时，当前4字节全部填FF。 */
+        {
+            rt_memset(&data[offset], 0xFF, point->data_len); /* 空档案仍保留固定位置，便于上位机按逻辑编号解析。 */
+            offset += point->data_len;
+            continue;
+        }
+        if(type == DLT645_NOMINAL_POWER_PN) /* Pn点使用实时Pn数据及协议Pn小数位。 */
+        {
+            dlt645_append_value(&inv->param.Pn, protocol->param.Pn.decimal_places, 4U, 4U, RT_FALSE, &data[offset]);
+        }
+        else /* Qn点使用实时Qn数据及协议Qn小数位。 */
+        {
+            dlt645_append_value(&inv->param.Qn, protocol->param.Qn.decimal_places, 4U, 4U, RT_FALSE, &data[offset]);
+        }
+        offset += point->data_len; /* 每台Pn或Qn固定占4字节，无效实时量也保持相同长度。 */
+    }
+
+    *data_len = offset; /* 全部槽位处理完成后返回本次实际业务数据长度。 */
+    return (offset == required_len) ? RT_EOK : -RT_ERROR; /* 防止点表长度与编码实现意外不一致。 */
+}
+
+/* 读取指定逆变器或全部逆变器的额定有功功率Pn。 */
+rt_err_t dlt645_read_Pn(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    return dlt645_read_nominal_power(point, id, data, capacity, data_len, DLT645_NOMINAL_POWER_PN);
+}
+
+/* 读取指定逆变器或全部逆变器的额定无功功率Qn。 */
+rt_err_t dlt645_read_Qn(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    return dlt645_read_nominal_power(point, id, data, capacity, data_len, DLT645_NOMINAL_POWER_QN);
 }
 
 /* 检查无符号压缩BCD每个半字节是否位于0～9，发现A～F立即判定数据非法。 */

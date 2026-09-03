@@ -73,6 +73,11 @@ rt_err_t dlt645_read_power_factor(const Dlt645PointTypeDef *point, uint32_t id, 
 /* 按电压、电流、有功、无功和功率因数顺序读取指定逆变器的全部变量。 */
 rt_err_t dlt645_read_all_variables(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
 
+/* 读取指定逆变器或全部逆变器的额定有功功率Pn。 */
+rt_err_t dlt645_read_Pn(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+/* 读取指定逆变器或全部逆变器的额定无功功率Qn。 */
+rt_err_t dlt645_read_Qn(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
 /* 从实时数据中心读取指定逆变器运行状态并编码为规范规定的单字节BCD。 */
 rt_err_t dlt645_read_run_state(const Dlt645PointTypeDef *point,
                                uint32_t id,

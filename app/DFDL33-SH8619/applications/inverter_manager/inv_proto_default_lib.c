@@ -118,14 +118,14 @@ typedef struct Inv_dev_no_Id{   // 设备编号或序列号
     Enum_Inv_Mfr_Id_t mfr_id; /* 当前设备编号配置所属厂家编号。 */
     Inv_RegBlk_t dev_no;       /* 设备编号或序列号只读寄存器配置。 */
 }Inv_dev_no_Id_t;
-typedef struct Inv_pv_rated_active_pwr_Id{ // PV额定有功功率
+typedef struct Inv_Pn_Id{ /* PV额定有功功率协议配置项。 */
     Enum_Inv_Mfr_Id_t mfr_id;         /* 当前额定有功功率配置所属厂家编号。 */
-    Inv_RegBlk_t pv_rated_active_pwr;  /* PV额定有功功率只读寄存器配置。 */
-}Inv_pv_rated_active_pwr_Id_t;
-typedef struct Inv_pv_rated_reactive_pwr_Id{ // PV额定无功功率
+    Inv_RegBlk_t Pn;                   /* PV额定有功功率只读寄存器配置。 */
+} Inv_Pn_Id_t;
+typedef struct Inv_Qn_Id{ /* PV额定无功功率协议配置项。 */
     Enum_Inv_Mfr_Id_t mfr_id;           /* 当前额定无功功率配置所属厂家编号。 */
-    Inv_RegBlk_t pv_rated_reactive_pwr;  /* PV额定无功功率只读寄存器配置。 */
-}Inv_pv_rated_reactive_pwr_Id_t;
+    Inv_RegBlk_t Qn;                     /* PV额定无功功率只读寄存器配置。 */
+} Inv_Qn_Id_t;
 typedef struct Inv_set_volt_Id{ // 逆变器设定电压
     Enum_Inv_Mfr_Id_t mfr_id; /* 当前设定电压配置所属厂家编号。 */
     Inv_RegBlk_t set_volt;     /* 逆变器设定电压只读寄存器配置。 */
@@ -423,16 +423,16 @@ Inv_dev_no_Id_t g_inv_dev_no[] = {    // 设备编号或序列号
 
 
 
-Inv_pv_rated_active_pwr_Id_t g_inv_pv_rated_active_pwr[] = {    // PV额定有功功率
+Inv_Pn_Id_t g_inv_Pn[] = { /* PV额定有功功率协议配置表。 */
     //逆变器ID           寄存器地址   寄存器个数     读功能码  数据类型    字节序        小数位数  预留
     {INV_MFR_SUNGROW_1,   {5000 ,        1,            0x04,   TYPE_U16, Type_Byte_CDAB,     1,      0}},
     {INV_MFR_HUAWEI_1,    {30073,        2,            0x03,   TYPE_U32, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_GROWATT_1,   {6,            2,            0x03,   TYPE_U32, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_GROWATT_1,   {6,            2,            0x03,   TYPE_U32, Type_Byte_ABCD,     4,      0}},
 
 };
 
 
-Inv_pv_rated_reactive_pwr_Id_t g_inv_pv_rated_reactive_pwr[] = {    // PV额定无功功率
+Inv_Qn_Id_t g_inv_Qn[] = { /* PV额定无功功率协议配置表。 */
     //逆变器ID           寄存器地址   寄存器个数     读功能码  数据类型    字节序        小数位数  预留
 //    {INV_MFR_SUNGROW_1,   {5000,        1,            0x04,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
 };
@@ -602,8 +602,8 @@ static void inv_proto_set_all_points_unused(Inv_Proto_t *protocol)
     }
 
     protocol->param.dev_no.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
-    protocol->param.pv_rated_active_pwr.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
-    protocol->param.pv_rated_reactive_pwr.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
+    protocol->param.Pn.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
+    protocol->param.Qn.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
     protocol->param.set_volt.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
     protocol->param.output_type.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
 
@@ -664,10 +664,8 @@ void inv_proto_default_lib_init(void)
         /* 当前配置文件尚无功率因数读取表，PFx保持0xFFFF，后续增加表后在此接入。 */
         INV_COPY_MFR_POINT(protocol->daily_energy, g_inv_daily_energy, daily_energy);
         INV_COPY_MFR_POINT(protocol->param.dev_no, g_inv_dev_no, dev_no);
-        INV_COPY_MFR_POINT(protocol->param.pv_rated_active_pwr,
-                           g_inv_pv_rated_active_pwr, pv_rated_active_pwr);
-        INV_COPY_MFR_POINT(protocol->param.pv_rated_reactive_pwr,
-                           g_inv_pv_rated_reactive_pwr, pv_rated_reactive_pwr);
+        INV_COPY_MFR_POINT(protocol->param.Pn, g_inv_Pn, Pn);
+        INV_COPY_MFR_POINT(protocol->param.Qn, g_inv_Qn, Qn);
         INV_COPY_MFR_POINT(protocol->param.set_volt, g_inv_set_volt, set_volt);
         INV_COPY_MFR_POINT(protocol->param.output_type, g_inv_output_type, output_type);
 
