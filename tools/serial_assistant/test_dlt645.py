@@ -295,6 +295,43 @@ class DLT645Tests(unittest.TestCase):
                 self.assertEqual(decoded[1][1], "--")
                 self.assertNotEqual(decoded[-1][1], "--")
 
+    def test_active_power_time_controls_use_independent_hhmm_blocks(self):
+        power_values = {
+            "period1_start": "07:30", "period1_end": "08:45",
+            "period2_start": "FF", "period2_end": "FF",
+            "period1_power": "-12.3456", "period2_power": "56.7800",
+        }
+        power_payload = self.registry.encode("04E60B01", power_values)
+        self.assertEqual(power_payload, bytes.fromhex("30 07 45 08 FF FF FF FF 56 34 12 80 00 78 56 00"))
+        power_decoded = self.registry.decode("04E60B01", power_payload)
+        self.assertEqual(power_decoded[0], ("第1次调节开始时间", "07:30", ""))
+        self.assertEqual(power_decoded[2], ("第2次调节开始时间", "--", ""))
+        self.assertEqual(power_decoded[4], ("第1次调节值", "-12.3456", "kW"))
+        self.assertEqual(len(self.registry.get("04E60BFF").write_request["fields"]), 72)
+        self.assertEqual(sum(int(field["length"]) for field in self.registry.get("04E60BFF").write_request["fields"]), 192)
+
+        all_power_definition = self.registry.get("04E60BFF")
+        all_power_values = {field["name"]: "FF" for field in all_power_definition.write_request["fields"]}
+        for name, value in power_values.items():
+            all_power_values[f"inverter1_{name}"] = value
+        all_power_payload = self.registry.encode("04E60BFF", all_power_values)
+        self.assertEqual(all_power_payload[:16], power_payload)
+        self.assertEqual(all_power_payload[16:], b"\xFF" * 176)
+        self.assertLessEqual(4 + 8 + len(all_power_payload), 255)
+
+        percent_values = {
+            "period1_start": "09:00", "period1_end": "10:00",
+            "period2_start": "14:30", "period2_end": "15:45",
+            "period1_percent": "-123.4", "period2_percent": "25.0",
+        }
+        percent_payload = self.registry.encode("04E60C01", percent_values)
+        self.assertEqual(percent_payload, bytes.fromhex("00 09 00 10 30 14 45 15 34 92 50 02"))
+        percent_decoded = self.registry.decode("04E60C01", percent_payload)
+        self.assertEqual(percent_decoded[0], ("第1次调节开始时间", "09:00", ""))
+        self.assertEqual(percent_decoded[4], ("第1次调节值", "-123.4", "%"))
+        self.assertEqual(len(self.registry.get("04E60CFF").write_request["fields"]), 72)
+        self.assertEqual(sum(int(field["length"]) for field in self.registry.get("04E60CFF").write_request["fields"]), 144)
+
 
 if __name__ == "__main__":
     unittest.main()

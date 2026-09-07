@@ -5,6 +5,8 @@
 
 #include "inv_data.h"
 #include "inverter_protocol_library.h"
+#include "time_ctrl.h"
+#include "user_rtc.h"
 
 #define DLT645_VARIABLE_ALL_SELECTOR  0xFFU /* DI0等于FF时按档案顺序返回全部12台逆变器。 */
 #define DLT645_VOLTAGE_LEN            6U    /* 三相电压各占2字节，单台合计6字节。 */
@@ -749,6 +751,308 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
                 (response[0] == DLT645_CONTROL_STATUS_NOT_CONTROLLED)) ? RT_EOK : -RT_ERROR; /* 成功或FF不控制正常回复，其余状态返回写异常。 */
     }
     return RT_EOK; /* 全量请求始终通过12个状态表达各槽位结果。 */
+}
+
+/* 根据04E60B或04E60C取得时段控制方式、单个数值长度和645目标小数位。 */
+static rt_err_t dlt645_time_control_format(uint32_t id,
+                                           Time_Ctrl_Mode_t *mode,
+                                           uint8_t *value_len,
+                                           uint8_t *target_decimals)
+{
+    uint8_t point_type = (uint8_t)(id >> 8); /* DI1区分有功数值时段控和有功百分比时段控。 */
+
+    if(point_type == 0x0BU)
+    {
+        *mode = TIME_CTRL_ACTIVE_POWER_VALUE;
+        *value_len = 4U;       /* 有功功率格式XXXX.XXXX固定占4字节。 */
+        *target_decimals = 4U; /* 有功功率645字段固定保留4位小数。 */
+        return RT_EOK;
+    }
+    if(point_type == 0x0CU)
+    {
+        *mode = TIME_CTRL_ACTIVE_POWER_PERCENT;
+        *value_len = 2U;       /* 有功百分比格式XXX.X固定占2字节。 */
+        *target_decimals = 1U; /* 有功百分比645字段固定保留1位小数。 */
+        return RT_EOK;
+    }
+    return -RT_EINVAL; /* 其他数据标识不属于本时段控制接口。 */
+}
+
+/* 取得指定档案和控制方式对应的厂家控制寄存器配置。 */
+static const Inv_CtrlRegBlk_t *dlt645_time_control_reg(uint8_t archive_index, Time_Ctrl_Mode_t mode)
+{
+    const Inv_Proto_t *protocol = Inv_Archive_Get_Protocol(archive_index); /* 取得档案绑定的厂家协议。 */
+
+    if(protocol == RT_NULL) /* 空档案或协议未匹配时没有可用的小数位和控制能力配置。 */
+    {
+        return RT_NULL;
+    }
+    return (mode == TIME_CTRL_ACTIVE_POWER_VALUE) ?
+           &protocol->ctrl.active_pwr_ctrl : &protocol->ctrl.active_pwr_pct_ctrl; /* 两类时段控复用已有数值控制寄存器。 */
+}
+
+/* 将低字节在前的hhmm压缩BCD解码为小时和分钟。 */
+static rt_err_t dlt645_decode_hhmm(const uint8_t *data, uint8_t *hour, uint8_t *minute)
+{
+    int32_t decoded_hour;   /* BCD小时转换后的整数值。 */
+    int32_t decoded_minute; /* BCD分钟转换后的整数值。 */
+
+    if((dlt645_bcd_decode_u32(&data[0], 1U, &decoded_minute) != RT_EOK) ||
+       (dlt645_bcd_decode_u32(&data[1], 1U, &decoded_hour) != RT_EOK) ||
+       (decoded_hour > 23) || (decoded_minute > 59)) /* 线上顺序为分、时，且两个字段必须符合时钟范围。 */
+    {
+        return -RT_EINVAL;
+    }
+    *hour = (uint8_t)decoded_hour;     /* 范围确认后输出小时。 */
+    *minute = (uint8_t)decoded_minute; /* 范围确认后输出分钟。 */
+    return RT_EOK;
+}
+
+/* 将小时和分钟编码成低字节在前的hhmm压缩BCD。 */
+static rt_err_t dlt645_encode_hhmm(uint8_t hour, uint8_t minute, uint8_t *data)
+{
+    if((hour > 23U) || (minute > 59U)) /* 内部时间异常时禁止输出非法BCD时间。 */
+    {
+        return -RT_EINVAL;
+    }
+    if((dlt645_encode_bcd(minute, &data[0], 1U, RT_FALSE) != RT_EOK) ||
+       (dlt645_encode_bcd(hour, &data[1], 1U, RT_FALSE) != RT_EOK)) /* 645线上低地址字节先发送分钟，再发送小时。 */
+    {
+        return -RT_EINVAL;
+    }
+    return RT_EOK;
+}
+
+/* 把单台645时段数据块解析为绑定接收当天的一次性时段命令。 */
+static rt_err_t dlt645_decode_time_control_block(uint32_t id,
+                                                 uint8_t archive_index,
+                                                 const uint8_t *block,
+                                                 Time_Ctrl_Command_t *command)
+{
+    struct tm current_time = get_local_time_t(); /* 04E60B和04E60C都使用接收当天的本地日期。 */
+    Time_Ctrl_Mode_t mode;                       /* 当前数据标识对应的时段控制方式。 */
+    const Inv_CtrlRegBlk_t *control_reg;         /* 目标厂家协议对应的数值控制配置。 */
+    uint8_t value_len;                           /* 单个控制值在645数据块中的长度。 */
+    uint8_t source_decimals;                     /* 645控制值字段的小数位。 */
+    uint8_t period_index;                        /* 当前解析的第1或第2时段下标。 */
+
+    if(dlt645_time_control_format(id, &mode, &value_len, &source_decimals) != RT_EOK) /* 数据标识必须属于两类时段控制之一。 */
+    {
+        return -RT_EINVAL;
+    }
+    rt_memset(command, 0, sizeof(*command)); /* 禁用时段及秒字段默认保持为0。 */
+    command->archive_index = archive_index; /* 命令档案下标与DI0或全量槽位一一对应。 */
+
+    for(period_index = 0U; period_index < TIME_CTRL_PERIOD_COUNT; ++period_index)
+    {
+        uint16_t time_offset = period_index * 4U; /* 当前时段开始时间在单台块中的偏移。 */
+        uint16_t value_offset = 8U + period_index * value_len; /* 当前时段控制值在单台块中的偏移。 */
+        rt_bool_t start_ff = dlt645_field_is_ff(&block[time_offset], 2U); /* 开始时间是否全FF。 */
+        rt_bool_t end_ff = dlt645_field_is_ff(&block[time_offset + 2U], 2U); /* 结束时间是否全FF。 */
+        rt_bool_t value_ff = dlt645_field_is_ff(&block[value_offset], value_len); /* 控制值是否全FF。 */
+        int32_t decoded_value; /* 完成符号位BCD解码后的645定点控制值。 */
+
+        if((start_ff == RT_TRUE) || (end_ff == RT_TRUE)) /* 开始或结束时间任一为全FF时，该时段不执行调控。 */
+        {
+            command->periods[period_index].enabled = RT_FALSE;
+            continue; /* 禁用时段不再解析或校验其控制值，允许主站保留原数值。 */
+        }
+        if(value_ff == RT_TRUE) /* 开始和结束均有效但控制值为FF时无法执行明确调控。 */
+        {
+            return -RT_EINVAL;
+        }
+        if((current_time.tm_year < 70) ||
+           (dlt645_decode_hhmm(&block[time_offset], &command->periods[period_index].start.hour,
+                               &command->periods[period_index].start.minute) != RT_EOK) ||
+           (dlt645_decode_hhmm(&block[time_offset + 2U], &command->periods[period_index].end.hour,
+                               &command->periods[period_index].end.minute) != RT_EOK)) /* RTC日期和两个hhmm时间必须有效。 */
+        {
+            return -RT_EINVAL;
+        }
+        command->periods[period_index].start.year = (uint16_t)(current_time.tm_year + 1900); /* 开始日期绑定接收当天。 */
+        command->periods[period_index].start.month = (uint8_t)(current_time.tm_mon + 1);
+        command->periods[period_index].start.day = (uint8_t)current_time.tm_mday;
+        command->periods[period_index].end.year = command->periods[period_index].start.year; /* 结束日期与开始日期相同，禁止跨天。 */
+        command->periods[period_index].end.month = command->periods[period_index].start.month;
+        command->periods[period_index].end.day = command->periods[period_index].start.day;
+        command->periods[period_index].mode = mode; /* 同一个645数据标识内两个时段使用相同调节方式。 */
+        command->periods[period_index].enabled = RT_TRUE;
+
+        control_reg = dlt645_time_control_reg(archive_index, mode); /* 取得厂家目标小数位用于写值换算。 */
+        if((control_reg == RT_NULL) ||
+           (dlt645_bcd_decode_s32(&block[value_offset], value_len, &decoded_value) != RT_EOK) ||
+           ((mode == TIME_CTRL_ACTIVE_POWER_PERCENT) &&
+            ((decoded_value < -1000) || (decoded_value > 1000))) ||
+           (dlt645_rescale_value(decoded_value, source_decimals, control_reg->decimal_places,
+                                 &command->periods[period_index].value) != RT_EOK)) /* 配置、BCD、百分比范围和定点换算必须全部有效。 */
+        {
+            return -RT_EINVAL;
+        }
+    }
+    return RT_EOK;
+}
+
+/* 将当前保存的一台时段命令编码成04E60B或04E60C单台数据块。 */
+static rt_err_t dlt645_encode_time_control_block(uint32_t id,
+                                                 uint8_t archive_index,
+                                                 const Time_Ctrl_Command_t *command,
+                                                 uint8_t *block)
+{
+    Time_Ctrl_Mode_t requested_mode;             /* 当前读取数据标识要求的时段控制方式。 */
+    const Inv_CtrlRegBlk_t *control_reg;          /* 厂家控制值缓存所使用的小数位配置。 */
+    uint8_t value_len;                            /* 单个控制值的645字段长度。 */
+    uint8_t target_decimals;                      /* 645控制值字段的小数位。 */
+    uint8_t period_index;                         /* 当前编码的第1或第2时段下标。 */
+    uint16_t block_len;                           /* 当前数据标识对应的单台数据块长度。 */
+
+    if(dlt645_time_control_format(id, &requested_mode, &value_len, &target_decimals) != RT_EOK) /* 先确定目标格式。 */
+    {
+        return -RT_EINVAL;
+    }
+    block_len = 8U + TIME_CTRL_PERIOD_COUNT * value_len; /* 四个hhmm共8字节，尾部再放两个控制值。 */
+    rt_memset(block, 0xFF, block_len); /* 禁用或属于另一控制方式的时段默认保持全FF。 */
+    control_reg = dlt645_time_control_reg(archive_index, requested_mode); /* 读取值需要从厂家小数位换回645精度。 */
+    if(control_reg == RT_NULL) /* 当前厂家不支持该控制方式时整个单台块返回FF。 */
+    {
+        return RT_EOK;
+    }
+
+    for(period_index = 0U; period_index < TIME_CTRL_PERIOD_COUNT; ++period_index)
+    {
+        uint16_t time_offset = period_index * 4U; /* 当前时段开始时间字段偏移。 */
+        uint16_t value_offset = 8U + period_index * value_len; /* 当前时段控制值字段偏移。 */
+        int32_t scaled_value; /* 从厂家控制精度换算到645目标精度后的定点值。 */
+        uint8_t encoded_start[2]; /* 完整编码成功前暂存开始hhmm，避免留下半组有效字段。 */
+        uint8_t encoded_end[2];   /* 完整编码成功前暂存结束hhmm。 */
+        uint8_t encoded_value[4]; /* 两类控制值最大占4字节。 */
+
+        if((command->periods[period_index].enabled != RT_TRUE) ||
+           (command->periods[period_index].mode != requested_mode)) /* 禁用或属于另一数据标识的时段继续使用FF。 */
+        {
+            continue;
+        }
+        if((dlt645_encode_hhmm(command->periods[period_index].start.hour,
+                               command->periods[period_index].start.minute, encoded_start) != RT_EOK) ||
+           (dlt645_encode_hhmm(command->periods[period_index].end.hour,
+                               command->periods[period_index].end.minute, encoded_end) != RT_EOK) ||
+           (dlt645_rescale_value(command->periods[period_index].value, control_reg->decimal_places,
+                                 target_decimals, &scaled_value) != RT_EOK) ||
+           (dlt645_encode_bcd(scaled_value, encoded_value, value_len, RT_TRUE) != RT_EOK)) /* 时间、精度和有符号BCD必须整体编码成功。 */
+        {
+            continue;
+        }
+        rt_memcpy(&block[time_offset], encoded_start, sizeof(encoded_start)); /* 全部字段有效后写入当前时段开始时间。 */
+        rt_memcpy(&block[time_offset + 2U], encoded_end, sizeof(encoded_end)); /* 写入当前时段结束时间。 */
+        rt_memcpy(&block[value_offset], encoded_value, value_len); /* 写入当前时段控制值。 */
+    }
+    return RT_EOK;
+}
+
+/* 读取单台或全部逆变器的有功数值或百分比时段控制配置。 */
+rt_err_t dlt645_read_time_control(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data,
+                                  uint16_t capacity, uint16_t *data_len)
+{
+    uint8_t selector = (uint8_t)id; /* DI0选择单台逆变器或全部12个档案槽位。 */
+    uint8_t first_archive;          /* 本次读取的首个档案槽位下标。 */
+    uint8_t archive_count;          /* 本次需要返回的固定单台数据块数量。 */
+    uint8_t archive_offset;         /* 当前处理的相对档案槽位。 */
+    uint16_t required_len;          /* 单台或全量读取的完整业务数据长度。 */
+
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL)) /* 公共入口的重要指针只检查一次。 */
+    {
+        return -RT_EINVAL;
+    }
+    first_archive = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? 0U : (uint8_t)(selector - 1U); /* 选择器已由分发层校验。 */
+    archive_count = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? INVERTER_ARCHIVE_MAX_COUNT : 1U; /* FF仍为每台独立时间和数值。 */
+    required_len = point->data_len * archive_count; /* 04E60B全量192字节，04E60C全量144字节。 */
+    if(capacity < required_len) /* 禁止发送被截断的时段控制数据块。 */
+    {
+        return -RT_EINVAL;
+    }
+    rt_memset(data, 0xFF, required_len); /* 空档案、未配置和不支持默认返回对应单台块全FF。 */
+
+    for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
+    {
+        uint8_t archive_index = first_archive + archive_offset; /* 当前读取的实际档案下标。 */
+        Time_Ctrl_Command_t command; /* 从时段线程邮箱取得的完整命令快照。 */
+        rt_bool_t enabled;           /* 当前档案是否启用了时段计划。 */
+
+        if((Time_Ctrl_Get(archive_index, &command, &enabled) != TIME_CTRL_RESULT_OK) ||
+           (enabled != RT_TRUE)) /* 空档案、未初始化或已停止计划保持全FF。 */
+        {
+            continue;
+        }
+        (void)dlt645_encode_time_control_block(id, archive_index, &command,
+                                               &data[archive_offset * point->data_len]); /* 单个时段编码失败时对应字段保持FF。 */
+    }
+    *data_len = required_len; /* 单台和全量都返回固定长度，便于主站按槽位解析。 */
+    return RT_EOK;
+}
+
+/* 写入单台或全部逆变器的当天一次性时段计划，全部预检查通过后再统一更新邮箱。 */
+rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point, uint32_t id, const uint8_t *data,
+                                   uint16_t data_len, uint8_t *response,
+                                   uint16_t response_capacity, uint16_t *response_len)
+{
+    uint8_t selector = (uint8_t)id; /* DI0选择单台或全部12个独立时段数据块。 */
+    uint8_t first_archive;          /* 本次写入的首个档案槽位下标。 */
+    uint8_t archive_count;          /* 本次写入包含的固定单台块数量。 */
+    uint8_t archive_offset;         /* 当前预检查或提交的相对档案槽位。 */
+    Time_Ctrl_Command_t commands[INVERTER_ARCHIVE_MAX_COUNT]; /* 预解析完成且绑定接收当天的逐台命令。 */
+    rt_bool_t apply[INVERTER_ARCHIVE_MAX_COUNT]; /* RT_TRUE表示当前档案需要更新或停止时段计划。 */
+
+    if((point == RT_NULL) || (data == RT_NULL) || (response_len == RT_NULL)) /* 公共写入口的重要指针只检查一次。 */
+    {
+        return -RT_EINVAL;
+    }
+    RT_UNUSED(response); /* 时段计划写入使用标准无数据写应答。 */
+    RT_UNUSED(response_capacity);
+    *response_len = 0U; /* 明确通知分发层不要生成逐台状态数据域。 */
+    first_archive = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? 0U : (uint8_t)(selector - 1U); /* 选择器已经由分发层验证。 */
+    archive_count = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? INVERTER_ARCHIVE_MAX_COUNT : 1U; /* 全量仍按12个完整单台块解析。 */
+    if(data_len != (uint16_t)(point->data_len * archive_count)) /* 单台和全量长度必须与点表完全一致。 */
+    {
+        return -RT_EINVAL;
+    }
+    rt_memset(apply, 0, sizeof(apply)); /* 空档案配全FF允许跳过，不修改任何邮箱。 */
+
+    for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
+    {
+        uint8_t archive_index = first_archive + archive_offset; /* 当前数据块对应的实际档案槽位。 */
+        const uint8_t *block = &data[archive_offset * point->data_len]; /* 当前逆变器的完整时段控制数据块。 */
+        rt_bool_t period1_disabled = dlt645_field_is_ff(&block[0], 2U) ||
+                                     dlt645_field_is_ff(&block[2], 2U); /* 第1时段开始或结束为FF即不执行。 */
+        rt_bool_t period2_disabled = dlt645_field_is_ff(&block[4], 2U) ||
+                                     dlt645_field_is_ff(&block[6], 2U); /* 第2时段采用相同的禁用规则。 */
+
+        if(Inv_Data_Get(archive_index) == RT_NULL) /* 空档案只允许两个时段都处于不调控状态。 */
+        {
+            if((period1_disabled != RT_TRUE) || (period2_disabled != RT_TRUE)) /* 任一时段时间完整都表示存在对空档案的控制意图。 */
+            {
+                return -RT_EINVAL;
+            }
+            continue;
+        }
+        if(dlt645_decode_time_control_block(id, archive_index, block, &commands[archive_offset]) != RT_EOK) /* 单台块的时间、FF组合、数值或精度必须合法。 */
+        {
+            return -RT_EINVAL;
+        }
+        if(Time_Ctrl_Check(&commands[archive_offset]) != TIME_CTRL_RESULT_OK) /* 检查工作窗口、重叠、控制能力和恢复能力。 */
+        {
+            return -RT_EINVAL;
+        }
+        apply[archive_offset] = RT_TRUE; /* 全部预检查完成后才会实际修改这个档案的邮箱。 */
+    }
+
+    for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
+    {
+        if((apply[archive_offset] == RT_TRUE) &&
+           (Time_Ctrl_Set(commands[archive_offset]) != TIME_CTRL_RESULT_OK)) /* 两个时段全FF由Set统一转换为停止计划。 */
+        {
+            return -RT_ERROR; /* 极短窗口内档案或线程状态变化时返回写异常。 */
+        }
+    }
+    return RT_EOK; /* 所有需要处理的档案邮箱均已成功更新或停止。 */
 }
 
 /* 读取DI0指定逆变器或全部逆变器的推导运行状态，空档案和未知状态使用FF占位。 */

@@ -115,4 +115,16 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point,
                                     uint16_t response_capacity,
                                     uint16_t *response_len);
 
+/* 读取有功功率数值或百分比时段控制，单台和全量均保留独立的两个时段。 */
+rt_err_t dlt645_read_time_control(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
+/* 写入接收当天执行一次的有功功率数值或百分比时段控制。 */
+rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point,
+                                   uint32_t id,
+                                   const uint8_t *data,
+                                   uint16_t data_len,
+                                   uint8_t *response,
+                                   uint16_t response_capacity,
+                                   uint16_t *response_len);
+
 #endif /* __DLT645_DATA_API_H__ */

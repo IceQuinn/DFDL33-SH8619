@@ -148,12 +148,22 @@
     },
     "active_power_schedule": {
       "fields": [
-        {"name": "period1_start", "description": "第1次调节开始时间", "type": "bcd_datetime", "length": 5, "format": "YYMMDDhhmm", "byte_order": "big"},
-        {"name": "period1_end", "description": "第1次调节结束时间", "type": "bcd_datetime", "length": 5, "format": "YYMMDDhhmm", "byte_order": "big"},
-        {"name": "period2_start", "description": "第2次调节开始时间", "type": "bcd_datetime", "length": 5, "format": "YYMMDDhhmm", "byte_order": "big"},
-        {"name": "period2_end", "description": "第2次调节结束时间", "type": "bcd_datetime", "length": 5, "format": "YYMMDDhhmm", "byte_order": "big"},
-        {"name": "period1_power", "description": "第1次调节值", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "unit": "kW"},
-        {"name": "period2_power", "description": "第2次调节值", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "unit": "kW"}
+        {"name": "period1_start", "description": "第1次调节开始时间", "type": "bcd_datetime", "length": 2, "format": "hhmm", "byte_order": "little", "allow_ff": true, "default": "FF"},
+        {"name": "period1_end", "description": "第1次调节结束时间", "type": "bcd_datetime", "length": 2, "format": "hhmm", "byte_order": "little", "allow_ff": true, "default": "FF"},
+        {"name": "period2_start", "description": "第2次调节开始时间", "type": "bcd_datetime", "length": 2, "format": "hhmm", "byte_order": "little", "allow_ff": true, "default": "FF"},
+        {"name": "period2_end", "description": "第2次调节结束时间", "type": "bcd_datetime", "length": 2, "format": "hhmm", "byte_order": "little", "allow_ff": true, "default": "FF"},
+        {"name": "period1_power", "description": "第1次调节值", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "kW", "allow_ff": true, "default": "FF"},
+        {"name": "period2_power", "description": "第2次调节值", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "kW", "allow_ff": true, "default": "FF"}
+      ]
+    },
+    "active_power_percent_schedule": {
+      "fields": [
+        {"name": "period1_start", "description": "第1次调节开始时间", "type": "bcd_datetime", "length": 2, "format": "hhmm", "byte_order": "little", "allow_ff": true, "default": "FF"},
+        {"name": "period1_end", "description": "第1次调节结束时间", "type": "bcd_datetime", "length": 2, "format": "hhmm", "byte_order": "little", "allow_ff": true, "default": "FF"},
+        {"name": "period2_start", "description": "第2次调节开始时间", "type": "bcd_datetime", "length": 2, "format": "hhmm", "byte_order": "little", "allow_ff": true, "default": "FF"},
+        {"name": "period2_end", "description": "第2次调节结束时间", "type": "bcd_datetime", "length": 2, "format": "hhmm", "byte_order": "little", "allow_ff": true, "default": "FF"},
+        {"name": "period1_percent", "description": "第1次调节值", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "%", "allow_ff": true, "default": "FF"},
+        {"name": "period2_percent", "description": "第2次调节值", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "%", "allow_ff": true, "default": "FF"}
       ]
     },
     "protocol_register_int16": {
@@ -312,17 +322,6 @@
       }
     },
     {
-      "di": "04E60B01",
-      "category": "extended",
-      "group_id": "active_power_schedule",
-      "group_description": "04 E6 0B xx | 有功功率时段调节",
-      "selector": "01",
-      "description": "逆变器1有功功率时段调节",
-      "access": "read_write",
-      "read_schema": "active_power_schedule",
-      "write_schema": "active_power_schedule"
-    },
-    {
       "di": "04E70103",
       "category": "extended",
       "group_id": "protocol_library",
@@ -335,6 +334,30 @@
     }
   ],
   "data_identifier_groups": [
+    {
+      "id": "active_power_schedule",
+      "category": "extended",
+      "prefix": "04E60B",
+      "display": "04 E6 0B xx | 有功功率时段调节",
+      "description": "有功功率时段调节",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器有功功率时段调节"}, "label_template": "逆变器{decimal}有功功率时段调节"},
+      "access": "read_write",
+      "repeat_suffixes": {"FF": 12},
+      "read_schema": "active_power_schedule",
+      "write_schema": "active_power_schedule"
+    },
+    {
+      "id": "active_power_percent_schedule",
+      "category": "extended",
+      "prefix": "04E60C",
+      "display": "04 E6 0C xx | 有功功率百分比时段调节",
+      "description": "有功功率百分比时段调节",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器有功功率百分比时段调节"}, "label_template": "逆变器{decimal}有功功率百分比时段调节"},
+      "access": "read_write",
+      "repeat_suffixes": {"FF": 12},
+      "read_schema": "active_power_percent_schedule",
+      "write_schema": "active_power_percent_schedule"
+    },
     {
       "id": "inverter_rated_active_power",
       "category": "extended",

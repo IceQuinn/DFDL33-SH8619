@@ -41,6 +41,7 @@ typedef struct Time_Ctrl_Period
     Time_Ctrl_DateTime_t end;   /* 调节结束时间，不包含该时刻。 */
     Time_Ctrl_Mode_t mode;      /* 有功数值或有功百分比控制。 */
     int32_t value;              /* 与目标协议decimal_places一致的定点整数。 */
+    rt_bool_t enabled;          /* RT_TRUE表示该时段有效，开始或结束时间为全FF时为RT_FALSE。 */
 } Time_Ctrl_Period_t;
 
 /* 单个逆变器档案的完整时段控制命令。 */
@@ -70,6 +71,12 @@ typedef enum Time_Ctrl_Result
  * 旧命令未开始时直接更新；旧命令执行中时先排队恢复额定功率，再执行新命令。
  */
 Time_Ctrl_Result_t Time_Ctrl_Set(Time_Ctrl_Command_t command);
+
+/* 只校验一台逆变器的时段命令，不修改共享邮箱或当前执行状态。 */
+Time_Ctrl_Result_t Time_Ctrl_Check(const Time_Ctrl_Command_t *command);
+
+/* 在线程安全的短临界区内读取指定档案当前保存的时段命令。 */
+Time_Ctrl_Result_t Time_Ctrl_Get(uint8_t archive_index, Time_Ctrl_Command_t *command, rt_bool_t *enabled);
 
 /* 停止指定档案的时段控制；正在调控时会先排队恢复额定功率。 */
 Time_Ctrl_Result_t Time_Ctrl_Stop_Archive(uint8_t archive_index);

@@ -23,6 +23,10 @@
 /* 恢复额定输出时使用的有功百分比。 */
 #define TIME_CTRL_RESTORE_PERCENT            100
 
+/* 逆变器控制允许时段的起止小时，结束小时17不属于可提交控制的窗口。 */
+#define TIME_CTRL_WORK_START_HOUR               7U
+#define TIME_CTRL_WORK_STOP_HOUR               17U
+
 /* 必须与通用逆变器控制模块的内部数值缓冲区容量保持一致。 */
 #define TIME_CTRL_CONTROL_REG_MAX               4U
 
@@ -183,6 +187,13 @@ static Time_Ctrl_Result_t time_ctrl_validate(const Time_Ctrl_Command_t *command,
         /* 当前时段的只读指针，简化后续字段访问。 */
         const Time_Ctrl_Period_t *period = &command->periods[period_index];
 
+        if(period->enabled != RT_TRUE) /* 全FF禁用的时段不参与日期、数值和重叠校验。 */
+        {
+            starts[period_index] = (time_t)0;
+            ends[period_index] = (time_t)0;
+            continue;
+        }
+
         /* 时段只接受有功数值控和有功百分比控两种方式。 */
         if((period->mode != TIME_CTRL_ACTIVE_POWER_VALUE) &&
            (period->mode != TIME_CTRL_ACTIVE_POWER_PERCENT)) {
@@ -209,17 +220,27 @@ static Time_Ctrl_Result_t time_ctrl_validate(const Time_Ctrl_Command_t *command,
         if(starts[period_index] >= ends[period_index]) {
             return TIME_CTRL_RESULT_INVALID_RANGE;
         }
+        /* 时分精度下结束时间最晚为16:59，确保恢复命令仍可在17:00停控前提交。 */
+        if((period->start.hour < TIME_CTRL_WORK_START_HOUR) ||
+           (period->start.hour >= TIME_CTRL_WORK_STOP_HOUR) ||
+           (period->end.hour < TIME_CTRL_WORK_START_HOUR) ||
+           (period->end.hour >= TIME_CTRL_WORK_STOP_HOUR)) {
+            return TIME_CTRL_RESULT_INVALID_RANGE;
+        }
     }
 
-    /* 一条命令的两个时段也必须属于同一天，任何跨日期操作都直接拒绝。 */
-    if(time_ctrl_same_day(&command->periods[0].start,
-                          &command->periods[1].start) == RT_FALSE) {
-        return TIME_CTRL_RESULT_CROSS_DAY;
-    }
+    if((command->periods[0].enabled == RT_TRUE) && (command->periods[1].enabled == RT_TRUE)) /* 只有两个时段都启用时才需要相互比较。 */
+    {
+        /* 一条命令的两个时段必须属于同一天，任何跨日期操作都直接拒绝。 */
+        if(time_ctrl_same_day(&command->periods[0].start,
+                              &command->periods[1].start) == RT_FALSE) {
+            return TIME_CTRL_RESULT_CROSS_DAY;
+        }
 
-    /* 采用[start,end)区间，所以前一时段结束等于后一时段开始不算重叠。 */
-    if((starts[0] < ends[1]) && (starts[1] < ends[0])) {
-        return TIME_CTRL_RESULT_OVERLAP;
+        /* 采用[start,end)区间，所以前一时段结束等于后一时段开始不算重叠。 */
+        if((starts[0] < ends[1]) && (starts[1] < ends[0])) {
+            return TIME_CTRL_RESULT_OVERLAP;
+        }
     }
     return TIME_CTRL_RESULT_OK;
 }
@@ -318,7 +339,7 @@ static rt_bool_t time_ctrl_value_valid(const Inv_CtrlRegBlk_t *control, int32_t 
     }
 }
 
-/* 检查有功百分比定点值是否位于0%～100%闭区间。 */
+/* 检查有功百分比定点值是否位于-100%～100%闭区间。 */
 static rt_bool_t time_ctrl_percent_value_valid(const Inv_CtrlRegBlk_t *control,
                                                int32_t value)
 {
@@ -336,7 +357,7 @@ static rt_bool_t time_ctrl_percent_value_valid(const Inv_CtrlRegBlk_t *control,
         }
         maximum *= 10;
     }
-    return ((value >= 0) && (value <= maximum)) ? RT_TRUE : RT_FALSE;
+    return ((value >= -maximum) && (value <= maximum)) ? RT_TRUE : RT_FALSE;
 }
 
 /* 将时段控制结果码转换成固定英文说明。 */
@@ -356,14 +377,12 @@ const char *Time_Ctrl_Result_Text(Time_Ctrl_Result_t result)
     return texts[result];
 }
 
-/* 按值受理一台逆变器的命令；邮箱只在短临界区内更新。 */
-Time_Ctrl_Result_t Time_Ctrl_Set(Time_Ctrl_Command_t command)
+/* 只校验一台逆变器时段命令的时间、档案、控制能力、数值和恢复能力。 */
+Time_Ctrl_Result_t Time_Ctrl_Check(const Time_Ctrl_Command_t *command)
 {
     time_t starts[TIME_CTRL_PERIOD_COUNT]; /* 仅用于本次参数校验的开始时间戳。 */
     time_t ends[TIME_CTRL_PERIOD_COUNT];   /* 仅用于本次参数校验的结束时间戳。 */
     Time_Ctrl_Result_t result;             /* 参数校验结果。 */
-    Time_Ctrl_Mailbox_t *mailbox;          /* 目标档案的命令邮箱。 */
-    rt_base_t level;                       /* 关中断前的CPU中断状态。 */
     Inv_CtrlRegBlk_t control;              /* 用于检查协议控制能力的临时配置。 */
     Inv_Control_Request_t restore_request; /* 用于检查每个时段结束后的恢复方式。 */
     uint8_t period_index;                  /* 当前正在检查的时段下标。 */
@@ -373,39 +392,62 @@ Time_Ctrl_Result_t Time_Ctrl_Set(Time_Ctrl_Command_t command)
         return TIME_CTRL_RESULT_THREAD_ERROR;
     }
 
-    result = time_ctrl_validate(&command, starts, ends); /* 先完成不依赖协议库的公共参数校验。 */
+    result = time_ctrl_validate(command, starts, ends); /* 先完成不依赖协议库的公共参数校验。 */
     /* 公共参数校验失败时原样返回具体错误码。 */
     if(result != TIME_CTRL_RESULT_OK) {
         return result;
     }
     /* 目标档案必须仍然有效，避免向已删除设备保存时段命令。 */
-    if(g_inv_archive_lib.valid[command.archive_index] != INVERTER_ARCHIVE_VALID) {
+    if(g_inv_archive_lib.valid[command->archive_index] != INVERTER_ARCHIVE_VALID) {
         return TIME_CTRL_RESULT_ARCHIVE_INVALID;
     }
 
     /* 两个调控方式以及各自结束时需要使用的恢复方式都必须可用。 */
     for(period_index = 0U; period_index < TIME_CTRL_PERIOD_COUNT; ++period_index) {
+        if(command->periods[period_index].enabled != RT_TRUE) /* 禁用时段没有下行控制或恢复能力要求。 */
+        {
+            continue;
+        }
         /* 当前时段使用的控制寄存器必须在目标协议中有效配置。 */
-        if(time_ctrl_get_control_config(command.archive_index,
-                                        command.periods[period_index].mode,
+        if(time_ctrl_get_control_config(command->archive_index,
+                                        command->periods[period_index].mode,
                                         &control) == RT_FALSE) {
             return TIME_CTRL_RESULT_UNSUPPORTED;
         }
-        /* 控制值必须符合数据类型范围，百分比值还必须位于0%～100%。 */
+        /* 控制值必须符合数据类型范围，百分比值还必须位于-100%～100%。 */
         if((time_ctrl_value_valid(&control,
-                                  command.periods[period_index].value) == RT_FALSE) ||
-           ((command.periods[period_index].mode == TIME_CTRL_ACTIVE_POWER_PERCENT) &&
+                                  command->periods[period_index].value) == RT_FALSE) ||
+           ((command->periods[period_index].mode == TIME_CTRL_ACTIVE_POWER_PERCENT) &&
             (time_ctrl_percent_value_valid(&control,
-                                           command.periods[period_index].value) == RT_FALSE))) {
+                                           command->periods[period_index].value) == RT_FALSE))) {
             return TIME_CTRL_RESULT_INVALID_VALUE;
         }
 
         /* 数值控优先使用本地额定功率恢复，无法使用时必须具备100%百分比兜底能力。 */
-        if(time_ctrl_prepare_restore_request(command.archive_index,
-                                             command.periods[period_index].mode,
+        if(time_ctrl_prepare_restore_request(command->archive_index,
+                                             command->periods[period_index].mode,
                                              &restore_request) == RT_FALSE) {
             return TIME_CTRL_RESULT_UNSUPPORTED;
         }
+    }
+
+    return TIME_CTRL_RESULT_OK;
+}
+
+/* 按值受理一台逆变器的命令；邮箱只在短临界区内更新。 */
+Time_Ctrl_Result_t Time_Ctrl_Set(Time_Ctrl_Command_t command)
+{
+    Time_Ctrl_Result_t result = Time_Ctrl_Check(&command); /* 修改邮箱前先完成全部无副作用校验。 */
+    Time_Ctrl_Mailbox_t *mailbox; /* 目标档案的命令邮箱。 */
+    rt_base_t level;              /* 关中断前的CPU中断状态。 */
+
+    if(result != TIME_CTRL_RESULT_OK) /* 校验失败时保持原计划不变。 */
+    {
+        return result;
+    }
+    if((command.periods[0].enabled != RT_TRUE) && (command.periods[1].enabled != RT_TRUE)) /* 两个时段都为全FF表示取消当前计划。 */
+    {
+        return Time_Ctrl_Stop_Archive(command.archive_index);
     }
 
     mailbox = &g_time_ctrl_mailboxes[command.archive_index]; /* 定位目标档案对应的共享命令邮箱。 */
@@ -413,6 +455,31 @@ Time_Ctrl_Result_t Time_Ctrl_Set(Time_Ctrl_Command_t command)
     mailbox->command = command;
     mailbox->enabled = RT_TRUE;
     ++mailbox->generation;
+    rt_hw_interrupt_enable(level);
+    return TIME_CTRL_RESULT_OK;
+}
+
+/* 在线程安全的短临界区内读取指定档案当前保存的时段命令。 */
+Time_Ctrl_Result_t Time_Ctrl_Get(uint8_t archive_index, Time_Ctrl_Command_t *command, rt_bool_t *enabled)
+{
+    rt_base_t level; /* 复制复合邮箱结构前保存的CPU中断状态。 */
+
+    if(g_time_ctrl_initialized != RT_TRUE) /* 线程初始化前邮箱内容不可作为有效配置读取。 */
+    {
+        return TIME_CTRL_RESULT_THREAD_ERROR;
+    }
+    if((archive_index >= INVERTER_ARCHIVE_MAX_COUNT) || (command == RT_NULL) || (enabled == RT_NULL)) /* 下标和输出指针必须有效。 */
+    {
+        return TIME_CTRL_RESULT_INVALID_PARAMETER;
+    }
+    if(g_inv_archive_lib.valid[archive_index] != INVERTER_ARCHIVE_VALID) /* 空档案不返回残留时段配置。 */
+    {
+        return TIME_CTRL_RESULT_ARCHIVE_INVALID;
+    }
+
+    level = rt_hw_interrupt_disable(); /* 防止Set或Stop在复制命令期间更新邮箱。 */
+    *command = g_time_ctrl_mailboxes[archive_index].command;
+    *enabled = g_time_ctrl_mailboxes[archive_index].enabled;
     rt_hw_interrupt_enable(level);
     return TIME_CTRL_RESULT_OK;
 }
@@ -761,6 +828,12 @@ static void time_ctrl_find_period(Time_Ctrl_Context_t *context, time_t now)
         /* 当前时段在done_mask中对应的位。 */
         uint8_t period_bit = (uint8_t)(1U << period_index);
 
+        if(context->command.periods[period_index].enabled != RT_TRUE) /* 全FF禁用时段直接标记完成，永不生成控制动作。 */
+        {
+            context->done_mask |= period_bit;
+            continue;
+        }
+
         /* 已完成或已错过的时段不允许重复启动。 */
         if((context->done_mask & period_bit) != 0U) {
             continue;
@@ -906,8 +979,10 @@ static Time_Ctrl_Result_t time_ctrl_test_build_command(Time_Ctrl_Command_t *comm
 
     command->periods[0].mode = TIME_CTRL_ACTIVE_POWER_PERCENT;
     command->periods[0].value = TIME_CTRL_TEST_PERCENT_VALUE;
+    command->periods[0].enabled = RT_TRUE; /* 默认测试的第1时段需要参与校验和执行。 */
     command->periods[1].mode = TIME_CTRL_ACTIVE_POWER_VALUE;
     command->periods[1].value = TIME_CTRL_TEST_POWER_VALUE;
+    command->periods[1].enabled = RT_TRUE; /* 默认测试的第2时段需要参与校验和执行。 */
     return TIME_CTRL_RESULT_OK;
 }
 

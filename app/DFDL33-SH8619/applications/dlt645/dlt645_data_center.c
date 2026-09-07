@@ -82,6 +82,10 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
     {0x04E60900U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_SBCD, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 2U, 10, -1000, 1000, dlt645_read_control_value, dlt645_write_control_value, "reactive power percent adjustment"}, /* 格式XXX.X%，合法范围为-100.0%～100.0%。 */
     // 日发电量
     {0x04E60A00U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 4U, 100, 0, 0, dlt645_read_daily_energy, RT_NULL, "inverter daily energy"}, /* DI0支持01～0C单台及FF全部，格式为XXXXXX.XX kWh。 */
+    // 有功功率数值时段控制
+    {0x04E60B00U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 16U, 1, 0, 0, dlt645_read_time_control, dlt645_write_time_control, "active power time control"}, /* 每台包含4个hhmm时间和2个XXXX.XXXX kW数值，全量仍逐台携带独立时间。 */
+    // 有功功率百分比时段控制
+    {0x04E60C00U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 12U, 1, 0, 0, dlt645_read_time_control, dlt645_write_time_control, "active power percent time control"}, /* 每台包含4个hhmm时间和2个XXX.X%数值，写入后仅在接收当天执行一次。 */
 };
 
 // const ReadDataTypeDef ReadDataStruct[] = 
