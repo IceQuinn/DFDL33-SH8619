@@ -80,6 +80,8 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
     {0x04E60800U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_SBCD, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 2U, 10, -1000, 1000, dlt645_read_control_value, dlt645_write_control_value, "active power percent adjustment"}, /* 格式XXX.X%，合法范围为-100.0%～100.0%。 */
     // 无功功率百分比调节
     {0x04E60900U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_SBCD, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 2U, 10, -1000, 1000, dlt645_read_control_value, dlt645_write_control_value, "reactive power percent adjustment"}, /* 格式XXX.X%，合法范围为-100.0%～100.0%。 */
+    // 日发电量
+    {0x04E60A00U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 4U, 100, 0, 0, dlt645_read_daily_energy, RT_NULL, "inverter daily energy"}, /* DI0支持01～0C单台及FF全部，格式为XXXXXX.XX kWh。 */
 };
 
 // const ReadDataTypeDef ReadDataStruct[] = 

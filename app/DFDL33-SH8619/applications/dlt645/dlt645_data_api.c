@@ -332,6 +332,49 @@ rt_err_t dlt645_read_Qn(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *d
     return dlt645_read_nominal_power(point, id, data, capacity, data_len, DLT645_NOMINAL_POWER_QN);
 }
 
+/* 读取单台或全部逆变器日发电量，空档案、不支持、数据无效或编码溢出时返回全FF。 */
+rt_err_t dlt645_read_daily_energy(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data,
+                                  uint16_t capacity, uint16_t *data_len)
+{
+    uint8_t selector = (uint8_t)id; /* 数据标识最低字节用于选择单台逆变器或全部逆变器。 */
+    uint8_t first_archive;          /* 本次读取的首个档案槽位下标。 */
+    uint8_t archive_count;          /* 本次需要返回的固定日发电量字段数量。 */
+    uint8_t archive_offset;         /* 当前处理相对首档案的槽位偏移。 */
+    uint16_t required_len;          /* 单台或聚合读取对应的完整业务数据长度。 */
+
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL)) /* 公共接口的重要指针只在统一入口检查一次。 */
+    {
+        return -RT_EINVAL;
+    }
+    first_archive = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? 0U : (uint8_t)(selector - 1U); /* DI0已由分发层验证后转换为档案下标。 */
+    archive_count = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? INVERTER_ARCHIVE_MAX_COUNT : 1U; /* FF固定返回全部12个档案槽位。 */
+    required_len = point->data_len * archive_count; /* 每台日发电量固定占4字节。 */
+    if(capacity < required_len) /* 输出缓冲区不足时禁止生成截断的645应答。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
+    {
+        uint8_t archive_index = first_archive + archive_offset; /* 当前读取的实际档案槽位下标。 */
+        uint8_t *field = &data[archive_offset * point->data_len]; /* 当前档案在固定应答数据块中的字段地址。 */
+        Inv_Data_t *inv = Inv_Data_Get(archive_index); /* 取得周期抄读维护的日发电量实时缓存。 */
+        const Inv_Proto_t *protocol = Inv_Archive_Get_Protocol(archive_index); /* 取得厂家日发电量寄存器和小数位配置。 */
+
+        if((inv == RT_NULL) || (protocol == RT_NULL) ||
+           (protocol->daily_energy.reg_addr == INVERTER_PROTOCOL_REGISTER_UNUSED)) /* 空档案、未匹配协议或未配置寄存器时返回固定长度FF。 */
+        {
+            rt_memset(field, 0xFF, point->data_len);
+            continue;
+        }
+        dlt645_append_value(&inv->daily_energy, protocol->daily_energy.decimal_places,
+                            2U, (uint8_t)point->data_len, RT_FALSE, field); /* 源值统一换算为XXXXXX.XX无符号BCD。 */
+    }
+
+    *data_len = required_len; /* 单台返回4字节，全量返回12×4字节。 */
+    return RT_EOK;
+}
+
 /* 读取逆变器输出类型，协议不支持、档案为空、数据无效或数值超出规范范围时返回FF。 */
 rt_err_t dlt645_read_output_type(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data,
                                  uint16_t capacity, uint16_t *data_len)
