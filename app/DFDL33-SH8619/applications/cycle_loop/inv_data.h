@@ -169,6 +169,9 @@ uint32_t Inv_Control_Allocate_Request_Id(void);
 /* 按请求流水号等待并取出对应控制结果，不会误取或丢弃其他调用方的结果。 */
 rt_err_t Inv_Control_Get_Result_By_Id(uint32_t request_id, Inv_Control_Result_Info_t *result, int32_t timeout);
 
+/* 查询当前是否处于07:00～17:00逆变器控制允许时段。 */
+rt_bool_t Inv_Control_Is_Work_Enabled(void);
+
 /* 按0～11档案槽位获取实时数据，槽位无效或越界时返回RT_NULL。 */
 Inv_Data_t *Inv_Data_Get(uint8_t archive_index);
 

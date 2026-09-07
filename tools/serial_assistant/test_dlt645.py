@@ -264,6 +264,37 @@ class DLT645Tests(unittest.TestCase):
         self.assertEqual(decode_field(bytes.fromhex("FF FF"), bcd_field), "--")
         self.assertEqual(decode_field(bytes.fromhex("FF FF FF FF"), ascii_field), "--")
 
+    def test_inverter_adjustments_support_single_and_independent_all_device_values(self):
+        groups = {
+            "04E605": ("active_power_adjustment", "-12.3456", bytes.fromhex("56 34 12 80"), 4),
+            "04E606": ("reactive_power_adjustment", "-7.8901", bytes.fromhex("01 89 07 80"), 4),
+            "04E607": ("power_factor_adjustment", "-0.975", bytes.fromhex("75 89"), 2),
+            "04E608": ("active_power_percentage_adjustment", "-100.0", bytes.fromhex("00 90"), 2),
+            "04E609": ("reactive_power_percentage_adjustment", "-25.0", bytes.fromhex("50 82"), 2),
+        }
+        for prefix, (field_name, value, encoded, length) in groups.items():
+            with self.subTest(prefix=prefix):
+                single_di = prefix + "01"
+                all_di = prefix + "FF"
+                self.assertEqual(self.registry.get(single_di).access, "read_write")
+                self.assertEqual(self.registry.encode(single_di, {field_name: value}), encoded)
+                self.assertEqual(len(self.registry.get(all_di).read_response["fields"]), 12)
+                self.assertEqual(len(self.registry.get(all_di).write_request["fields"]), 12)
+
+                values = {
+                    f"inverter{index}_{field_name}": value if index in (1, 12) else "FF"
+                    for index in range(1, 13)
+                }
+                payload = self.registry.encode(all_di, values)
+                self.assertEqual(len(payload), length * 12)
+                self.assertEqual(payload[:length], encoded)
+                self.assertEqual(payload[length:-length], b"\xFF" * (length * 10))
+                self.assertEqual(payload[-length:], encoded)
+                decoded = self.registry.decode(all_di, payload)
+                self.assertNotEqual(decoded[0][1], "--")
+                self.assertEqual(decoded[1][1], "--")
+                self.assertNotEqual(decoded[-1][1], "--")
+
 
 if __name__ == "__main__":
     unittest.main()

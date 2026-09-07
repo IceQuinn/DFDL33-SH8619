@@ -2036,6 +2036,12 @@ uint32_t Inv_Control_Allocate_Request_Id(void)
     return request_id;
 }
 
+/* 返回周期线程维护的控制时段状态，供645在整批控制前完成一次性检查。 */
+rt_bool_t Inv_Control_Is_Work_Enabled(void)
+{
+    return g_inv_data_work_enabled; /* 该标志只按单字节读写，读取时不需要额外加锁。 */
+}
+
 /* 按流水号等待控制结果，查找过程中保留队列内其他调用方的结果及原有先后顺序。 */
 rt_err_t Inv_Control_Get_Result_By_Id(uint32_t request_id, Inv_Control_Result_Info_t *result, int32_t timeout)
 {

@@ -441,6 +441,8 @@ def encode_field(value: Any, definition: Mapping[str, Any]) -> bytes:
     length = int(definition["length"])
     order = _byte_order(definition)
     label = str(definition.get("description", definition.get("name", "字段")))
+    if definition.get("allow_ff") and str(value).strip().upper() == "FF":
+        return b"\xFF" * length
     if kind == "type_descriptor":
         if isinstance(value, Mapping):
             data_type_text = str(value.get("data_type", "uint_16"))

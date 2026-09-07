@@ -70,6 +70,16 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
     {0x04E60300U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_RAW,    DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 1U,  1,     0, 0, dlt645_read_output_type,    RT_NULL, "inverter output type"}, /* DI0支持01～0C单台及FF全部，00表示单相、01表示三相。 */
     // 运行状态读写
     {0x04E60400U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE,DLT645_CODEC_BCD, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 1U, 1, 0, 1, dlt645_read_run_state, dlt645_write_run_state, "inverter run state", }, /* DI0为FF时读取或逐个写入全部12台运行状态。 */
+    // 有功功率数值调节
+    {0x04E60500U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_SBCD, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 4U, 10000, INT32_MIN, INT32_MAX, dlt645_read_control_value, dlt645_write_control_value, "active power adjustment"}, /* 格式XXXX.XXXX kW，最高有效字节bit7表示符号。 */
+    // 无功功率数值调节
+    {0x04E60600U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_SBCD, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 4U, 10000, INT32_MIN, INT32_MAX, dlt645_read_control_value, dlt645_write_control_value, "reactive power adjustment"}, /* 格式XXXX.XXXX kvar，最高有效字节bit7表示符号。 */
+    // 功率因数调节
+    {0x04E60700U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_SBCD, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 2U, 1000, -1000, 1000, dlt645_read_control_value, dlt645_write_control_value, "power factor adjustment"}, /* 格式X.XXX，合法范围为-1.000～1.000。 */
+    // 有功功率百分比调节
+    {0x04E60800U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_SBCD, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 2U, 10, -1000, 1000, dlt645_read_control_value, dlt645_write_control_value, "active power percent adjustment"}, /* 格式XXX.X%，合法范围为-100.0%～100.0%。 */
+    // 无功功率百分比调节
+    {0x04E60900U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_SBCD, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 2U, 10, -1000, 1000, dlt645_read_control_value, dlt645_write_control_value, "reactive power percent adjustment"}, /* 格式XXX.X%，合法范围为-100.0%～100.0%。 */
 };
 
 // const ReadDataTypeDef ReadDataStruct[] = 
@@ -385,6 +395,37 @@ static rt_err_t dlt645_send_status_response(uint8_t fun_c, uint8_t err_code, uin
     return (uart_mgmt_write(uart_no, g_packBuf, packlen) == packlen) ? RT_EOK : -RT_ERROR; /* 串口完整接收待发送数据才视为成功。 */
 }
 
+/* 生成携带数据标识和逐台结果的写数据正常应答，所有数据域字节在此统一加0x33。 */
+static rt_err_t dlt645_send_write_data_response(uint32_t id, const uint8_t *data, uint16_t data_len, uint8_t uart_no)
+{
+    uint32_t packlen = 0U; /* 当前应答帧已经写入g_packBuf的字节数。 */
+    uint16_t index;        /* 当前复制的地址或逐台结果下标。 */
+
+    g_packBuf[packlen++] = 0xFEU; /* 保持工程现有应答格式，发送4个前导字节。 */
+    g_packBuf[packlen++] = 0xFEU;
+    g_packBuf[packlen++] = 0xFEU;
+    g_packBuf[packlen++] = 0xFEU;
+    g_packBuf[packlen++] = 0x68U; /* 写入第一个帧起始符。 */
+    for(index = 0U; index < DL645_ADDR_SIZE; ++index)
+    {
+        g_packBuf[packlen++] = sg_dl645_addr_bcd[index]; /* 写入当前645从站地址。 */
+    }
+    g_packBuf[packlen++] = 0x68U; /* 写入第二个帧起始符。 */
+    g_packBuf[packlen++] = E_D07_CTRL_WRITE_DATA | 0x80U; /* D7置1表示从站正常应答。 */
+    g_packBuf[packlen++] = (uint8_t)(DLT645_DATA_ID_LEN + data_len); /* 数据域包含4字节数据标识和逐台状态。 */
+    g_packBuf[packlen++] = (uint8_t)id + 0x33U; /* 数据标识按DI0～DI3顺序发送并统一加0x33。 */
+    g_packBuf[packlen++] = (uint8_t)(id >> 8) + 0x33U;
+    g_packBuf[packlen++] = (uint8_t)(id >> 16) + 0x33U;
+    g_packBuf[packlen++] = (uint8_t)(id >> 24) + 0x33U;
+    for(index = 0U; index < data_len; ++index)
+    {
+        g_packBuf[packlen++] = data[index] + 0x33U; /* 00～04状态在数据域中发送时同样需要加0x33。 */
+    }
+    dlt645_pack_base_end(g_packBuf, &packlen); /* 对完整帧计算校验和并追加结束符。 */
+    show_arr("dlt645 tx : ", g_packBuf, packlen); /* 输出完整应答便于核对逐台状态。 */
+    return (uart_mgmt_write(uart_no, g_packBuf, packlen) == packlen) ? RT_EOK : -RT_ERROR; /* 必须完整提交报文。 */
+}
+
 /* 块数据请求函数 */
 int dltl645_block_bcd_data_ack(const ReadBlockDataTypeDef *PReadBlockDate, uint8_t fun_c, uint8_t *p_buf, uint16_t len, uint8_t uart_no)
 {
@@ -631,6 +672,7 @@ void dlt645_ctrl_write_data(uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t
 {
     const Dlt645PointTypeDef *point = dlt645_point_find(id); /* 统一点表中与请求数据标识匹配的描述项。 */
     uint8_t err_code = E_D07_W_NO_DATA; /* 默认按未知点或无写权限回复无请求数据。 */
+    uint16_t response_len = 0U; /* 写回调可为全量调节返回12个逐台状态。 */
 
     RT_UNUSED(fun_c); /* 调用入口当前固定传入写数据功能码，状态应答层直接使用协议常量。 */
     if(point != RT_NULL) /* 仅匹配到已登记点后才检查权限并调用写处理函数。 */
@@ -652,7 +694,8 @@ void dlt645_ctrl_write_data(uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t
             /* p_buf由解析层完成减0x33，内容为密码、操作者代码和实际写数据。 */
             if((p_buf != RT_NULL) && (len == expected_len) &&
                (point->write(point, id, &p_buf[DLT645_WRITE_SECURITY_LEN],
-                             business_len) == RT_EOK)) /* 指针、总长度和全部业务写入结果有效才正常应答。 */
+                             business_len, g_dlt645_point_data,
+                             sizeof(g_dlt645_point_data), &response_len) == RT_EOK)) /* 指针、总长度和业务处理结果有效才正常应答。 */
             {
                 err_code = E_D07_W_OK; /* 设备已返回成功结果，回复正常写数据应答。 */
             }
@@ -663,5 +706,10 @@ void dlt645_ctrl_write_data(uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t
         }
     }
 
+    if((err_code == E_D07_W_OK) && (response_len > 0U)) /* 全量数值调节使用带数据标识和12个状态的正常应答。 */
+    {
+        dlt645_send_write_data_response(id, g_dlt645_point_data, response_len, uart_no);
+        return;
+    }
     dlt645_send_status_response(E_D07_CTRL_WRITE_DATA, err_code, uart_no); /* 每个写请求只在顶层发送一次最终状态。 */
 }

@@ -41,7 +41,10 @@ typedef rt_err_t (*Dlt645ReadHandler)(const struct Dlt645PointTypeDef *point,
 typedef rt_err_t (*Dlt645WriteHandler)(const struct Dlt645PointTypeDef *point,
                                       uint32_t id,
                                       const uint8_t *data,
-                                      uint16_t data_len);
+                                      uint16_t data_len,
+                                      uint8_t *response,
+                                      uint16_t response_capacity,
+                                      uint16_t *response_len);
 
 /* 描述一个645数据标识的匹配方式、权限、编码、范围以及对应业务数据接口。 */
 typedef struct Dlt645PointTypeDef
@@ -92,6 +95,21 @@ rt_err_t dlt645_read_run_state(const Dlt645PointTypeDef *point,
 rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
                                 uint32_t id,
                                 const uint8_t *data,
-                                uint16_t data_len);
+                                uint16_t data_len,
+                                uint8_t *response,
+                                uint16_t response_capacity,
+                                uint16_t *response_len);
+
+/* 读取五类逆变器调节设定值，空档案、不支持或缓存无效时使用全FF占位。 */
+rt_err_t dlt645_read_control_value(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
+/* 写入五类逆变器调节设定值，全量控制时为12个固定档案槽位生成逐台结果。 */
+rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point,
+                                    uint32_t id,
+                                    const uint8_t *data,
+                                    uint16_t data_len,
+                                    uint8_t *response,
+                                    uint16_t response_capacity,
+                                    uint16_t *response_len);
 
 #endif /* __DLT645_DATA_API_H__ */

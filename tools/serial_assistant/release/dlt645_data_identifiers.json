@@ -46,6 +46,31 @@
         {"name": "daily_energy", "description": "日发电量", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kWh"}
       ]
     },
+    "inverter_active_power_adjustment": {
+      "fields": [
+        {"name": "active_power_adjustment", "description": "有功功率调节值", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "kW", "allow_ff": true, "default": "FF"}
+      ]
+    },
+    "inverter_reactive_power_adjustment": {
+      "fields": [
+        {"name": "reactive_power_adjustment", "description": "无功功率调节值", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "kvar", "allow_ff": true, "default": "FF"}
+      ]
+    },
+    "inverter_power_factor_adjustment": {
+      "fields": [
+        {"name": "power_factor_adjustment", "description": "功率因数调节值", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 3, "sign_bit": {"byte": 0, "mask": "80"}, "minimum": -1.0, "maximum": 1.0, "allow_ff": true, "default": "FF"}
+      ]
+    },
+    "inverter_active_power_percentage_adjustment": {
+      "fields": [
+        {"name": "active_power_percentage_adjustment", "description": "有功功率百分比调节值", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "sign_bit": {"byte": 0, "mask": "80"}, "minimum": -100.0, "maximum": 100.0, "unit": "%", "allow_ff": true, "default": "FF"}
+      ]
+    },
+    "inverter_reactive_power_percentage_adjustment": {
+      "fields": [
+        {"name": "reactive_power_percentage_adjustment", "description": "无功功率百分比调节值", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "sign_bit": {"byte": 0, "mask": "80"}, "minimum": -100.0, "maximum": 100.0, "unit": "%", "allow_ff": true, "default": "FF"}
+      ]
+    },
     "inverter_three_phase_voltage": {
       "fields": [
         {"name": "voltage_a", "description": "A相电压", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "unit": "V"},
@@ -441,6 +466,66 @@
       "repeat_write_suffixes": {"FF": 12},
       "read_schema": "inverter_status",
       "write_schema": "inverter_status"
+    },
+    {
+      "id": "inverter_active_power_adjustment",
+      "category": "extended",
+      "prefix": "04E605",
+      "display": "04 E6 05 xx | 逆变器有功功率调节",
+      "description": "逆变器有功功率调节",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器有功功率调节"}, "label_template": "逆变器{decimal}有功功率调节"},
+      "access": "read_write",
+      "repeat_suffixes": {"FF": 12},
+      "read_schema": "inverter_active_power_adjustment",
+      "write_schema": "inverter_active_power_adjustment"
+    },
+    {
+      "id": "inverter_reactive_power_adjustment",
+      "category": "extended",
+      "prefix": "04E606",
+      "display": "04 E6 06 xx | 逆变器无功功率调节",
+      "description": "逆变器无功功率调节",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器无功功率调节"}, "label_template": "逆变器{decimal}无功功率调节"},
+      "access": "read_write",
+      "repeat_suffixes": {"FF": 12},
+      "read_schema": "inverter_reactive_power_adjustment",
+      "write_schema": "inverter_reactive_power_adjustment"
+    },
+    {
+      "id": "inverter_power_factor_adjustment",
+      "category": "extended",
+      "prefix": "04E607",
+      "display": "04 E6 07 xx | 逆变器功率因数调节",
+      "description": "逆变器功率因数调节",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器功率因数调节"}, "label_template": "逆变器{decimal}功率因数调节"},
+      "access": "read_write",
+      "repeat_suffixes": {"FF": 12},
+      "read_schema": "inverter_power_factor_adjustment",
+      "write_schema": "inverter_power_factor_adjustment"
+    },
+    {
+      "id": "inverter_active_power_percentage_adjustment",
+      "category": "extended",
+      "prefix": "04E608",
+      "display": "04 E6 08 xx | 逆变器有功功率百分比调节",
+      "description": "逆变器有功功率百分比调节",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器有功功率百分比调节"}, "label_template": "逆变器{decimal}有功功率百分比调节"},
+      "access": "read_write",
+      "repeat_suffixes": {"FF": 12},
+      "read_schema": "inverter_active_power_percentage_adjustment",
+      "write_schema": "inverter_active_power_percentage_adjustment"
+    },
+    {
+      "id": "inverter_reactive_power_percentage_adjustment",
+      "category": "extended",
+      "prefix": "04E609",
+      "display": "04 E6 09 xx | 逆变器无功功率百分比调节",
+      "description": "逆变器无功功率百分比调节",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部逆变器无功功率百分比调节"}, "label_template": "逆变器{decimal}无功功率百分比调节"},
+      "access": "read_write",
+      "repeat_suffixes": {"FF": 12},
+      "read_schema": "inverter_reactive_power_percentage_adjustment",
+      "write_schema": "inverter_reactive_power_percentage_adjustment"
     },
     {
       "id": "inverter_archive",

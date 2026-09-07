@@ -456,7 +456,10 @@ class SerialAssistant(tk.Tk):
             label = str(field_def.get("description", name))
             unit = str(field_def.get("unit", ""))
             kind = str(field_def.get("type", "hex"))
-            ttk.Label(self.dlt_fields_frame, text=label).grid(row=row, column=0, padx=4, pady=2, sticky="w")
+            display_label = label
+            if self.dlt_action_var.get() == "写" and field_def.get("allow_ff"):
+                display_label += "（FF=不控制）"
+            ttk.Label(self.dlt_fields_frame, text=display_label).grid(row=row, column=0, padx=4, pady=2, sticky="w")
             if self.dlt_action_var.get() == "写":
                 if kind == "type_descriptor":
                     type_var = tk.StringVar(value=str(field_def.get("default_type", "uint_16")))
