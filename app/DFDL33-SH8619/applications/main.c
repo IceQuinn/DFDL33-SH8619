@@ -94,7 +94,7 @@ int main(void)
     Ctu_Cfg_Init();             /* 装载装置配置。 */
 
     Dlt645_Init();              /* 初始化645协议库。 */
-    
+
     Inv_Proto_Init();           /* 协议库必须先于档案库初始化。 */
 
     Inv_Archive_Init();         /* 装载档案并建立运行时协议指针。 */

@@ -147,7 +147,7 @@ static void uart_dispatch_frame(uint16_t uart_no)
         extern void dlt645_rx_callback(void *ptr, uint16_t len, uint16_t buf_source);
         dlt645_rx_callback(rx->frame_buf, rx->frame_len, uart_no);
     }
-    else{   // 南向串口
+    else if((UART6_NO == uart_no) || (UART7_NO == uart_no) || (UART4_NO == uart_no)){   // 南向串口
         /* 自动识别阶段优先接收报文，没有识别事务等待响应时再交给下行读写状态机。 */
         result = cycle_loop_rx_frame(uart_no, rx->frame_buf, (uint16_t)rx->frame_len);
 
@@ -155,6 +155,9 @@ static void uart_dispatch_frame(uint16_t uart_no)
         if(result != RT_EOK) {
             Inv_Data_Rx_Frame(uart_no, rx->frame_buf, (uint16_t)rx->frame_len);
         }
+    }
+    else if((UART5_NO == uart_no) || (UART1_NO == uart_no)){   // 逆变器通信棒
+        uart_mgmt_write(uart_no, rx->frame_buf, (uint16_t)rx->frame_len);
     }
 
 
