@@ -86,6 +86,9 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
     {0x04E60B00U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 16U, 1, 0, 0, dlt645_read_time_control, dlt645_write_time_control, "active power time control"}, /* 每台包含4个hhmm时间和2个XXXX.XXXX kW数值，全量仍逐台携带独立时间。 */
     // 有功功率百分比时段控制
     {0x04E60C00U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 12U, 1, 0, 0, dlt645_read_time_control, dlt645_write_time_control, "active power percent time control"}, /* 每台包含4个hhmm时间和2个XXX.X%数值，写入后仅在接收当天执行一次。 */
+
+    // 光伏逆变器档案数量
+    {0x04E62100U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 1U, 1, 0, INVERTER_ARCHIVE_MAX_COUNT, dlt645_read_archive_count, RT_NULL, "inverter archive count"}, /* 固定数据标识仅允许读取，返回当前有效档案数的单字节BCD。 */
 };
 
 // const ReadDataTypeDef ReadDataStruct[] = 

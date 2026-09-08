@@ -146,6 +146,11 @@
         }
       ]
     },
+    "inverter_archive_count": {
+      "fields": [
+        {"name": "archive_count", "description": "光伏逆变器档案数", "type": "bcd", "length": 1, "byte_order": "little", "minimum": 0, "maximum": 12}
+      ]
+    },
     "active_power_schedule": {
       "fields": [
         {"name": "period1_start", "description": "第1次调节开始时间", "type": "bcd_datetime", "length": 2, "format": "hhmm", "byte_order": "little", "allow_ff": true, "default": "FF"},
@@ -549,6 +554,16 @@
       "repeat_suffixes": {"FF": 12},
       "read_schema": "inverter_reactive_power_percentage_adjustment",
       "write_schema": "inverter_reactive_power_percentage_adjustment"
+    },
+    {
+      "id": "inverter_archive_count",
+      "category": "extended",
+      "prefix": "04E621",
+      "display": "04 E6 21 00 | 光伏逆变器档案数",
+      "description": "光伏逆变器档案数",
+      "suffixes": {"values": ["00"], "labels": {"00": "光伏逆变器档案数"}},
+      "access": "read",
+      "read_schema": "inverter_archive_count"
     },
     {
       "id": "inverter_archive",

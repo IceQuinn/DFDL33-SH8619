@@ -139,6 +139,31 @@ static void dlt645_append_value(const Inv_RealtimeValue_t *source, uint8_t sourc
     }
 }
 
+/* 读取当前有效光伏逆变器档案数量，并按规范编码为一字节低位BCD。 */
+rt_err_t dlt645_read_archive_count(const Dlt645PointTypeDef *point, uint32_t id,
+                                   uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint8_t archive_count = g_inv_archive_lib.count; /* 档案保存和初始化流程已经根据valid数组维护有效档案数量。 */
+
+    (void)id; /* 本接口仅处理固定数据标识04E62100，不需要解析设备选择器。 */
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
+       (capacity < point->data_len) || (point->data_len != 1U)) /* 首次接收的接口参数和点表长度必须满足单字节输出要求。 */
+    {
+        return -RT_EINVAL;
+    }
+    if(archive_count > INVERTER_ARCHIVE_MAX_COUNT) /* 持久化数量异常时禁止向主站返回超出规范范围的数据。 */
+    {
+        return -RT_EINVAL;
+    }
+    if(dlt645_encode_bcd(archive_count, data, 1U, RT_FALSE) != RT_EOK) /* 0～12必须能够编码成规范要求的NN格式。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    *data_len = 1U; /* 光伏逆变器档案数量固定占一个BCD字节。 */
+    return RT_EOK;
+}
+
 /* 按变量类型生成单台逆变器的数据块，调用前已经确认实时数据和协议配置有效。 */
 static uint16_t dlt645_build_device_variables(Dlt645VariableTypeDef type, const Inv_Data_t *inv,
                                                const Inv_Proto_t *protocol, uint8_t *data)
