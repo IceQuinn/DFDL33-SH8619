@@ -4,7 +4,9 @@
 #include <rtthread.h>
 #include <stdint.h>
 
+#define HJ02C 0x2c
 
+rt_err_t hj02c_send(const void *buf, rt_size_t len);
 rt_err_t hj02c_send_cmd_and_get_resp(const char *cmd, char *resp,
                                          uint16_t max_len, uint16_t *len);
 /* ========== 配置指令 ========== */

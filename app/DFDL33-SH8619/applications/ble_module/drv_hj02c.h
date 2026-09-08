@@ -9,9 +9,9 @@
 #define HJ02C_SPI_BUS_NAME    "spi4"
 #define HJ02C_SPI_DEV_NAME    "spi40"
 
-#define HJ02C_CS_PIN          GET_PIN(A, 4)   // 软件 CS
-#define HJ02C_IRQ_PIN         GET_PIN(A, 5)   // IRQ，下降沿触发，低电平有效
-#define HJ02C_RST_PIN         GET_PIN(A, 6)   // 复位，高电平不复位
+#define HJ02C_CS_PIN          GET_PIN(B, 6)   // 软件 CS
+#define HJ02C_IRQ_PIN         GET_PIN(B, 5)   // IRQ，下降沿触发，低电平有效
+#define HJ02C_RST_PIN         GET_PIN(A, 8)   // 复位，高电平不复位
 
 extern struct rt_spi_device g_hj02c_dev;
 extern rt_mutex_t spi_lock;

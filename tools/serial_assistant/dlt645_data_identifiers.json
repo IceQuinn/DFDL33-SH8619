@@ -133,16 +133,16 @@
     },
     "inverter_archive": {
       "fields": [
-        {"name": "address", "description": "逆变器地址", "type": "uint", "length": 1, "byte_order": "little"},
+        {"name": "address", "description": "逆变器地址", "type": "uint", "length": 1, "byte_order": "little", "minimum": 1, "maximum": 247},
         {"name": "brand", "description": "逆变器品牌", "type": "ascii", "length": 32},
-        {"name": "protocol_version", "description": "逆变器规约版本", "type": "ascii", "length": 2},
+        {"name": "protocol_version", "description": "逆变器规约版本", "type": "hex_uint", "length": 2, "byte_order": "little", "default": "0x0100"},
         {
           "name": "port",
           "description": "接入端口",
           "type": "enum",
           "length": 1,
           "byte_order": "little",
-          "values": {"1": "端口1（RJ45-I）", "2": "端口2（RJ45-II）", "3": "端口3（RS485-II）"}
+          "values": {"1": "端口1（RJ45-I）", "2": "端口2（RJ45-II）", "3": "端口3（RS485-II）", "4": "端口4（无线）"}
         }
       ]
     },

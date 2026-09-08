@@ -155,6 +155,48 @@ int8_t Inv_Archive_Add_Device(uint8_t mb_addr, uint8_t port, const Inv_MfrInfo_t
     return Inv_Archive_Add(&archive);
 }
 
+/* 校验并替换指定档案槽位，成功后同步运行时协议指针、有效数量和Flash档案库。 */
+int8_t Inv_Archive_Set(uint8_t archive_index, const Inv_Archive_t *archive)
+{
+    const Inv_Proto_t *protocol; /* 按厂家名称和规约版本匹配到的有效协议配置。 */
+    uint8_t index;               /* 检查重复Modbus设备时使用的档案槽位下标。 */
+
+    if((archive == RT_NULL) || (archive_index >= INVERTER_ARCHIVE_MAX_COUNT) ||
+       (archive->mb_addr < 1U) || (archive->mb_addr > 247U) ||
+       (archive->port < INV_PORT_RJ45_1) || (archive->port > INV_PORT_WIRELESS)) /* 档案、目标槽位、Modbus地址和规范端口号必须全部有效。 */
+    {
+        return INVERTER_ARCHIVE_ADD_FAILED;
+    }
+
+    protocol = inv_archive_find_protocol(&archive->mfr_info); /* 写入前必须确认厂家和规约版本在协议库中存在完全匹配项。 */
+    if(protocol == RT_NULL) /* 未配置对应厂家规约时保持原档案不变，由645层返回写入错误。 */
+    {
+        return INVERTER_ARCHIVE_ADD_FAILED;
+    }
+
+    for(index = 0U; index < INVERTER_ARCHIVE_MAX_COUNT; ++index)
+    {
+        const Inv_Archive_t *stored_archive = &g_inv_archive_lib.archives[index]; /* 当前参与地址冲突检查的已存档案。 */
+
+        if((index != archive_index) &&
+           (g_inv_archive_lib.valid[index] == INVERTER_ARCHIVE_VALID) &&
+           (stored_archive->port == archive->port) &&
+           (stored_archive->mb_addr == archive->mb_addr)) /* 同一端口和Modbus地址不能同时登记到两个逻辑档案槽位。 */
+        {
+            return INVERTER_ARCHIVE_ADD_FAILED;
+        }
+    }
+
+    rt_enter_critical(); /* 防止任务切换发生在档案内容、有效标志和协议指针更新到一半时。 */
+    rt_memcpy(&g_inv_archive_lib.archives[archive_index], archive, sizeof(*archive)); /* 完整替换DI0指定的固定档案槽位。 */
+    g_inv_archive_lib.valid[archive_index] = INVERTER_ARCHIVE_VALID; /* 完整档案复制完成后再将槽位置为有效。 */
+    g_inv_archive_proto[archive_index] = protocol; /* 同步厂家协议指针，重启前也不保留旧协议引用。 */
+    rt_exit_critical();
+
+    Inv_Archive_Save(); /* 重新统计有效档案数量并将修改后的档案库持久化到Flash A/B区。 */
+    return (int8_t)archive_index;
+}
+
 /* 校验全部有效档案，并为能够匹配协议的档案建立运行时协议指针。 */
 void Inv_Archive_Validate_Protocols(void)
 {

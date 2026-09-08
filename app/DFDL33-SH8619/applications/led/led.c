@@ -51,13 +51,13 @@ struct LED_MODE
 
 //GPIO对应灯
 struct LED_PIN  LED_PIN_Str[LED_ALL]  = {
-        {GPIOC, GPIO_PINS_1 , "LED_RUN"  },
-        {GPIOA, GPIO_PINS_0 , "LED_WH_TX"  },
-        {GPIOA, GPIO_PINS_1 , "LED_WH_RX"  },
-        {GPIOD, GPIO_PINS_0 , "LED_UP_TX"  },
-        {GPIOD, GPIO_PINS_1 , "LED_UP_RX"  },
-        {GPIOB, GPIO_PINS_0 , "LED_DN_TX"  },
-        {GPIOB, GPIO_PINS_1 , "LED_DN_RX"  },
+        {GPIOC, GPIO_PINS_8 , "LED_RUN"  },
+        {GPIOC, GPIO_PINS_9 , "LED_WH_TX"  },
+        {GPIOB, GPIO_PINS_1 , "LED_WH_RX"  },
+        {GPIOB, GPIO_PINS_0 , "LED_UP_TX"  },
+        {GPIOC, GPIO_PINS_5 , "LED_UP_RX"  },
+        {GPIOC, GPIO_PINS_4 , "LED_DN_TX"  },
+        {GPIOA, GPIO_PINS_7 , "LED_DN_RX"  },
 };
 
 //LED灯配置
@@ -82,30 +82,25 @@ void LED_GPIO_Init()
       crm_periph_clock_enable(CRM_GPIOA_PERIPH_CLOCK, TRUE);
       crm_periph_clock_enable(CRM_GPIOB_PERIPH_CLOCK, TRUE);
       crm_periph_clock_enable(CRM_GPIOC_PERIPH_CLOCK, TRUE);
-      crm_periph_clock_enable(CRM_GPIOD_PERIPH_CLOCK, TRUE);
 
       gpio_default_para_init(&gpio_init_struct);
 
-      gpio_bits_reset(GPIOD, GPIO_PINS_0 | GPIO_PINS_1);
-      gpio_bits_reset(GPIOC, GPIO_PINS_1);
-      gpio_bits_reset(GPIOA, GPIO_PINS_0 | GPIO_PINS_1);
+      gpio_bits_reset(GPIOA, GPIO_PINS_7);
       gpio_bits_reset(GPIOB, GPIO_PINS_0 | GPIO_PINS_1);
+      gpio_bits_reset(GPIOC, GPIO_PINS_4 | GPIO_PINS_5 | GPIO_PINS_8 | GPIO_PINS_9);
 
       gpio_init_struct.gpio_drive_strength = GPIO_DRIVE_STRENGTH_STRONGER;
       gpio_init_struct.gpio_out_type = GPIO_OUTPUT_PUSH_PULL;
       gpio_init_struct.gpio_mode = GPIO_MODE_OUTPUT;
       gpio_init_struct.gpio_pins = GPIO_PINS_0 | GPIO_PINS_1;
       gpio_init_struct.gpio_pull = GPIO_PULL_NONE;
-      gpio_init(GPIOD, &gpio_init_struct);
+      gpio_init(GPIOB, &gpio_init_struct);
 
-      gpio_init_struct.gpio_pins = GPIO_PINS_1;
-      gpio_init(GPIOC, &gpio_init_struct);
-
-      gpio_init_struct.gpio_pins = GPIO_PINS_0 | GPIO_PINS_1;
+      gpio_init_struct.gpio_pins = GPIO_PINS_7;
       gpio_init(GPIOA, &gpio_init_struct);
 
-      gpio_init_struct.gpio_pins = GPIO_PINS_0 | GPIO_PINS_1;
-      gpio_init(GPIOB, &gpio_init_struct);
+      gpio_init_struct.gpio_pins = GPIO_PINS_4 | GPIO_PINS_5 | GPIO_PINS_8 | GPIO_PINS_9;
+      gpio_init(GPIOC, &gpio_init_struct);
 }
 
 
@@ -215,6 +210,7 @@ void LED_Ctrl(uint8_t Led_type, uint8_t Work_Mode, uint32_t TimeOut)
         }
     }
 }
+
 
 /*
  * Enable：使能，0：关闭全灯闪烁，非0：开启全灯闪烁

@@ -53,7 +53,7 @@ const user_thread_table_typedef user_thread_table[] = {
     {"led_run",     User_Led_Thread_Entry,      RT_NULL,  512,   25, 10},   /* LED灯运行线程 */
     {"645_sl",      dlt645_deal_thread_entry,   RT_NULL, 2048,   20, 15},   /* 645解析线程 */
     {"voltage_acq", voltage_acq_thread_entry,   RT_NULL, 1024,   15, 10},   /* 电压采集线程线程 */
-//    {"hj02c_rx",    hj02c_rx_thread_entry,      RT_NULL, 2048,   14, 10},   /* 蓝牙接收线程 */
+    {"hj02c_rx",    hj02c_rx_thread_entry,      RT_NULL, 2048,   14, 10},   /* 蓝牙接收线程 */
 };
 
 /* 按线程参数表依次创建并启动全部应用线程。 */
@@ -103,6 +103,11 @@ int main(void)
 
     uart_init();                /* 初始化串口后才能启动通信线程。 */
 
-    user_thread_init();         /* 基础资源就绪后创建应用线程。 */
+    if(hj02c_basic_init("MyAT32_001") == RT_EOK)    /* 蓝牙模块初始化 */
+    {
+        rt_kprintf("BLE is ready!\n");
+    }
+
+    user_thread_init();           /* 基础资源就绪后创建应用线程。 */
     return RT_EOK;
 }

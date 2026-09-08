@@ -58,7 +58,7 @@ uint8_t BCD2DEC(uint8_t ch);
 
 void dlt645_ctrl_read_data(uint8_t fun_c, uint32_t id,  uint8_t uart_no);
 void dlt645_ctrl_write_data(uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t len, uint8_t uart_no);
-
+void dlt645_upgrade_manage(uint32_t id, uint8_t *p_buf, uint16_t len);
 
 
 #endif

@@ -379,6 +379,9 @@ def decode_field(raw_value: bytes, definition: Mapping[str, Any]) -> Any:
     kind = str(definition.get("type", "hex")).lower()
     order = _byte_order(definition)
     logical = raw_value[::-1] if order == "little" else raw_value
+    if kind == "hex_uint":
+        integer = int.from_bytes(raw_value, order, signed=False)  # 规约版本按小端整数还原后统一显示为0xXXXX。
+        return f"0x{integer:0{len(raw_value) * 2}X}"
     if kind == "type_descriptor":
         descriptor = int.from_bytes(raw_value, order, signed=False)
         data_type = DESCRIPTOR_DATA_TYPES.get(descriptor & 0x0F, f"保留({descriptor & 0x0F})")
@@ -443,6 +446,12 @@ def encode_field(value: Any, definition: Mapping[str, Any]) -> bytes:
     label = str(definition.get("description", definition.get("name", "字段")))
     if definition.get("allow_ff") and str(value).strip().upper() == "FF":
         return b"\xFF" * length
+    if kind == "hex_uint":
+        text = str(value).strip()  # 上位机允许用户使用0x0100或0100输入16位规约版本。
+        if not re.fullmatch(rf"(?:0[xX])?[0-9A-Fa-f]{{1,{length * 2}}}", text):
+            raise ValueError(f"{label}必须是最多{length * 2}位十六进制数")
+        integer = int(text, 16)  # 移除可选0x前缀后按十六进制数值解析。
+        return integer.to_bytes(length, order, signed=False)  # 根据字段字节序生成00 01形式的小端线上数据。
     if kind == "type_descriptor":
         if isinstance(value, Mapping):
             data_type_text = str(value.get("data_type", "uint_16"))

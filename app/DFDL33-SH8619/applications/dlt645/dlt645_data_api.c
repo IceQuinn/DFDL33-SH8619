@@ -14,6 +14,10 @@
 #define DLT645_POWER_LEN              16U   /* 总、A、B、C相功率各占4字节，单台合计16字节。 */
 #define DLT645_POWER_FACTOR_LEN       8U    /* 总、A、B、C相功率因数各占2字节，单台合计8字节。 */
 #define DLT645_ALL_VARIABLE_LEN       55U   /* 五组变量按规范顺序拼接后的单台总长度。 */
+#define DLT645_ARCHIVE_ADDRESS_OFFSET 0U    /* 档案数据块第1字节为Modbus地址。 */
+#define DLT645_ARCHIVE_NAME_OFFSET    1U    /* Modbus地址之后为固定32字节厂家名称。 */
+#define DLT645_ARCHIVE_VERSION_OFFSET 33U   /* 厂家名称之后为低字节在前的16位规约版本。 */
+#define DLT645_ARCHIVE_PORT_OFFSET    35U   /* 档案数据块最后1字节为接入端口号。 */
 
 typedef enum Dlt645VariableType
 {
@@ -161,6 +165,130 @@ rt_err_t dlt645_read_archive_count(const Dlt645PointTypeDef *point, uint32_t id,
     }
 
     *data_len = 1U; /* 光伏逆变器档案数量固定占一个BCD字节。 */
+    return RT_EOK;
+}
+
+/* 判断完整档案数据块是否全部为FF，全FF档案当前不用于删除并应作为非法写入处理。 */
+static rt_bool_t dlt645_archive_is_all_ff(const uint8_t *data)
+{
+    uint16_t index; /* 当前检查的档案数据块字节下标。 */
+
+    for(index = 0U; index < INVERTER_ARCHIVE_WIRE_SIZE; ++index)
+    {
+        if(data[index] != 0xFFU) /* 任一字节不是FF即表示主站提交了具体档案内容。 */
+        {
+            return RT_FALSE;
+        }
+    }
+    return RT_TRUE;
+}
+
+/* 将主站下发的固定32字节厂家字段规范化为协议库使用的零填充ASCII名称。 */
+static rt_err_t dlt645_archive_normalize_name(const uint8_t *source,
+                                              char target[INVERTER_ARCHIVE_BRAND_WIRE_SIZE])
+{
+    uint8_t source_len = INVERTER_ARCHIVE_BRAND_WIRE_SIZE; /* 首个结束符之前的厂家名称长度。 */
+    uint8_t index;                                         /* 厂家字段扫描和复制下标。 */
+
+    for(index = 0U; index < INVERTER_ARCHIVE_BRAND_WIRE_SIZE; ++index)
+    {
+        if((source[index] == 0x00U) || (source[index] == 0xFFU)) /* 00和FF均可作为固定长度厂家字符串的结束填充值。 */
+        {
+            source_len = index;
+            break;
+        }
+        if((source[index] < 0x20U) || (source[index] > 0x7EU)) /* 厂家名称只接受可打印ASCII字符。 */
+        {
+            return -RT_EINVAL;
+        }
+    }
+    while((source_len > 0U) && (source[source_len - 1U] == 0x20U)) /* 去除上位机可能补在名称末尾的空格。 */
+    {
+        --source_len;
+    }
+    if(source_len == 0U) /* 空厂家名称无法与有效协议库建立明确对应关系。 */
+    {
+        return -RT_EINVAL;
+    }
+    for(index = source_len; index < INVERTER_ARCHIVE_BRAND_WIRE_SIZE; ++index)
+    {
+        if((source[index] != 0x00U) && (source[index] != 0xFFU) && (source[index] != 0x20U)) /* 名称结束后只允许00、FF或空格填充。 */
+        {
+            return -RT_EINVAL;
+        }
+    }
+
+    rt_memset(target, 0, INVERTER_ARCHIVE_BRAND_WIRE_SIZE); /* 协议库厂家名称统一使用零填充，保证固定长度比较稳定。 */
+    rt_memcpy(target, source, source_len); /* 只复制规范化后的有效ASCII名称，不保留主站填充字节。 */
+    return RT_EOK;
+}
+
+/* 读取DI0指定的固定档案槽位，有效档案按36字节字段顺序输出，无效档案输出全FF。 */
+rt_err_t dlt645_read_archive(const Dlt645PointTypeDef *point, uint32_t id,
+                             uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint8_t archive_index = (uint8_t)id - 1U; /* 分发层已确认DI0为01～0C，此处转换为0～11槽位下标。 */
+    const Inv_Archive_t *archive;             /* 当前请求档案槽位的只读结构地址。 */
+
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
+       (point->data_len != INVERTER_ARCHIVE_WIRE_SIZE) || (capacity < point->data_len)) /* 接口参数和点表长度必须能够容纳完整档案。 */
+    {
+        return -RT_EINVAL;
+    }
+    if(g_inv_archive_lib.valid[archive_index] != INVERTER_ARCHIVE_VALID) /* 无效槽位按规范返回固定36字节全FF。 */
+    {
+        rt_memset(data, 0xFF, INVERTER_ARCHIVE_WIRE_SIZE);
+        *data_len = INVERTER_ARCHIVE_WIRE_SIZE;
+        return RT_EOK;
+    }
+
+    archive = &g_inv_archive_lib.archives[archive_index]; /* 有效标志确认后再取得对应档案内容。 */
+    data[DLT645_ARCHIVE_ADDRESS_OFFSET] = archive->mb_addr; /* Modbus地址按原始无符号字节传输。 */
+    rt_memcpy(&data[DLT645_ARCHIVE_NAME_OFFSET], archive->mfr_info.name, INVERTER_ARCHIVE_BRAND_WIRE_SIZE); /* 厂家名称固定输出32字节ASCII。 */
+    data[DLT645_ARCHIVE_VERSION_OFFSET] = (uint8_t)archive->mfr_info.proto_ver; /* 规约版本先发送uint16_t低字节。 */
+    data[DLT645_ARCHIVE_VERSION_OFFSET + 1U] = (uint8_t)(archive->mfr_info.proto_ver >> 8U); /* 规约版本随后发送uint16_t高字节。 */
+    data[DLT645_ARCHIVE_PORT_OFFSET] = archive->port; /* 端口号按规范定义的01～04原值传输。 */
+    *data_len = INVERTER_ARCHIVE_WIRE_SIZE; /* 单条逆变器档案固定返回36字节。 */
+    return RT_EOK;
+}
+
+/* 解析并写入DI0指定的逆变器档案，只有厂家和规约版本匹配有效协议库时才保存。 */
+rt_err_t dlt645_write_archive(const Dlt645PointTypeDef *point, uint32_t id,
+                              const uint8_t *data, uint16_t data_len,
+                              uint8_t *response, uint16_t response_capacity,
+                              uint16_t *response_len)
+{
+    uint8_t archive_index = (uint8_t)id - 1U; /* 分发层已确认DI0为01～0C，此处定位主站指定的档案槽位。 */
+    Inv_Archive_t archive;                    /* 完成全部字段校验后提交给档案模块的临时档案。 */
+
+    RT_UNUSED(response); /* 单档案写入成功使用标准无数据写应答，不生成附加状态数据。 */
+    RT_UNUSED(response_capacity); /* 不生成附加状态数据，因此无需占用应答数据缓冲区。 */
+    if((point == RT_NULL) || (data == RT_NULL) || (response_len == RT_NULL) ||
+       (point->data_len != INVERTER_ARCHIVE_WIRE_SIZE) || (data_len != point->data_len)) /* 指针和业务数据长度必须满足完整36字节档案要求。 */
+    {
+        return -RT_EINVAL;
+    }
+    if(dlt645_archive_is_all_ff(data) == RT_TRUE) /* 当前版本不支持使用全FF写请求删除档案。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    rt_memset(&archive, 0, sizeof(archive)); /* 清除结构体填充内容，厂家名称也以零作为统一填充值。 */
+    archive.mb_addr = data[DLT645_ARCHIVE_ADDRESS_OFFSET]; /* Modbus地址按原始1字节读取，合法范围由档案模块统一校验。 */
+    if(dlt645_archive_normalize_name(&data[DLT645_ARCHIVE_NAME_OFFSET], archive.mfr_info.name) != RT_EOK) /* 厂家字段必须是非空、可打印并可规范化的ASCII字符串。 */
+    {
+        return -RT_EINVAL;
+    }
+    archive.mfr_info.proto_ver = (uint16_t)data[DLT645_ARCHIVE_VERSION_OFFSET] |
+                                 ((uint16_t)data[DLT645_ARCHIVE_VERSION_OFFSET + 1U] << 8U); /* 两个线上字节按小端顺序还原为0x0100等规约版本值。 */
+    archive.port = data[DLT645_ARCHIVE_PORT_OFFSET]; /* 端口号01～04由档案模块按规范枚举统一校验。 */
+
+    if(Inv_Archive_Set(archive_index, &archive) == INVERTER_ARCHIVE_ADD_FAILED) /* 地址端口非法、设备重复或厂家规约未匹配时保持原档案不变。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    *response_len = 0U; /* 写入成功后返回标准645正常写应答，不携带业务数据。 */
     return RT_EOK;
 }
 

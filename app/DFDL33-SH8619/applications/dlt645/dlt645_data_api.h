@@ -90,6 +90,18 @@ rt_err_t dlt645_read_daily_energy(const Dlt645PointTypeDef *point, uint32_t id, 
 /* 读取当前有效光伏逆变器档案数量，返回范围0～12的一字节BCD。 */
 rt_err_t dlt645_read_archive_count(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
 
+/* 读取DI0指定的光伏逆变器档案，无效档案返回固定36字节全FF。 */
+rt_err_t dlt645_read_archive(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
+/* 写入或修改DI0指定的光伏逆变器档案，写入成功后需人工重启使全部运行状态重新初始化。 */
+rt_err_t dlt645_write_archive(const Dlt645PointTypeDef *point,
+                              uint32_t id,
+                              const uint8_t *data,
+                              uint16_t data_len,
+                              uint8_t *response,
+                              uint16_t response_capacity,
+                              uint16_t *response_len);
+
 /* 从实时数据中心读取指定逆变器运行状态并编码为规范规定的单字节BCD。 */
 rt_err_t dlt645_read_run_state(const Dlt645PointTypeDef *point,
                                uint32_t id,

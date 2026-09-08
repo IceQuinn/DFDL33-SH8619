@@ -14,6 +14,8 @@
 
 #include "inv_data.h"
 
+#include "upgrade.h"
+
 #define DBG_TAG "645_data"
 #define DBG_LVL DBG_LOG
 #include <rtdbg.h>
@@ -89,6 +91,8 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
 
     // 光伏逆变器档案数量
     {0x04E62100U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 1U, 1, 0, INVERTER_ARCHIVE_MAX_COUNT, dlt645_read_archive_count, RT_NULL, "inverter archive count"}, /* 固定数据标识仅允许读取，返回当前有效档案数的单字节BCD。 */
+    // 光伏逆变器档案
+    {0x04E62100U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_DEVICE, INVERTER_ARCHIVE_WIRE_SIZE, 1, 0, 0, dlt645_read_archive, dlt645_write_archive, "inverter archive"}, /* DI0为01～0C，每个档案固定包含地址、厂家、规约版本和端口共36字节。 */
 };
 
 // const ReadDataTypeDef ReadDataStruct[] = 
@@ -389,7 +393,10 @@ static rt_err_t dlt645_send_read_response(uint32_t id,
     dlt645_pack_base_end(g_packBuf, &packlen); /* 根据完整帧内容计算CS并追加0x16。 */
     show_arr("dlt645 tx : ", g_packBuf, packlen); /* 发送前输出完整十六进制报文便于联调。 */
 
-    return (uart_mgmt_write(uart_no, g_packBuf, packlen) == packlen) ? RT_EOK : -RT_ERROR; /* 仅完整提交全部字节才返回成功。 */
+//    return (uart_mgmt_write(uart_no, g_packBuf, packlen) == packlen) ? RT_EOK : -RT_ERROR; /* 仅完整提交全部字节才返回成功。 */
+    if(dlt645_data_ack(uart_no, g_packBuf, packlen) != RT_EOK)
+        return -RT_ERROR;
+    return RT_EOK;
 }
 
 /* 根据处理结果统一生成正常或异常状态应答，当前主要用于写数据命令的最终回复。 */
@@ -401,7 +408,10 @@ static rt_err_t dlt645_send_status_response(uint8_t fun_c, uint8_t err_code, uin
     dlt645_pack_base_end(g_packBuf, &packlen); /* 计算校验和并追加结束符。 */
     show_arr("dlt645 tx : ", g_packBuf, packlen); /* 输出最终应答报文用于确认长度字段和错误码。 */
 
-    return (uart_mgmt_write(uart_no, g_packBuf, packlen) == packlen) ? RT_EOK : -RT_ERROR; /* 串口完整接收待发送数据才视为成功。 */
+//    return (uart_mgmt_write(uart_no, g_packBuf, packlen) == packlen) ? RT_EOK : -RT_ERROR; /* 串口完整接收待发送数据才视为成功。 */
+    if(dlt645_data_ack(uart_no, g_packBuf, packlen) != RT_EOK)
+        return -RT_ERROR;
+    return RT_EOK;
 }
 
 /* 生成携带数据标识和逐台结果的写数据正常应答，所有数据域字节在此统一加0x33。 */
@@ -432,7 +442,10 @@ static rt_err_t dlt645_send_write_data_response(uint32_t id, const uint8_t *data
     }
     dlt645_pack_base_end(g_packBuf, &packlen); /* 对完整帧计算校验和并追加结束符。 */
     show_arr("dlt645 tx : ", g_packBuf, packlen); /* 输出完整应答便于核对逐台状态。 */
-    return (uart_mgmt_write(uart_no, g_packBuf, packlen) == packlen) ? RT_EOK : -RT_ERROR; /* 必须完整提交报文。 */
+//    return (uart_mgmt_write(uart_no, g_packBuf, packlen) == packlen) ? RT_EOK : -RT_ERROR; /* 必须完整提交报文。 */
+    if(dlt645_data_ack(uart_no, g_packBuf, packlen) != RT_EOK)
+        return -RT_ERROR;
+    return RT_EOK;
 }
 
 /* 块数据请求函数 */
@@ -489,7 +502,8 @@ int dltl645_block_bcd_data_ack(const ReadBlockDataTypeDef *PReadBlockDate, uint8
     show_rtc_time();
     show_arr("ctu power ack : ", g_packBuf, packlen);
 
-    uart_mgmt_write(uart_no, g_packBuf, packlen);
+//    uart_mgmt_write(uart_no, g_packBuf, packlen);
+    dlt645_data_ack(uart_no, g_packBuf, packlen);
     return 1;
 }
 
@@ -540,7 +554,8 @@ rt_err_t dltl645_ymdw_ack(uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t l
     show_rtc_time();
     show_arr("ctu power ack : ", g_packBuf, packlen);
 
-    uart_mgmt_write(uart_no, g_packBuf, packlen);
+//    uart_mgmt_write(uart_no, g_packBuf, packlen);
+    dlt645_data_ack(uart_no, g_packBuf, packlen);
     return RT_EOK;
 
 }
@@ -589,7 +604,8 @@ rt_err_t dltl645_hms_ack(uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t le
     show_rtc_time();
     show_arr("ctu power ack : ", g_packBuf, packlen);
 
-    uart_mgmt_write(uart_no, g_packBuf, packlen);
+//    uart_mgmt_write(uart_no, g_packBuf, packlen);
+    dlt645_data_ack(uart_no, g_packBuf, packlen);
     return RT_EOK;
 }
 
@@ -621,7 +637,8 @@ int translayerdl645_no_data_requested_ack(uint8_t fun_c, uint8_t uart_no)
     show_rtc_time();
     show_arr("ctu power ack : ", g_packBuf, packLen);
 
-    uart_mgmt_write(uart_no, g_packBuf, packLen);
+//    uart_mgmt_write(uart_no, g_packBuf, packLen);
+    dlt645_data_ack(uart_no, g_packBuf, packLen);
     return 1;
 }
 
@@ -722,3 +739,54 @@ void dlt645_ctrl_write_data(uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t
     }
     dlt645_send_status_response(E_D07_CTRL_WRITE_DATA, err_code, uart_no); /* 每个写请求只在顶层发送一次最终状态。 */
 }
+
+void dlt645_upgrade_manage(uint32_t id, uint8_t *p_buf, uint16_t len)
+{
+    upgrd_msg_t msg;
+    rt_memset(&msg, 0, sizeof(msg));
+
+//    switch(id)
+//    {
+//        case 0x08800001:
+//            msg.type = UPGRD_MSG_HAND;
+//            break;
+//        case 0x08800002:
+//            msg.type = UPGRD_MSG_UPDATA;
+//            break;
+//        case 0x08800003:
+//            msg.type = UPGRD_MSG_RETRANS;
+//            break;
+//        case 0x08800004:
+//            msg.type = UPGRD_MSG_CHECK;
+//            break;
+//        default:
+//            break;
+//    }
+    if(0x08800001 == id){
+        msg.type = UPGRD_MSG_HAND;
+    }
+    else if(0x08800002 == id){
+        msg.type = UPGRD_MSG_UPDATA;
+    }
+    else if(0x08800003 == id){
+        msg.type = UPGRD_MSG_RETRANS;
+    }
+    else if(0x08800004 == id){
+        msg.type = UPGRD_MSG_CHECK;
+    }
+    else{
+        return ;
+    }
+
+    msg.len = len;
+    if(msg.len > sizeof(msg.data)) {
+        msg.len = sizeof(msg.data);
+    }
+    rt_memcpy(msg.data, p_buf, msg.len);
+
+    /* 发送到消息队列 */
+    if (rt_mq_send(upgrd_mq, &msg, sizeof(msg)) != RT_EOK) {
+        rt_kprintf("Upgrade MQ full! Discard msg.\r\n");
+    }
+}
+

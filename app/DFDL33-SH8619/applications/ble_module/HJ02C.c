@@ -19,6 +19,16 @@ static void *memmem(const void *haystack, size_t hlen,
     return RT_NULL;
 }
 
+rt_err_t hj02c_send(const void *buf, rt_size_t len)
+{
+    if(-1 == hj02c_spi_send(&g_hj02c_dev, buf, len))
+    {
+        rt_kprintf("hj02c send failed\n");
+        return -RT_ERROR;
+    }
+    return RT_EOK;
+}
+
 rt_size_t hj02c_spi_send_Test(struct rt_spi_device *device, const void *buf, rt_size_t len)
 {
     rt_size_t sent;
@@ -31,9 +41,8 @@ void HJ02C_Test(uint8_t argc, char **argv)
 {
     if(wait_irq_high(2000) != RT_EOK)
     {
-//        rt_mutex_release(spi_lock);
         rt_kprintf("wait_irq_high(2000)\n");
-        return -1;
+        return ;
     }
 
     rt_pin_write(HJ02C_CS_PIN, PIN_LOW);
@@ -48,9 +57,8 @@ void HJ02C_Test(uint8_t argc, char **argv)
 
     if(wait_irq_low(2000) != RT_EOK)
     {
-//        rt_mutex_release(spi_lock);
         rt_kprintf("wait_irq_low(2000)\n");
-        return -1;
+        return ;
     }
 
     uint8_t dummy = 0xFF;
@@ -86,7 +94,11 @@ rt_err_t hj02c_send_cmd_and_get_resp(const char *cmd, char *resp,
     uint16_t len = 0;
     uint8_t dummy = 0xFF;
 
-    rt_mutex_take(spi_lock, RT_WAITING_FOREVER);
+    if(wait_irq_high(2000) != RT_EOK)
+    {
+        rt_kprintf("wait_irq_high(2000)\n");
+        return -1;
+    }
 
     rt_pin_write(HJ02C_CS_PIN, PIN_LOW);
     rt_hw_us_delay(2);
@@ -96,14 +108,10 @@ rt_err_t hj02c_send_cmd_and_get_resp(const char *cmd, char *resp,
     rt_hw_us_delay(2);
     rt_pin_write(HJ02C_CS_PIN, PIN_HIGH);
 
-    rt_tick_t start = rt_tick_get();
-    while (rt_pin_read(HJ02C_IRQ_PIN) != PIN_LOW) {
-        if (rt_tick_get() - start > rt_tick_from_millisecond(2000)) {
-            rt_pin_write(HJ02C_CS_PIN, PIN_HIGH);
-            rt_mutex_release(spi_lock);
-            return RT_ETIMEOUT;
-        }
-        rt_thread_mdelay(1);
+    if(wait_irq_low(2000) != RT_EOK)
+    {
+        rt_kprintf("wait_irq_low(2000)\n");
+        return -1;
     }
 
     rt_pin_write(HJ02C_CS_PIN, PIN_LOW);
@@ -113,7 +121,6 @@ rt_err_t hj02c_send_cmd_and_get_resp(const char *cmd, char *resp,
 
     if (len == 0 || len > max_len) {
         rt_pin_write(HJ02C_CS_PIN, PIN_HIGH);
-        rt_mutex_release(spi_lock);
         return RT_ERROR;
     }
 
@@ -122,7 +129,6 @@ rt_err_t hj02c_send_cmd_and_get_resp(const char *cmd, char *resp,
     rt_hw_us_delay(1);
 
     rt_pin_write(HJ02C_CS_PIN, PIN_HIGH);
-    rt_mutex_release(spi_lock);
 
     wait_irq_high(500);
 
@@ -153,7 +159,7 @@ rt_err_t hj02c_send_set_cmd(const char *cmd)
     uint16_t len = 0;
 
     rt_err_t err = hj02c_send_cmd_and_get_resp(cmd, resp, sizeof(resp), &len);
-    if (err != RT_EOK) {
+    if (err != RT_EOK){
         return err;
     }
 
@@ -239,7 +245,7 @@ rt_err_t hj02c_basic_init(const char *device_name)
 
     hj02c_spi4_init();
 
-    rt_thread_mdelay(100); // 等待 SPI4 初始化完成
+    rt_thread_mdelay(1000); // 等待 SPI4 初始化完成
 
     if (hj02c_factory() != RT_EOK)
         return RT_ERROR;
@@ -263,23 +269,18 @@ rt_err_t hj02c_basic_init(const char *device_name)
 }
 
 extern rt_sem_t irq_sem;
-
 void hj02c_rx_thread_entry(void *parameter)
 {
     uint16_t len;
     uint8_t rx_buf[512];
-
-    /* 初始化蓝牙模块 */
-    if(hj02c_basic_init("MyAT32_001") == RT_EOK)
-    {
-        rt_kprintf("BLE is ready!\n");
-    }
 
     while (1)
     {
         if (rt_sem_take(irq_sem, RT_WAITING_FOREVER) == RT_EOK)
         {
             len = hj02c_spi_recv(&g_hj02c_dev, rx_buf);
+
+            dlt645_rx_callback(rx_buf, len, HJ02C);
             rt_kprintf("recv len = %d\r\n", len);
         }
     }

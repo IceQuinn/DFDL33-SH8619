@@ -110,6 +110,9 @@ int8_t Inv_Archive_Add_Device(uint8_t mb_addr,
                               uint8_t port,
                               const Inv_MfrInfo_t *mfr_info);
 
+/* 将完整档案写入指定槽位，厂家规约不匹配、地址端口非法或设备重复时返回失败。 */
+int8_t Inv_Archive_Set(uint8_t archive_index, const Inv_Archive_t *archive);
+
 /* 校验全部有效档案，没有对应有效协议的档案会被置无效并保存。 */
 void Inv_Archive_Validate_Protocols(void);
 

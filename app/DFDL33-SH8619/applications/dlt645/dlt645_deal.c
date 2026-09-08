@@ -1,12 +1,13 @@
 #include "dlt645_deal.h"
 #include "dlt645_define.h"
-#include <rtthread.h>
 #include <rtdevice.h>
 
 #include "ctu_cfg.h"
 #include "main_uart.h"
 #include "dlt645_data_center.h"
 #include "rng_buf.h"
+
+#include "HJ02C.h"
 
 #define DBG_TAG "dlt645"
 #define DBG_LVL DBG_LOG
@@ -166,7 +167,13 @@ int dlt645_addr_ack(uint8_t uart_no)
     }
     rt_kprintf("\n");
 
-    uart_mgmt_write(uart_no, g_packBuf, packLen);
+//    if(HJ02C == uart_no)
+//    {
+//        hj02c_send(g_packBuf, packLen);
+//    }else{
+//        uart_mgmt_write(uart_no, g_packBuf, packLen);
+//    }
+    dlt645_data_ack(uart_no, g_packBuf, packLen);
 
     return 1;
 }
@@ -224,10 +231,11 @@ void dlt645_deal(uint8_t uart_no, uint8_t *dlt645_addr, uint8_t *bufPtr, uint16_
                     dlt645_ctrl_write_data(E_D07_CTRL_WRITE_DATA, DLT645_Pack.Ruler_ID, DLT645_Pack.Data, DLT645_Pack.Data_Length, uart_no);
                     break;
                 case E_D07_CTRL_PRIVATE_GSE:
-                    rt_kprintf("Receive Private645\n");
-                    // DLT645_Pack.Data_Length = newPackPtr[9];
-                    // DLT645_Pack.Data = &newPackPtr[10];
-
+//                    rt_kprintf("Receive Private645\n");
+                    rt_memcpy(&DLT645_Pack.Ruler_ID, &newPackPtr[10], 4);
+                    DLT645_Pack.Data_Length = newPackPtr[9] - 4;
+                    DLT645_Pack.Data = &newPackPtr[14];
+                    dlt645_upgrade_manage(DLT645_Pack.Ruler_ID, DLT645_Pack.Data, DLT645_Pack.Data_Length);
                     break;
                 case E_D07_CTRL_READ_ADDR:
                     rt_kprintf("recv dl645 read addr\n");
@@ -287,6 +295,17 @@ void dlt645_rx_get(void *ptr, uint16_t *len, uint16_t *buf_source)
     *len = queue.len;
 
     RngBufRead(&dlt645_rng, ptr, queue.len);
+}
+
+rt_err_t dlt645_data_ack(uint16_t uart_no, const void *buffer, rt_size_t size)
+{
+    if(HJ02C == uart_no)
+    {
+        return hj02c_send(buffer, size);
+    }
+    else{
+        return (uart_mgmt_write(uart_no, buffer, size) == size) ? RT_EOK : -RT_ERROR;
+    }
 }
 
 uint8_t dlt645_deal_rx_buf[256] = {0};

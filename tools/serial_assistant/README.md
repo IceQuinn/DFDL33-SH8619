@@ -75,6 +75,7 @@ Windows 通常不允许两个程序同时打开同一个 COM 口，因此监听�
 - `bit_field`：位状态。
 - `ascii`：定长字符串。
 - `hex` / `raw_bytes`：定长原始字节。
+- `hex_uint`：按配置字节序传输的十六进制无符号整数，读取时统一显示为`0xXXXX`。
 
 全局 `defaults` 可配置隐藏的写安全字段：
 

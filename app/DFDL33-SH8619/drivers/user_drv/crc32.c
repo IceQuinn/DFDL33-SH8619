@@ -75,6 +75,26 @@ uint32_t crc32(void* buf, uint32_t len)
     return crc;  
 }
 
+//叠加计算
+uint32_t crc32_part(void* ptr_buf, int nLength, uint32_t *data_crc)
+{
+    int32_t i;
+    uint32_t crc = *data_crc;
+    unsigned char *buf = ptr_buf;
+
+    if (nLength < 1)
+        return 0xffffffff;
+
+    for (i=0; i != nLength; i++)
+    {
+        crc = table[(crc ^ buf[i]) & 0xff] ^ (crc >> 8);
+    }
+
+//    crc = crc ^ 0xffffffff;
+
+    return crc;
+}
+
 /* 复位软件crc32计算 */
 uint32_t sf_accumulate_crc = 0;
 void sf_reset_crc(void)

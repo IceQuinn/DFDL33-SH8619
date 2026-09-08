@@ -4,17 +4,14 @@
 #include "at32f403a_407.h"
 
 struct rt_spi_device g_hj02c_dev;
-rt_mutex_t spi_lock;
 rt_sem_t irq_sem;
 
 /* IRQ 中断回调 */
-uint8_t callback_num = 0;
 static void hj02c_irq_callback(void *args)
 {
     if (irq_sem != RT_NULL)
     {
         rt_sem_release(irq_sem);
-        callback_num++;
     }
 }
 
@@ -75,11 +72,14 @@ int hj02c_spi4_init(void)
     spi4_init();
 
     crm_periph_clock_enable(CRM_GPIOA_PERIPH_CLOCK, TRUE);
+    crm_periph_clock_enable(CRM_GPIOB_PERIPH_CLOCK, TRUE);
 
     rt_pin_mode(HJ02C_CS_PIN,  PIN_MODE_OUTPUT);
     rt_pin_mode(HJ02C_IRQ_PIN, PIN_MODE_INPUT_PULLUP);
     rt_pin_mode(HJ02C_RST_PIN, PIN_MODE_OUTPUT);
     rt_pin_write(HJ02C_CS_PIN, PIN_HIGH);     // CS 默认不选中
+    rt_pin_write(HJ02C_RST_PIN, PIN_LOW);    // 模块正常工作
+    rt_thread_mdelay(10);
     rt_pin_write(HJ02C_RST_PIN, PIN_HIGH);    // 模块正常工作
 
     rt_err_t ret = rt_spi_bus_attach_device(&g_hj02c_dev, "spi40", "spi4", RT_NULL);
@@ -95,7 +95,6 @@ int hj02c_spi4_init(void)
     rt_spi_configure(&g_hj02c_dev, &cfg);
 
     irq_sem  = rt_sem_create("hj_irq", 0, RT_IPC_FLAG_FIFO);
-    spi_lock = rt_mutex_create("hj_spi", RT_IPC_FLAG_FIFO);
 
     return RT_EOK;
 }
@@ -136,11 +135,9 @@ rt_err_t wait_irq_low(uint32_t timeout_ms)
 rt_size_t hj02c_spi_send(struct rt_spi_device *device, const void *buf, rt_size_t len)
 {
     rt_size_t sent;
-    rt_mutex_take(spi_lock, RT_WAITING_FOREVER);
 
     if(wait_irq_high(2000) != RT_EOK)
     {
-        rt_mutex_release(spi_lock);
         return -1;
     }
 
@@ -149,7 +146,6 @@ rt_size_t hj02c_spi_send(struct rt_spi_device *device, const void *buf, rt_size_
     sent = rt_spi_send(device, buf, len);
     rt_hw_us_delay(2);
     rt_pin_write(HJ02C_CS_PIN, PIN_HIGH);
-    rt_mutex_release(spi_lock);
     return sent;
 }
 
@@ -168,11 +164,9 @@ rt_size_t hj02c_spi_recv(struct rt_spi_device *device, void *buf)
 //    uint8_t rcvd2;
     uint16_t rcvd;
     uint8_t dummy = 0xFF;
-    rt_mutex_take(spi_lock, RT_WAITING_FOREVER);
 
     if(wait_irq_low(2000) != RT_EOK)
     {
-        rt_mutex_release(spi_lock);
         return -1;
     }
 
@@ -194,7 +188,6 @@ rt_size_t hj02c_spi_recv(struct rt_spi_device *device, void *buf)
 
     rt_hw_us_delay(2);   // 等 SPI 硬件空闲再拉高 CS
     rt_pin_write(HJ02C_CS_PIN, PIN_HIGH);
-    rt_mutex_release(spi_lock);
 
     wait_irq_high(500);  // 等 IRQ 恢复高
 

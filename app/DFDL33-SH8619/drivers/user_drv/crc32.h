@@ -5,6 +5,7 @@
 
 
 uint32_t crc32(void* buf, uint32_t len);
+uint32_t crc32_part(void* ptr_buf, int nLength, uint32_t *data_crc);
 
 void sf_reset_crc(void);
 

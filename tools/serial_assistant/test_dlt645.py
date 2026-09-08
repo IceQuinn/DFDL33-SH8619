@@ -243,12 +243,19 @@ class DLT645Tests(unittest.TestCase):
         )
 
         archive = self.registry.encode("04E62101", {
-            "address": "1", "brand": "TEST", "protocol_version": "12", "port": "端口2（RJ45-II）",
+            "address": "1", "brand": "TEST", "protocol_version": "0x0100", "port": "端口2（RJ45-II）",
         })
         self.assertEqual(len(archive), 36)
+        self.assertEqual(archive[33:35], bytes.fromhex("00 01"))
         decoded = dict((name, value) for name, value, _unit in self.registry.decode("04E62101", archive))
         self.assertEqual(decoded["逆变器品牌"], "TEST")
+        self.assertEqual(decoded["逆变器规约版本"], "0x0100")
         self.assertEqual(decoded["接入端口"], "端口2（RJ45-II）")
+        wireless_archive = self.registry.encode("04E6210C", {
+            "address": "247", "brand": "HUAWEI", "protocol_version": "0x0300", "port": "端口4（无线）",
+        })
+        self.assertEqual(wireless_archive[0], 247)
+        self.assertEqual(wireless_archive[33:36], bytes.fromhex("00 03 04"))
 
     def test_complex_datetime_and_type_descriptor_fields(self):
         datetime_field = {"name": "time", "description": "时间", "type": "bcd_datetime", "length": 5,
