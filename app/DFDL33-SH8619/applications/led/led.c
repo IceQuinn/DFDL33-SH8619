@@ -63,12 +63,12 @@ struct LED_PIN  LED_PIN_Str[LED_ALL]  = {
 //LED灯配置
 struct LED_MODE LED_MODE_Str[LED_ALL] = {
         {-1, 0, LED_NORMAL,     &LED_PIN_Str[LED_RUN]  },
-        {-1, 0, LED_OFF,        &LED_PIN_Str[LED_WH_TX]  },
-        {-1, 0, LED_OFF,        &LED_PIN_Str[LED_WH_RX]  },
-        {-1, 0, LED_OFF,        &LED_PIN_Str[LED_UP_TX]  },
-        {-1, 0, LED_OFF,        &LED_PIN_Str[LED_UP_RX]  },
-        {-1, 0, LED_OFF,        &LED_PIN_Str[LED_DN_TX]  },
-        {-1, 0, LED_OFF,        &LED_PIN_Str[LED_DN_RX]  },
+        {-1, 0, LED_NORMAL,        &LED_PIN_Str[LED_WH_TX]  },
+        {-1, 0, LED_NORMAL,        &LED_PIN_Str[LED_WH_RX]  },
+        {-1, 0, LED_NORMAL,        &LED_PIN_Str[LED_UP_TX]  },
+        {-1, 0, LED_NORMAL,        &LED_PIN_Str[LED_UP_RX]  },
+        {-1, 0, LED_NORMAL,        &LED_PIN_Str[LED_DN_TX]  },
+        {-1, 0, LED_NORMAL,        &LED_PIN_Str[LED_DN_RX]  },
 };
 
 struct LED_MODE Last_LED_MODE_Str[LED_ALL] = {0};

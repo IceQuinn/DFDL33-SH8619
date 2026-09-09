@@ -13,7 +13,7 @@ uint16_t adc_dma_buffer[VOL_SAMPLE_POINTS] = {0};
   */
 void wk_adc1_init(void)
 {
-    crm_periph_clock_enable(CRM_GPIOC_PERIPH_CLOCK, TRUE);
+    crm_periph_clock_enable(CRM_GPIOA_PERIPH_CLOCK, TRUE);
     crm_periph_clock_enable(CRM_ADC1_PERIPH_CLOCK, TRUE);
 
     gpio_init_type gpio_init_struct;
@@ -25,7 +25,7 @@ void wk_adc1_init(void)
     /* configure the IN10 pin */
     gpio_init_struct.gpio_mode = GPIO_MODE_ANALOG;
     gpio_init_struct.gpio_pins = GPIO_PINS_0;
-    gpio_init(GPIOC, &gpio_init_struct);
+    gpio_init(GPIOA, &gpio_init_struct);
 
     adc_reset(ADC1);
     crm_adc_clock_div_set(CRM_ADC_DIV_6);
@@ -42,7 +42,7 @@ void wk_adc1_init(void)
     adc_base_config(ADC1, &adc_base_struct);
 
     /* adc_ordinary_conversionmode-------------------------------------------- */
-    adc_ordinary_channel_set(ADC1, ADC_CHANNEL_10, 1, ADC_SAMPLETIME_239_5);
+    adc_ordinary_channel_set(ADC1, ADC_CHANNEL_0, 1, ADC_SAMPLETIME_239_5);
 
     /* When "ADCx_ORDINARY_TRIG_SOFTWARE" is selected, user can only use software trigger. \
       The software trigger function is adc_ordinary_software_trigger_enable(ADCx, TRUE); */
@@ -106,8 +106,8 @@ void wk_tmr3_init(void)
     tmr_cnt_dir_set(TMR3, TMR_COUNT_UP);
     tmr_clock_source_div_set(TMR3, TMR_CLOCK_DIV1);
     tmr_period_buffer_enable(TMR3, FALSE);
-//    tmr_base_init(TMR3, 119, 999);//240MHz配置
-    tmr_base_init(TMR3, 99, 899);//180MHZ配置
+    tmr_base_init(TMR3, 119, 999);//240MHz配置
+//    tmr_base_init(TMR3, 99, 899);//180MHZ配置
 
     /* configure primary mode settings */
     tmr_sub_sync_mode_set(TMR3, FALSE);

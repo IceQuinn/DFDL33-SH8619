@@ -4,7 +4,8 @@
   "description": "DL/T 645-2007数据标识及扩展数据区结构配置",
   "categories": [
     {"id": "standard", "description": "标准DL/T 645"},
-    {"id": "extended", "description": "扩展DL/T 645"}
+    {"id": "extended", "description": "扩展DL/T 645"},
+    {"id": "other", "description": "其他"}
   ],
   "defaults": {
     "password_permission": "00",
@@ -202,6 +203,9 @@
     },
     {
       "di": "02010100",
+      "category": "other",
+      "group_id": "converter_realtime",
+      "group_description": "协议转换单元实时数据",
       "description": "A相电压",
       "access": "read",
       "read_response": {
@@ -220,6 +224,9 @@
     },
     {
       "di": "02020100",
+      "category": "other",
+      "group_id": "converter_realtime",
+      "group_description": "协议转换单元实时数据",
       "description": "A相电流",
       "access": "read",
       "read_response": {
@@ -238,8 +245,11 @@
     },
     {
       "di": "04000101",
+      "category": "other",
+      "group_id": "converter_datetime",
+      "group_description": "日期时间",
       "description": "日期及星期",
-      "access": "read_write",
+      "access": "read",
       "read_response": {
         "fields": [
           {"name": "weekday", "description": "星期", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 1, "maximum": 7},
@@ -247,34 +257,148 @@
           {"name": "month", "description": "月", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 1, "maximum": 12},
           {"name": "year", "description": "年", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 0, "maximum": 99}
         ]
-      },
-      "write_request": {
-        "fields": [
-          {"name": "weekday", "description": "星期(01~07)", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 1, "maximum": 7},
-          {"name": "day", "description": "日(01~31)", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 1, "maximum": 31},
-          {"name": "month", "description": "月(01~12)", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 1, "maximum": 12},
-          {"name": "year", "description": "年(00~99)", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 0, "maximum": 99}
-        ]
       }
     },
     {
       "di": "04000102",
+      "category": "other",
+      "group_id": "converter_datetime",
+      "group_description": "日期时间",
       "description": "时间",
-      "access": "read_write",
+      "access": "read",
       "read_response": {
         "fields": [
           {"name": "second", "description": "秒", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 0, "maximum": 59},
           {"name": "minute", "description": "分", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 0, "maximum": 59},
           {"name": "hour", "description": "时", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 0, "maximum": 23}
         ]
-      },
-      "write_request": {
-        "fields": [
-          {"name": "second", "description": "秒(00~59)", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 0, "maximum": 59},
-          {"name": "minute", "description": "分(00~59)", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 0, "maximum": 59},
-          {"name": "hour", "description": "时(00~23)", "type": "bcd", "length": 1, "byte_order": "big", "minimum": 0, "maximum": 23}
-        ]
       }
+    },
+    {
+      "di": "02030000", "category": "other", "group_id": "converter_realtime", "group_description": "协议转换单元实时数据", "description": "瞬时总有功功率", "access": "read",
+      "read_response": {"fields": [{"name": "active_total", "description": "瞬时总有功功率", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 4, "unit": "kW"}]}
+    },
+    {
+      "di": "02030100", "category": "other", "group_id": "converter_realtime", "group_description": "协议转换单元实时数据", "description": "瞬时A相有功功率", "access": "read",
+      "read_response": {"fields": [{"name": "active_a", "description": "瞬时A相有功功率", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 4, "unit": "kW"}]}
+    },
+    {
+      "di": "02040000", "category": "other", "group_id": "converter_realtime", "group_description": "协议转换单元实时数据", "description": "瞬时总无功功率", "access": "read",
+      "read_response": {"fields": [{"name": "reactive_total", "description": "瞬时总无功功率", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 4, "unit": "kvar"}]}
+    },
+    {
+      "di": "02040100", "category": "other", "group_id": "converter_realtime", "group_description": "协议转换单元实时数据", "description": "瞬时A相无功功率", "access": "read",
+      "read_response": {"fields": [{"name": "reactive_a", "description": "瞬时A相无功功率", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 4, "unit": "kvar"}]}
+    },
+    {
+      "di": "02050000", "category": "other", "group_id": "converter_realtime", "group_description": "协议转换单元实时数据", "description": "瞬时总视在功率", "access": "read",
+      "read_response": {"fields": [{"name": "apparent_total", "description": "瞬时总视在功率", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 4, "unit": "kVA"}]}
+    },
+    {
+      "di": "02050100", "category": "other", "group_id": "converter_realtime", "group_description": "协议转换单元实时数据", "description": "瞬时A相视在功率", "access": "read",
+      "read_response": {"fields": [{"name": "apparent_a", "description": "瞬时A相视在功率", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 4, "unit": "kVA"}]}
+    },
+    {
+      "di": "02060000", "category": "other", "group_id": "converter_realtime", "group_description": "协议转换单元实时数据", "description": "总功率因数", "access": "read",
+      "read_response": {"fields": [{"name": "factor_total", "description": "总功率因数", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 3}]}
+    },
+    {
+      "di": "02060100", "category": "other", "group_id": "converter_realtime", "group_description": "协议转换单元实时数据", "description": "A相功率因数", "access": "read",
+      "read_response": {"fields": [{"name": "factor_a", "description": "A相功率因数", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 3}]}
+    },
+    {
+      "di": "02800001", "category": "other", "group_id": "converter_realtime", "group_description": "协议转换单元实时数据", "description": "零线电流", "access": "read",
+      "read_response": {"fields": [{"name": "neutral_current", "description": "零线电流", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 3, "unit": "A"}]}
+    },
+    {
+      "di": "05060101", "category": "other", "group_id": "converter_freeze", "group_description": "日冻结数据", "description": "上一次日冻结正向有功总电能", "access": "read",
+      "read_response": {"fields": [{"name": "forward_energy", "description": "正向有功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kWh"}]}
+    },
+    {
+      "di": "05060201", "category": "other", "group_id": "converter_freeze", "group_description": "日冻结数据", "description": "上一次日冻结反向有功总电能", "access": "read",
+      "read_response": {"fields": [{"name": "reverse_energy", "description": "反向有功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kWh"}]}
+    },
+    {
+      "di": "06100101", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "A相电压曲线数据", "access": "read",
+      "read_response": {"fields": [{"name": "voltage_a", "description": "A相电压", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "unit": "V"}]}
+    },
+    {
+      "di": "06100201", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "A相电流曲线数据", "access": "read",
+      "read_response": {"fields": [{"name": "current_a", "description": "A相电流", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 3, "unit": "A"}]}
+    },
+    {
+      "di": "06100300", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "总有功功率曲线数据", "access": "read",
+      "read_response": {"fields": [{"name": "active_total", "description": "总有功功率", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 4, "unit": "kW"}]}
+    },
+    {
+      "di": "06100301", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "A相有功功率曲线数据", "access": "read",
+      "read_response": {"fields": [{"name": "active_a", "description": "A相有功功率", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 4, "unit": "kW"}]}
+    },
+    {
+      "di": "06100400", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "总无功功率曲线数据", "access": "read",
+      "read_response": {"fields": [{"name": "reactive_total", "description": "总无功功率", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 4, "unit": "kvar"}]}
+    },
+    {
+      "di": "06100401", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "A相无功功率曲线数据", "access": "read",
+      "read_response": {"fields": [{"name": "reactive_a", "description": "A相无功功率", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 4, "unit": "kvar"}]}
+    },
+    {
+      "di": "06100500", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "总功率因数曲线数据", "access": "read",
+      "read_response": {"fields": [{"name": "factor_total", "description": "总功率因数", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 3}]}
+    },
+    {
+      "di": "06100501", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "A相功率因数曲线数据", "access": "read",
+      "read_response": {"fields": [{"name": "factor_a", "description": "A相功率因数", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 3}]}
+    },
+    {
+      "di": "06100601", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "正向有功总电能曲线数据", "access": "read",
+      "read_response": {"fields": [{"name": "forward_active_energy", "description": "正向有功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kWh"}]}
+    },
+    {
+      "di": "06100602", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "反向有功总电能曲线数据", "access": "read",
+      "read_response": {"fields": [{"name": "reverse_active_energy", "description": "反向有功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kWh"}]}
+    },
+    {
+      "di": "06100603", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "组合无功1总电能曲线数据", "access": "read",
+      "read_response": {"fields": [{"name": "combined_reactive_energy_1", "description": "组合无功1总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kvarh"}]}
+    },
+    {
+      "di": "06100604", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "组合无功2总电能曲线数据", "access": "read",
+      "read_response": {"fields": [{"name": "combined_reactive_energy_2", "description": "组合无功2总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kvarh"}]}
+    },
+    {
+      "di": "061006FF", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "有功及组合无功电能曲线数据块", "access": "read",
+      "read_response": {"fields": [
+        {"name": "forward_active_energy", "description": "正向有功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kWh"},
+        {"name": "reverse_active_energy", "description": "反向有功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kWh"},
+        {"name": "combined_reactive_energy_1", "description": "组合无功1总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kvarh"},
+        {"name": "combined_reactive_energy_2", "description": "组合无功2总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kvarh"}
+      ]}
+    },
+    {
+      "di": "06100701", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "第一象限无功总电能曲线数据", "access": "read",
+      "read_response": {"fields": [{"name": "quadrant_1_reactive_energy", "description": "第一象限无功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kvarh"}]}
+    },
+    {
+      "di": "06100702", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "第二象限无功总电能曲线数据", "access": "read",
+      "read_response": {"fields": [{"name": "quadrant_2_reactive_energy", "description": "第二象限无功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kvarh"}]}
+    },
+    {
+      "di": "06100703", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "第三象限无功总电能曲线数据", "access": "read",
+      "read_response": {"fields": [{"name": "quadrant_3_reactive_energy", "description": "第三象限无功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kvarh"}]}
+    },
+    {
+      "di": "06100704", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "第四象限无功总电能曲线数据", "access": "read",
+      "read_response": {"fields": [{"name": "quadrant_4_reactive_energy", "description": "第四象限无功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kvarh"}]}
+    },
+    {
+      "di": "061007FF", "category": "other", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "四象限无功总电能曲线数据块", "access": "read",
+      "read_response": {"fields": [
+        {"name": "quadrant_1_reactive_energy", "description": "第一象限无功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kvarh"},
+        {"name": "quadrant_2_reactive_energy", "description": "第二象限无功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kvarh"},
+        {"name": "quadrant_3_reactive_energy", "description": "第三象限无功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kvarh"},
+        {"name": "quadrant_4_reactive_energy", "description": "第四象限无功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kvarh"}
+      ]}
     },
     {
       "di": "F0010001",

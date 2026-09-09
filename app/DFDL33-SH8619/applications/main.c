@@ -103,7 +103,7 @@ int main(void)
 
     uart_init();                /* 初始化串口后才能启动通信线程。 */
 
-    if(hj02c_basic_init("MyAT32_001") == RT_EOK)    /* 蓝牙模块初始化 */
+    if(hj02c_basic_init("MyAT32_002") == RT_EOK)    /* 蓝牙模块初始化 */
     {
         rt_kprintf("BLE is ready!\n");
     }

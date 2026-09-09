@@ -4,6 +4,7 @@
 #include "user_logic_func.h"
 
 #define  M_PI    3.14159265358979
+#define  VOLTAGE_CALIBRATION_COEFFICIENT   356.204534
 
 float    g_voltage_rms = 0.0f;
 static rt_sem_t  g_adc_sem = RT_NULL;
@@ -51,6 +52,9 @@ void start_voltage_sampling(void)
     tmr_counter_enable(TMR3, TRUE);
 }
 
+//float rms_buf[100] = {0};
+//int rms_buf_idx = 0;
+
 void voltage_acq_thread_entry(void *param)
 {
     rt_kprintf("[VOL] Voltage acquisition thread started.\n");
@@ -71,12 +75,13 @@ void voltage_acq_thread_entry(void *param)
         rt_sem_take(g_adc_sem, RT_WAITING_FOREVER);
 
         /* 计算有效值 */
-        g_voltage_rms = calculate_rms(adc_dma_buffer, VOL_SAMPLE_POINTS);
-
-//        int rms_int = (int)g_voltage_rms;
-//        int rms_dec = (int)((g_voltage_rms - rms_int) * 1000);  // 取3位小数
-//
-//        rt_kprintf("[VOL] Voltage RMS = %d.%03d V\n", rms_int, rms_dec);
+        float rms = calculate_rms(adc_dma_buffer, VOL_SAMPLE_POINTS);
+//        if(rms_buf_idx < 100)
+//        {
+//            rms_buf[rms_buf_idx] = rms;
+//            rms_buf_idx++;
+//        }
+        g_voltage_rms = rms * VOLTAGE_CALIBRATION_COEFFICIENT;
 
         /* 空闲 500ms */
         rt_thread_mdelay(VOL_IDLE_MS);
@@ -86,4 +91,11 @@ void voltage_acq_thread_entry(void *param)
     }
 }
 
+void show_voltage_rms(void)
+{
+    int vol_int = (int)g_voltage_rms;
+    int vol_dec = (int)((g_voltage_rms - vol_int) * 100); // 1位小数
+    rt_kprintf("Voltage Rms: %d.%d V\n", vol_int, vol_dec);
+}
+MSH_CMD_EXPORT(show_voltage_rms, show_voltage_rms);
 

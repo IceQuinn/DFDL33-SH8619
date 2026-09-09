@@ -63,6 +63,15 @@ typedef struct Dlt645PointTypeDef
     const char *name;          /* 用于运行日志和问题定位的点表英文名称。 */
 } Dlt645PointTypeDef;
 
+/* 获取协议转换单元A相电压，返回值单位为0.1V，当前使用默认值并预留真实采样接口替换位置。 */
+uint16_t dlt645_get_converter_phase_a_voltage(void);
+
+/* 读取协议转换单元A相电压并编码为规范要求的两字节XXX.X BCD。 */
+rt_err_t dlt645_read_converter_phase_a_voltage(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
+/* 为规范要求暂时固定回零的数据标识生成点表指定长度的全零业务数据。 */
+rt_err_t dlt645_read_zero_data(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
 /* 读取指定逆变器或全部逆变器的三相电压数据块。 */
 rt_err_t dlt645_read_voltage(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
 /* 读取指定逆变器或全部逆变器的三相电流数据块。 */

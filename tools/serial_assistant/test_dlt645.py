@@ -64,9 +64,45 @@ class DLT645Tests(unittest.TestCase):
         self.assertEqual(result.data_identifier, "F0010001")
         self.assertEqual(result.payload, payload)
 
-    def test_configured_write_range_is_enforced(self):
-        with self.assertRaisesRegex(ValueError, "不能大于23"):
-            self.registry.encode("04000102", {"second": 0, "minute": 0, "hour": 24})
+    def test_other_identifiers_are_read_only_and_decode_expected_values(self):
+        self.assertEqual(self.registry.categories["other"], "其他")
+
+        actual_value_identifiers = ("02010100", "06100101")
+        for data_identifier in actual_value_identifiers:
+            definition = self.registry.get(data_identifier)
+            self.assertEqual(definition.category, "other")
+            self.assertEqual(definition.access, "read")
+            self.assertEqual(self.registry.decode(data_identifier, bytes.fromhex("00 22")),
+                             [("A相电压", "220", "V")])
+
+        zero_value_identifiers = (
+            "02020100", "02030000", "02030100", "02040000", "02040100",
+            "02050000", "02050100", "02060000", "02060100", "02800001",
+            "05060101", "05060201", "06100201", "06100300", "06100301",
+            "06100400", "06100401", "06100500", "06100501", "06100601",
+            "06100602", "06100603", "06100604", "06100701", "06100702",
+            "06100703", "06100704",
+        )
+        for data_identifier in zero_value_identifiers:
+            definition = self.registry.get(data_identifier)
+            payload_length = sum(int(field["length"]) for field in definition.read_response["fields"])
+            self.assertEqual(definition.category, "other")
+            self.assertEqual(definition.access, "read")
+            self.assertTrue(all(value == "0" for _name, value, _unit in
+                                self.registry.decode(data_identifier, bytes(payload_length))))
+
+        for data_identifier in ("061006FF", "061007FF"):
+            definition = self.registry.get(data_identifier)
+            self.assertEqual(len(definition.read_response["fields"]), 4)
+            self.assertEqual(sum(int(field["length"]) for field in definition.read_response["fields"]), 16)
+            self.assertTrue(all(value == "0" for _name, value, _unit in
+                                self.registry.decode(data_identifier, bytes(16))))
+
+        for data_identifier in ("04000101", "04000102"):
+            definition = self.registry.get(data_identifier)
+            self.assertEqual(definition.category, "other")
+            self.assertEqual(definition.access, "read")
+            self.assertEqual(definition.write_request, {})
 
     def test_vendor_write_format_can_omit_security_fields(self):
         registry = DataIdentifierRegistry(

@@ -18,6 +18,7 @@
 #define DLT645_ARCHIVE_NAME_OFFSET    1U    /* Modbus地址之后为固定32字节厂家名称。 */
 #define DLT645_ARCHIVE_VERSION_OFFSET 33U   /* 厂家名称之后为低字节在前的16位规约版本。 */
 #define DLT645_ARCHIVE_PORT_OFFSET    35U   /* 档案数据块最后1字节为接入端口号。 */
+#define DLT645_CONVERTER_VOLTAGE_DEFAULT 2200U /* 临时A相电压为220.0V，内存单位固定为0.1V。 */
 
 typedef enum Dlt645VariableType
 {
@@ -126,6 +127,49 @@ static rt_err_t dlt645_encode_bcd(int32_t value, uint8_t *data, uint8_t byte_len
     {
         data[byte_len - 1U] |= 0x80U;
     }
+    return RT_EOK;
+}
+
+/* 获取协议转换单元A相电压，当前返回0.1V单位的默认值，后续在本函数内接入真实采样接口。 */
+uint16_t dlt645_get_converter_phase_a_voltage(void)
+{
+    return DLT645_CONVERTER_VOLTAGE_DEFAULT; /* 2200表示220.0V，调用方不需要再执行浮点换算。 */
+}
+
+/* 读取协议转换单元A相电压，02010100和06100101共用本接口及同一数据来源。 */
+rt_err_t dlt645_read_converter_phase_a_voltage(const Dlt645PointTypeDef *point, uint32_t id,
+                                               uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint16_t voltage = dlt645_get_converter_phase_a_voltage(); /* 取得单位为0.1V的协议转换单元A相电压。 */
+
+    RT_UNUSED(id); /* 两个固定数据标识的数据格式相同，不需要在取值接口内区分。 */
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
+       (point->data_len != 2U) || (capacity < point->data_len)) /* 指针、点表长度和输出容量必须满足XXX.X两字节BCD要求。 */
+    {
+        return -RT_EINVAL;
+    }
+    if((voltage > 9999U) || (dlt645_encode_bcd(voltage, data, 2U, RT_FALSE) != RT_EOK)) /* XXX.X格式最多表示999.9V，越界值不能截断回复。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    *data_len = point->data_len; /* 02010100和06100101均固定返回两字节业务数据。 */
+    return RT_EOK;
+}
+
+/* 根据点表长度生成全零业务数据，供当前规范中没有实际数据来源的其他类数据标识复用。 */
+rt_err_t dlt645_read_zero_data(const Dlt645PointTypeDef *point, uint32_t id,
+                               uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    RT_UNUSED(id); /* 回零点不根据数据标识计算数值，长度完全由已经匹配的点表描述决定。 */
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
+       (point->data_len == 0U) || (capacity < point->data_len)) /* 输出指针有效且缓冲区能够容纳点表规定长度时才允许填零。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    rt_memset(data, 0, point->data_len); /* 这里生成减去0x33后的全零业务数据，顶层组帧时再统一加0x33。 */
+    *data_len = point->data_len; /* 返回点表规定的固定业务数据长度，避免不同标识之间长度混用。 */
     return RT_EOK;
 }
 
