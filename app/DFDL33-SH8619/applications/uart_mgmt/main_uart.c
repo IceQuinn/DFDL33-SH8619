@@ -15,6 +15,7 @@
 #include "ctu_cfg.h"
 #include "cycle_loop.h"
 #include "inv_data.h"
+#include "led.h"
 
 /* 最后一个字节之后连续10ms没有新数据时，将当前串口数据截取为一帧。 */
 #define UART_RX_BUF_SIZE          256U
@@ -146,6 +147,12 @@ static void uart_dispatch_frame(uint16_t uart_no)
     if((UART3_NO == uart_no) || (UART8_NO == uart_no)){ // 北向串口
         extern void dlt645_rx_callback(void *ptr, uint16_t len, uint16_t buf_source);
         dlt645_rx_callback(rx->frame_buf, rx->frame_len, uart_no);
+        if(UART3_NO == uart_no){
+            LED_Ctrl(LED_WH_RX, LED_FAST, 1000);
+        }
+        else if(UART8_NO == uart_no){
+            LED_Ctrl(LED_UP_RX, LED_FAST, 1000);
+        }
     }
     else if((UART6_NO == uart_no) || (UART7_NO == uart_no) || (UART4_NO == uart_no)){   // 南向串口
         /* 自动识别阶段优先接收报文，没有识别事务等待响应时再交给下行读写状态机。 */
@@ -155,6 +162,7 @@ static void uart_dispatch_frame(uint16_t uart_no)
         if(result != RT_EOK) {
             Inv_Data_Rx_Frame(uart_no, rx->frame_buf, (uint16_t)rx->frame_len);
         }
+        LED_Ctrl(LED_DN_RX, LED_FAST, 1000);
     }
     else if((UART5_NO == uart_no) || (UART1_NO == uart_no)){   // 逆变器通信棒
         uart_mgmt_write(uart_no, rx->frame_buf, (uint16_t)rx->frame_len);
@@ -178,6 +186,17 @@ rt_size_t uart_mgmt_write(uint16_t uart_no, const void *buffer, rt_size_t size)
     if(uart_dev[uart_no] == RT_NULL) {
         return 0U;
     }
+
+    if(UART3_NO == uart_no){
+        LED_Ctrl(LED_WH_TX, LED_FAST, 1000);
+    }
+    else if(UART8_NO == uart_no){
+        LED_Ctrl(LED_UP_TX, LED_FAST, 1000);
+    }
+    else if((UART6_NO == uart_no) || (UART7_NO == uart_no) || (UART4_NO == uart_no)){
+        LED_Ctrl(LED_DN_TX, LED_FAST, 1000);
+    }
+
 
     return rt_device_write(uart_dev[uart_no], 0, buffer, size);
 }

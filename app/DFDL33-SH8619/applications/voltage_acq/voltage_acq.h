@@ -7,9 +7,9 @@
 #include "at32f403a_407.h"
 #include <math.h>
 
-#define VOL_IDLE_MS          500
+#define VOL_IDLE_MS          100
 
-extern float    g_voltage_rms;
+extern uint16_t g_voltage_rms;
 
 int  voltage_acq_init(void);
 void start_voltage_sampling(void);

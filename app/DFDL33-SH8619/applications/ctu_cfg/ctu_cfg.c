@@ -91,7 +91,7 @@ void set_default_para(void)
 
     ctu_cfg.longitude                   = 1143999;      //经度
     ctu_cfg.latitude                    = 304456;       //纬度
-
+    ctu_cfg.g_vol_cal_coef              = 356.204534;
 }
 
 //恢复默认值并保存

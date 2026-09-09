@@ -2,11 +2,12 @@
 #include "drv_acq.h"
 #include "drv_dma.h"
 #include "user_logic_func.h"
+#include "ctu_cfg.h"
 
 #define  M_PI    3.14159265358979
 #define  VOLTAGE_CALIBRATION_COEFFICIENT   356.204534
 
-float    g_voltage_rms = 0.0f;
+uint16_t g_voltage_rms = 0;;
 static rt_sem_t  g_adc_sem = RT_NULL;
 
 /* ================================================================== */
@@ -52,8 +53,21 @@ void start_voltage_sampling(void)
     tmr_counter_enable(TMR3, TRUE);
 }
 
-//float rms_buf[100] = {0};
-//int rms_buf_idx = 0;
+float Averaging(float *buf, uint16_t len)
+{
+    float sum = 0.0f;
+    for (uint16_t i = 0; i < len; i++)
+    {
+        sum += buf[i];
+    }
+    return sum / (float)len;
+}
+
+float rms_buf[50] = {0};
+int rms_buf_idx = 0;
+static float rms_accumulator = 0.0f;   /* RMS 累加值 */
+static uint8_t rms_count = 0;           /* 采样次数计数 */
+int calibration_flg = 0;
 
 void voltage_acq_thread_entry(void *param)
 {
@@ -76,12 +90,32 @@ void voltage_acq_thread_entry(void *param)
 
         /* 计算有效值 */
         float rms = calculate_rms(adc_dma_buffer, VOL_SAMPLE_POINTS);
-//        if(rms_buf_idx < 100)
-//        {
-//            rms_buf[rms_buf_idx] = rms;
-//            rms_buf_idx++;
-//        }
-        g_voltage_rms = rms * VOLTAGE_CALIBRATION_COEFFICIENT;
+
+        rms_buf[rms_buf_idx] = rms;
+        rms_buf_idx++;
+        if(50 == rms_buf_idx)
+        {
+            rms_buf_idx = 0;
+        }
+
+//        g_voltage_rms = rms * VOLTAGE_CALIBRATION_COEFFICIENT;
+
+        rms_accumulator += rms;
+        rms_count++;
+
+        if (rms_count >= 5)
+        {
+            float rms_avg = rms_accumulator / 5.0f;
+            if(calibration_flg){
+                float average_value = Averaging(rms_buf, rms_buf_idx);
+                ctu_cfg.g_vol_cal_coef = 220 / average_value;
+                calibration_flg = 0;
+            }
+            g_voltage_rms = rms_avg * ctu_cfg.g_vol_cal_coef * 10;
+
+            rms_accumulator = 0.0f;
+            rms_count = 0;
+        }
 
         /* 空闲 500ms */
         rt_thread_mdelay(VOL_IDLE_MS);
@@ -93,9 +127,16 @@ void voltage_acq_thread_entry(void *param)
 
 void show_voltage_rms(void)
 {
-    int vol_int = (int)g_voltage_rms;
-    int vol_dec = (int)((g_voltage_rms - vol_int) * 100); // 1位小数
+    uint16_t vol_int = g_voltage_rms/10;
+//    int vol_dec = (int)((g_voltage_rms - vol_int) * 100); // 2位小数
+    uint16_t vol_dec = g_voltage_rms%10;
     rt_kprintf("Voltage Rms: %d.%d V\n", vol_int, vol_dec);
 }
 MSH_CMD_EXPORT(show_voltage_rms, show_voltage_rms);
+
+void voltage_calibration(void)
+{
+    calibration_flg = 1;
+}
+MSH_CMD_EXPORT(voltage_calibration, voltage calibration);
 

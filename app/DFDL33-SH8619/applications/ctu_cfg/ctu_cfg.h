@@ -39,6 +39,7 @@ typedef struct GSE8615_CONFIG_V1
 
     uint32_t longitude;                             //经度
     uint32_t latitude;                              //纬度
+    float g_vol_cal_coef;                           //单向采集电压校准系数
 
 }GSE8625_CfgTypeDef_Vlast;
 
