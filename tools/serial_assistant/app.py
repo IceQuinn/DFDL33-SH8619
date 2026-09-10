@@ -25,6 +25,7 @@ from dlt645 import (
     DataIdentifierRegistry,
     build_read_address,
     build_read_data,
+    build_write_address,
     build_write_data,
     looks_like_frame,
     parse_frame as parse_dlt645_frame,
@@ -256,6 +257,11 @@ class SerialAssistant(tk.Tk):
         ttk.Button(top, text="重新加载配置", command=self.reload_dlt_config).grid(row=0, column=6, padx=4)
         self.dlt_config_var = tk.StringVar(value=f"配置：{self.dlt_config_path}")
         ttk.Label(top, textvariable=self.dlt_config_var).grid(row=0, column=7, padx=8, sticky="w")
+        self.dlt_new_address_var = tk.StringVar(value=self.dlt_address_var.get())  # 新地址单独输入，收到0x95成功应答前不改变当前通信地址。
+        ttk.Label(top, text="新通信地址").grid(row=1, column=0, padx=(0, 4), pady=(7, 0), sticky="w")
+        ttk.Entry(top, textvariable=self.dlt_new_address_var, width=16).grid(row=1, column=1, padx=(0, 10), pady=(7, 0))
+        ttk.Button(top, text="生成写地址报文", command=self.generate_dlt_write_address).grid(row=1, column=4, padx=4, pady=(7, 0))
+        ttk.Button(top, text="写入通信地址", command=lambda: self.generate_dlt_write_address(send=True)).grid(row=1, column=5, padx=4, pady=(7, 0))
         top.columnconfigure(7, weight=1)
 
         choose = ttk.Frame(parent)
@@ -608,6 +614,16 @@ class SerialAssistant(tk.Tk):
             frame = build_read_address(int(self.dlt_preamble_var.get()))
             self._set_dlt_generated(frame)
             if send:
+                self._send_bytes(frame)
+        except Exception as exc:
+            messagebox.showerror("生成失败", str(exc))
+
+    def generate_dlt_write_address(self, send: bool = False) -> None:
+        """生成或发送0x15写通信地址报文，设备成功回复后再更新界面的当前地址。"""
+        try:
+            frame = build_write_address(self.dlt_new_address_var.get(), int(self.dlt_preamble_var.get()))  # 地址校验和字节序转换集中由645编解码模块完成。
+            self._set_dlt_generated(frame)
+            if send:  # 仅“写入通信地址”按钮实际发送，“生成写地址报文”只便于人工核对HEX。
                 self._send_bytes(frame)
         except Exception as exc:
             messagebox.showerror("生成失败", str(exc))
@@ -971,7 +987,7 @@ class SerialAssistant(tk.Tk):
             result.address and result.direction == "从机→主机" and function == 0x14
         ) else None
         target_di = result.data_identifier or pending_di
-        target = f"DI {target_di}" if target_di else ("通信地址" if result.operation == "读通信地址" else "—")
+        target = f"DI {target_di}" if target_di else ("通信地址" if result.operation in ("读通信地址", "写通信地址") else "—")
         data_summary = f"{len(result.payload)}字节" if result.payload else "—"
         check = "CS正确" if result.checksum_ok else "CS错误"
         if result.received_checksum is not None and result.calculated_checksum is not None:
@@ -1025,8 +1041,10 @@ class SerialAssistant(tk.Tk):
         item_id = self.tree.insert("", "end", values=values, tags=tags)
         if decoded_values:
             self.dlt_row_details[item_id] = tuple(decoded_values)
-        if result.valid and result.operation == "读通信地址" and result.direction == "从机→主机" and result.address:
+        if(result.valid and result.operation in ("读通信地址", "写通信地址")
+                and result.direction == "从机→主机" and result.address):  # 0x93和0x95正常回复的地址域均代表设备当前生效地址。
             self.dlt_address_var.set(result.address)
+            self.dlt_new_address_var.set(result.address)  # 成功写地址后同步两个输入框，后续读写数据直接使用新地址。
         self._scroll_to_last()
 
     def _add_dlt_unparsed(self, direction: str, data: bytes) -> None:

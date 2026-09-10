@@ -111,6 +111,14 @@ def build_read_address(preamble: int = 4) -> bytes:
     return build_frame("AAAAAAAAAAAA", 0x13, preamble=preamble)
 
 
+def build_write_address(new_address: str, preamble: int = 4) -> bytes:
+    """生成0x15写通信地址请求，地址域使用广播地址，数据域携带低字节在前的新地址。"""
+    normalized = normalize_address(new_address)  # 写入地址沿用统一的12位格式检查，避免界面与协议编码规则不一致。
+    if normalized in ("AAAAAAAAAAAA", "999999999999"):  # 广播地址和通配地址只能用于寻址，不能保存为设备地址。
+        raise ValueError("新645通信地址不能使用广播地址或通配地址")
+    return build_frame("AAAAAAAAAAAA", 0x15, encode_address(normalized), preamble)
+
+
 def build_read_data(
     address: str,
     data_identifier: str,
@@ -265,6 +273,20 @@ def parse_frame(frame: bytes, registry: Optional["DataIdentifierRegistry"] = Non
     elif function in (0x11, 0x12) and clear_data:
         details.append("数据域不足4字节，无法取得数据标识")
         structure_ok = False
+    elif function == 0x15 and direction == "主机→从机":
+        if len(clear_data) == 6:  # 写地址请求必须携带完整的6字节BCD地址，按低字节在前进行解析。
+            try:
+                written_address = decode_address(clear_data)
+                if not re.fullmatch(r"\d{12}", written_address) or written_address == "999999999999":  # 保存地址必须是非通配的12位十进制BCD。
+                    raise ValueError("写入通信地址不是可保存的12位BCD地址")
+                payload = clear_data  # 保留写入地址原始数据，便于HEX解析窗口核对报文内容。
+                details.append(f"新通信地址={written_address}")
+            except ValueError as exc:
+                details.append(str(exc))
+                structure_ok = False
+        else:
+            details.append(f"写通信地址数据域长度为{len(clear_data)}字节，应为6字节")
+            structure_ok = False
 
     return DLT645Result(
         structure_ok and checksum_ok, raw, preamble, address, control, operation, direction,

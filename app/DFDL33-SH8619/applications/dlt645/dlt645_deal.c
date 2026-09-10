@@ -178,6 +178,88 @@ int dlt645_addr_ack(uint8_t uart_no)
     return 1;
 }
 
+/* 检查待写入通信地址的6个字节是否均为合法压缩BCD，并拒绝广播及通配地址。 */
+static rt_bool_t dlt645_write_address_valid(const uint8_t address[DL645_ADDR_SIZE])
+{
+    uint8_t index; /* 当前检查的通信地址字节下标。 */
+    rt_bool_t all_aa = RT_TRUE; /* AA AA AA AA AA AA是广播读写地址，不能保存为设备自身地址。 */
+    rt_bool_t all_99 = RT_TRUE; /* 99 99 99 99 99 99是通配地址，不能保存为设备自身地址。 */
+
+    for(index = 0U; index < DL645_ADDR_SIZE; ++index)
+    {
+        if(((address[index] & 0x0FU) > 9U) || (((address[index] >> 4U) & 0x0FU) > 9U)) /* 每个半字节必须是0～9的十进制BCD。 */
+        {
+            return RT_FALSE;
+        }
+        if(address[index] != 0xAAU) /* 任一字节不是AA即可排除全广播地址。 */
+        {
+            all_aa = RT_FALSE;
+        }
+        if(address[index] != 0x99U) /* 任一字节不是99即可排除全通配地址。 */
+        {
+            all_99 = RT_FALSE;
+        }
+    }
+    return ((all_aa == RT_FALSE) && (all_99 == RT_FALSE));
+}
+
+/* 发送写通信地址正常或异常应答，正常应答使用已经生效的新通信地址。 */
+static rt_err_t dlt645_write_address_ack(uint8_t uart_no, uint8_t err_code)
+{
+    uint8_t response[32] = {0}; /* 写地址应答不携带业务数据，32字节局部缓冲足够容纳前导码和异常字。 */
+    uint16_t length = 0U; /* 当前已经写入应答缓冲的字节数量。 */
+    uint8_t checksum = 0U; /* 从第一个68开始累加得到的8位校验和。 */
+    uint16_t index; /* 地址、校验和及发送长度循环使用的下标。 */
+
+    response[length++] = 0xFEU; /* 保持工程现有645应答格式，发送4个前导字节。 */
+    response[length++] = 0xFEU;
+    response[length++] = 0xFEU;
+    response[length++] = 0xFEU;
+    response[length++] = 0x68U;
+    for(index = 0U; index < DL645_ADDR_SIZE; ++index)
+    {
+        response[length++] = sg_dl645_addr_bcd[index]; /* 成功时运行地址已切换，因此此处自然使用新地址。 */
+    }
+    response[length++] = 0x68U;
+    if(err_code == E_D07_W_OK) /* 正常写地址应答控制码为0x95且数据域长度为0。 */
+    {
+        response[length++] = E_D07_CTRL_WRITE_ADDR | 0x80U;
+        response[length++] = 0U;
+    }
+    else /* 地址长度或BCD内容非法时返回0xD5异常应答及一字节错误状态。 */
+    {
+        response[length++] = E_D07_CTRL_WRITE_ADDR | 0xC0U;
+        response[length++] = 1U;
+        response[length++] = err_code + 0x33U;
+    }
+    for(index = 4U; index < length; ++index)
+    {
+        checksum += response[index];
+    }
+    response[length++] = checksum;
+    response[length++] = 0x16U;
+    show_arr("dlt645 write address ack :", response, length); /* 输出完整应答便于确认新地址及控制码。 */
+    return dlt645_data_ack(uart_no, response, length);
+}
+
+/* 处理0x15写通信地址命令，校验通过后同步更新Flash配置和当前运行地址。 */
+static void dlt645_write_address(uint8_t uart_no, const uint8_t *address, uint8_t data_length)
+{
+    if((data_length != DL645_ADDR_SIZE) || (dlt645_write_address_valid(address) == RT_FALSE)) /* 数据域必须恰好为6字节合法BCD地址。 */
+    {
+        LOG_E("dlt645 write address invalid, length=%d", data_length);
+        dlt645_write_address_ack(uart_no, E_D07_W_ERR); /* 地址未变更，异常应答继续使用当前地址。 */
+        return;
+    }
+
+    rt_memcpy(ctu_cfg.dlt645_bcd_addr, address, DL645_ADDR_SIZE); /* 先更新配置对象，后续保存内容与运行地址保持一致。 */
+    ctu_cfg_save(); /* 将新通信地址保存到配置A/B区，使重新上电后仍然有效。 */
+    rt_memcpy(sg_dl645_addr_bcd, address, DL645_ADDR_SIZE); /* 保存完成后立即切换当前645从站匹配及应答地址。 */
+    LOG_I("dlt645 address changed to %02x%02x%02x%02x%02x%02x",
+          address[5], address[4], address[3], address[2], address[1], address[0]); /* 日志按高位到低位显示12位地址。 */
+    dlt645_write_address_ack(uart_no, E_D07_W_OK); /* 使用新地址返回0x95正常应答。 */
+}
+
 /* 645协议解析 */
 void dlt645_deal(uint8_t uart_no, uint8_t *dlt645_addr, uint8_t *bufPtr, uint16_t PackLen)
 {
@@ -240,6 +322,10 @@ void dlt645_deal(uint8_t uart_no, uint8_t *dlt645_addr, uint8_t *bufPtr, uint16_
                 case E_D07_CTRL_READ_ADDR:
                     rt_kprintf("recv dl645 read addr\n");
                     dlt645_addr_ack(uart_no);
+                    break;
+                case E_D07_CTRL_WRITE_ADDR:
+                    rt_kprintf("recv dl645 write addr\n");
+                    dlt645_write_address(uart_no, DLT645_Pack.Data, DLT645_Pack.Data_Length); /* 数据域已在统一解析阶段完成减0x33。 */
                     break;
                 case E_D07_CTRL_SYNC_TIME:
                     rt_kprintf("recv dl645 broadcast time adjist\n");

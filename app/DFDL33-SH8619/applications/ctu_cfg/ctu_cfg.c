@@ -45,7 +45,7 @@ void Ctu_Cfg_Init(void)
 //        CFG_Vx_To_Vlast(ctu_cfg.hdr.ver, ctu_cfg.hdr.len);
 //        ctu_cfg_save();
     }
-    set_default_data();
+    /* Flash校验成功时保留已经保存的通信参数，禁止再次用默认值覆盖645写地址结果。 */
 }
 
 void set_default_para(void)

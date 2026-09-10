@@ -103,7 +103,12 @@ int main(void)
 
     uart_init();                /* 初始化串口后才能启动通信线程。 */
 
-    if(hj02c_basic_init("MyAT32_002") == RT_EOK)    /* 蓝牙模块初始化 */
+
+    char BLE_Name[32] = {0};
+    rt_sprintf(BLE_Name, "%02x%02x%02x%02x%02x%02x", ctu_cfg.dlt645_bcd_addr[5], ctu_cfg.dlt645_bcd_addr[4],
+                                                     ctu_cfg.dlt645_bcd_addr[3], ctu_cfg.dlt645_bcd_addr[2],
+                                                     ctu_cfg.dlt645_bcd_addr[1], ctu_cfg.dlt645_bcd_addr[0] );
+    if(hj02c_basic_init(BLE_Name) == RT_EOK)    /* 蓝牙模块初始化 */
     {
         rt_kprintf("BLE is ready!\n");
     }

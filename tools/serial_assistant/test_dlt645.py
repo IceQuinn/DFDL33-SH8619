@@ -10,6 +10,7 @@ from dlt645 import (
     build_frame,
     build_read_address,
     build_read_data,
+    build_write_address,
     build_write_data,
     decode_address,
     encode_address,
@@ -46,6 +47,21 @@ class DLT645Tests(unittest.TestCase):
         self.assertTrue(result.valid)
         self.assertEqual(result.operation, "读通信地址")
         self.assertEqual(result.direction, "主机→从机")
+
+    def test_write_address_request(self):
+        frame = build_write_address("123456789012", 4)
+        result = parse_frame(frame)
+        self.assertTrue(result.valid)
+        self.assertEqual(result.operation, "写通信地址")
+        self.assertEqual(result.address, "AAAAAAAAAAAA")
+        self.assertEqual(result.payload, encode_address("123456789012"))
+        self.assertIn("新通信地址=123456789012", result.detail)
+
+    def test_write_address_rejects_non_device_addresses(self):
+        for address in ("AAAAAAAAAAAA", "999999999999"):
+            with self.subTest(address=address):
+                with self.assertRaises(ValueError):
+                    build_write_address(address)
 
     def test_read_response_is_decoded_from_registry(self):
         clear = encode_di("02010100") + bytes.fromhex("05 22")
