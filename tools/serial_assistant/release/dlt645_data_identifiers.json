@@ -180,6 +180,13 @@
       "fields": [
         {"name": "protocol_count", "description": "有效协议库总数", "type": "uint", "length": 1, "byte_order": "little", "minimum": 0, "maximum": 100}
       ]
+    },
+    "meter_location": {
+      "fields": [
+        {"name": "longitude", "description": "经度", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "minimum": 0, "maximum": 180, "unit": "°"},
+        {"name": "latitude", "description": "纬度", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 4, "minimum": 0, "maximum": 90, "unit": "°"},
+        {"name": "altitude", "description": "高度", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 2, "minimum": 0, "maximum": 9999.99, "unit": "m"}
+      ]
     }
   },
   "data_identifiers": [
@@ -200,6 +207,16 @@
           }
         ]
       }
+    },
+    {
+      "di": "0400040F",
+      "category": "standard",
+      "group_id": "meter_parameter",
+      "group_description": "电能表参数",
+      "description": "电能表位置信息（经度、纬度和高度）",
+      "access": "read_write",
+      "read_schema": "meter_location",
+      "write_schema": "meter_location"
     },
     {
       "di": "02010100",

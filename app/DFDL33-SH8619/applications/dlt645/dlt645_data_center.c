@@ -26,12 +26,6 @@
 uint8_t g_packBuf[DLT645_FRAME_BUFFER_SIZE] = {0};
 uint8_t sg_dl645_addr_bcd[DL645_ADDR_SIZE] = {0};
 
-/* 数据块（表） */
-const ReadBlockDataTypeDef ReadBlockDataStruct[] =
-{
-    {0x0400040F, 4, 8, {&ctu_cfg.longitude, &ctu_cfg.latitude, RT_NULL},       1, TYPE_U32, "long lat"},//经纬度
-};
-
 /* 单个可读可写数据（表） */
 const R_WDataTypeDef R_WDataStruct[] =
 {
@@ -52,6 +46,7 @@ static uint8_t g_dlt645_point_data[DLT645_POINT_DATA_MAX_LEN]; /* 保存读取�
 static const Dlt645PointTypeDef g_dlt645_points[] =
 {
     //DI3～DI1    DI0           读写权限            编码方式            DI0选择器                                    数据长度 定点数倍率 写入值下限 写入值上限 读取回调函数 写入回调函数 点表名称
+    {0x0400040FU, 0xFFFFFFFFU, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 11U, 1, 0, 0, dlt645_read_location, dlt645_write_location, "converter location"}, /* 标准位置信息依次包含经度XXXX.XXXX、纬度XXXX.XXXX和高度XXXX.XX。 */
     // 协议转换单元其他类数据：A相电压据实回复，当前由临时默认取值接口提供。
     {0x02010100U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 2U, 10, 0, 0, dlt645_read_converter_phase_a_voltage, RT_NULL, "converter phase A voltage"}, /* 格式XXX.X V，内存值单位为0.1V。 */
     // 协议转换单元其他类数据：以下测量量按现阶段规范要求固定回复全零。
@@ -135,12 +130,6 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
     // 协议库槽位01～64分别映射RAM中的100条临时协议。
     {0x04E70100U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_PROTOCOL, INV_PROTO_SIZE, 1, 0, 0, dlt645_read_protocol, dlt645_write_protocol, "protocol library slot"}, /* 有效槽位返回238字节结构，无效槽位返回全FF，写入不保存到Flash。 */
 };
-
-// const ReadDataTypeDef ReadDataStruct[] = 
-// {
-//     {0x0400040F, &ctu_cfg.longitude, 1.0, TYPE_U32, 4, "longitude"},//经度
-//     {0x0400040F, &ctu_cfg.latitude, 1.0, TYPE_U32, 4, "latitude"},//纬度
-// };
 
 uint8_t BCD2DEC(uint8_t ch)
 {
@@ -712,18 +701,6 @@ void dlt645_ctrl_read_data(uint8_t fun_c, uint32_t id,  uint8_t uart_no)
 
         dlt645_send_read_response(id, g_dlt645_point_data, data_len, uart_no); /* 顶层统一执行加0x33、组帧和单次发送。 */
         return;
-    }
-
-    /* 尚未迁移到统一点表的旧数据块只保留读兼容，写入口不再调用。 */
-    for(uint16_t i = 0U; i < countof(ReadBlockDataStruct); ++i)
-    {
-        if(id == ReadBlockDataStruct[i].DataIdf) /* 旧数据块使用完整数据标识精确匹配。 */
-        {
-            LOG_I("recv dlt645 %s ", ReadBlockDataStruct[i].DescribeType);
-            dltl645_block_bcd_data_ack(&ReadBlockDataStruct[i], E_D07_CTRL_READ_DATA,
-                                       RT_NULL, 0, uart_no); /* 旧函数内部仍负责读取、组帧和发送。 */
-            return;
-        }
     }
 
     if(id == 0x04000101) /* 日期及星期暂时通过原专用读取函数回复。 */

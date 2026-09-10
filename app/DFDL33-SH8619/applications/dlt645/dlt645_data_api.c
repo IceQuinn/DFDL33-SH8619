@@ -5,6 +5,7 @@
 
 #include "inv_data.h"
 #include "inverter_protocol_library.h"
+#include "ctu_cfg.h"
 #include "time_ctrl.h"
 #include "user_rtc.h"
 
@@ -19,6 +20,10 @@
 #define DLT645_ARCHIVE_VERSION_OFFSET 33U   /* 厂家名称之后为低字节在前的16位规约版本。 */
 #define DLT645_ARCHIVE_PORT_OFFSET    35U   /* 档案数据块最后1字节为接入端口号。 */
 #define DLT645_CONVERTER_VOLTAGE_DEFAULT 2200U /* 临时A相电压为220.0V，内存单位固定为0.1V。 */
+#define DLT645_LOCATION_DATA_LEN       11U      /* 位置信息由4字节经度、4字节纬度和3字节高度组成。 */
+#define DLT645_LONGITUDE_MAX           1800000U /* 经度格式XXXX.XXXX，业务有效范围限制为0～180.0000度。 */
+#define DLT645_LATITUDE_MAX             900000U /* 纬度格式XXXX.XXXX，业务有效范围限制为0～90.0000度。 */
+#define DLT645_ALTITUDE_MAX             999999U /* 高度格式XXXX.XX，三字节BCD最大表示9999.99米。 */
 
 /* 读取RAM协议库的当前有效数量；协议库数量使用原始整数而不是BCD编码。 */
 rt_err_t dlt645_read_protocol_count(const Dlt645PointTypeDef *point, uint32_t id,
@@ -703,6 +708,72 @@ static rt_err_t dlt645_bcd_decode_u32(const uint8_t *data, uint16_t data_len, in
     }
 
     *value = (int32_t)result; /* 所有范围检查通过后才写入调用方结果变量。 */
+    return RT_EOK;
+}
+
+/* 读取0400040F位置信息，按标准顺序编码经度、纬度和高度，数据尚未执行加0x33。 */
+rt_err_t dlt645_read_location(const Dlt645PointTypeDef *point, uint32_t id,
+                              uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    RT_UNUSED(id); /* 0400040F是固定数据标识，不使用DI0选择档案或数据块。 */
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
+       (point->data_len != DLT645_LOCATION_DATA_LEN) || (capacity < point->data_len)) /* 一次检查点描述、输出指针及11字节容量。 */
+    {
+        return -RT_EINVAL;
+    }
+    if((ctu_cfg.longitude > DLT645_LONGITUDE_MAX) ||
+       (ctu_cfg.latitude > DLT645_LATITUDE_MAX) ||
+       (ctu_cfg.altitude > DLT645_ALTITUDE_MAX)) /* 配置中的越界位置不能截断为看似有效的BCD数据。 */
+    {
+        return -RT_EINVAL;
+    }
+    if((dlt645_encode_bcd((int32_t)ctu_cfg.longitude, &data[0], 4U, RT_FALSE) != RT_EOK) ||
+       (dlt645_encode_bcd((int32_t)ctu_cfg.latitude, &data[4], 4U, RT_FALSE) != RT_EOK) ||
+       (dlt645_encode_bcd((int32_t)ctu_cfg.altitude, &data[8], 3U, RT_FALSE) != RT_EOK)) /* 三个字段必须全部成功编码才允许回复。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    *data_len = point->data_len; /* 标准位置信息固定返回11字节业务数据。 */
+    return RT_EOK;
+}
+
+/* 写入0400040F位置信息，全部字段校验成功后一次性更新配置并调用ctu_cfg_save持久化。 */
+rt_err_t dlt645_write_location(const Dlt645PointTypeDef *point, uint32_t id,
+                               const uint8_t *data, uint16_t data_len,
+                               uint8_t *response, uint16_t response_capacity,
+                               uint16_t *response_len)
+{
+    int32_t longitude; /* 解码后的经度定点整数，单位0.0001度。 */
+    int32_t latitude;  /* 解码后的纬度定点整数，单位0.0001度。 */
+    int32_t altitude;  /* 解码后的高度定点整数，单位0.01米。 */
+
+    RT_UNUSED(id); /* 固定数据标识不需要再次判断DI0。 */
+    RT_UNUSED(response); /* 标准写数据成功应答不携带业务数据。 */
+    RT_UNUSED(response_capacity);
+    if((point == RT_NULL) || (data == RT_NULL) || (response_len == RT_NULL) ||
+       (point->data_len != DLT645_LOCATION_DATA_LEN) || (data_len != point->data_len)) /* 写入业务区必须完整包含11字节位置信息。 */
+    {
+        return -RT_EINVAL;
+    }
+    if((dlt645_bcd_decode_u32(&data[0], 4U, &longitude) != RT_EOK) ||
+       (dlt645_bcd_decode_u32(&data[4], 4U, &latitude) != RT_EOK) ||
+       (dlt645_bcd_decode_u32(&data[8], 3U, &altitude) != RT_EOK)) /* 任一字段包含非法BCD时整组写入失败。 */
+    {
+        return -RT_EINVAL;
+    }
+    if(((uint32_t)longitude > DLT645_LONGITUDE_MAX) ||
+       ((uint32_t)latitude > DLT645_LATITUDE_MAX) ||
+       ((uint32_t)altitude > DLT645_ALTITUDE_MAX)) /* 经度、纬度和高度必须同时处于允许范围。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    ctu_cfg.longitude = (uint32_t)longitude; /* 完整校验后再提交新经度，避免失败时只更新部分字段。 */
+    ctu_cfg.latitude = (uint32_t)latitude; /* 纬度与经度在同一次写请求中原子更新内存值。 */
+    ctu_cfg.altitude = (uint32_t)altitude; /* 高度属于同一标准数据标识，随经纬度一起更新。 */
+    ctu_cfg_save(); /* 位置信息写入成功后保存到配置A/B区，重新上电后继续有效。 */
+    *response_len = 0U; /* 成功时由顶层发送数据域长度为0的0x94标准写应答。 */
     return RT_EOK;
 }
 

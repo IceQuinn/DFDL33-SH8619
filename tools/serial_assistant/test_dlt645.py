@@ -80,6 +80,24 @@ class DLT645Tests(unittest.TestCase):
         self.assertEqual(result.data_identifier, "F0010001")
         self.assertEqual(result.payload, payload)
 
+    def test_standard_location_read_and_write_codec(self):
+        values = {"longitude": "114.3999", "latitude": "30.4456", "altitude": "12.34"}
+        payload = self.registry.encode("0400040F", values)
+        self.assertEqual(payload, bytes.fromhex("99 39 14 01 56 44 30 00 34 12 00"))
+        self.assertEqual(
+            self.registry.decode("0400040F", payload),
+            [("经度", "114.3999", "°"), ("纬度", "30.4456", "°"), ("高度", "12.34", "m")],
+        )
+        definition = self.registry.get("0400040F")
+        self.assertEqual(definition.category, "standard")
+        self.assertEqual(definition.access, "read_write")
+
+    def test_standard_location_rejects_invalid_coordinates(self):
+        with self.assertRaises(ValueError):
+            self.registry.encode("0400040F", {"longitude": "180.0001", "latitude": "30", "altitude": "0"})
+        with self.assertRaises(ValueError):
+            self.registry.encode("0400040F", {"longitude": "120", "latitude": "90.0001", "altitude": "0"})
+
     def test_other_identifiers_are_read_only_and_decode_expected_values(self):
         self.assertEqual(self.registry.categories["other"], "其他")
 

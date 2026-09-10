@@ -44,6 +44,11 @@ void Ctu_Cfg_Init(void)
         // 版本升级
 //        CFG_Vx_To_Vlast(ctu_cfg.hdr.ver, ctu_cfg.hdr.len);
 //        ctu_cfg_save();
+        if(ctu_cfg.hdr.len < (sizeof(ctu_cfg) - sizeof(ctu_cfg.hdr))) /* 旧版配置不含结构体尾部的高度字段时执行一次长度兼容。 */
+        {
+            ctu_cfg.altitude = 0U; /* 旧配置升级后的默认高度为0.00m，原有字段及偏移保持不变。 */
+            ctu_cfg_save(); /* 用当前结构长度重新保存A/B区，后续启动不再重复执行兼容处理。 */
+        }
     }
     /* Flash校验成功时保留已经保存的通信参数，禁止再次用默认值覆盖645写地址结果。 */
 }
@@ -53,36 +58,36 @@ void set_default_para(void)
     // RJ45-2-2
     ctu_cfg.uart_protocol[UART1_NO]     = MODBUS_MASTER;//通信协议 1=modbus协议,2=dlt645协议
     ctu_cfg.uart_baud[UART1_NO]         = 9600;         //波特率
-    ctu_cfg.uart_check[UART1_NO]        = 1;            //校验位
+    ctu_cfg.uart_check[UART1_NO]        = 1;            //校验位 1=8,N,1; 2=8,O,1 3=8,E,1
     // RS485-Ⅰ
     ctu_cfg.uart_protocol[UART3_NO]     = DLT645_SLAVE; //通信协议 1=modbus协议,2=dlt645协议
     ctu_cfg.uart_baud[UART3_NO]         = 9600;         //波特率
-    ctu_cfg.uart_check[UART3_NO]        = 3;            //校验位
+    ctu_cfg.uart_check[UART3_NO]        = 3;            //校验位 1=8,N,1; 2=8,O,1 3=8,E,1
 
     // RJ45-2-1
     ctu_cfg.uart_protocol[UART4_NO]     = MODBUS_MASTER; //通信协议 1=modbus协议,2=dlt645协议
     ctu_cfg.uart_baud[UART4_NO]         = 9600;         //波特率
-    ctu_cfg.uart_check[UART4_NO]        = 1;            //校验位
+    ctu_cfg.uart_check[UART4_NO]        = 1;            //校验位 1=8,N,1; 2=8,O,1 3=8,E,1
 
     // RJ45-1-2
     ctu_cfg.uart_protocol[UART5_NO]     = MODBUS_MASTER; //通信协议 1=modbus协议,2=dlt645协议
     ctu_cfg.uart_baud[UART5_NO]         = 9600;         //波特率
-    ctu_cfg.uart_check[UART5_NO]        = 1;            //校验位
+    ctu_cfg.uart_check[UART5_NO]        = 1;            //校验位 1=8,N,1; 2=8,O,1 3=8,E,1
 
     // RS485-Ⅱ
     ctu_cfg.uart_protocol[UART6_NO]     = MODBUS_MASTER; //通信协议 1=modbus协议,2=dlt645协议
     ctu_cfg.uart_baud[UART6_NO]         = 9600;         //波特率
-    ctu_cfg.uart_check[UART6_NO]        = 1;            //校验位
+    ctu_cfg.uart_check[UART6_NO]        = 1;            //校验位 1=8,N,1; 2=8,O,1 3=8,E,1
 
     // RJ45-1-1
     ctu_cfg.uart_protocol[UART7_NO]     = MODBUS_MASTER; //通信协议 1=modbus协议,2=dlt645协议
     ctu_cfg.uart_baud[UART7_NO]         = 9600;         //波特率
-    ctu_cfg.uart_check[UART7_NO]        = 1;            //校验位
+    ctu_cfg.uart_check[UART7_NO]        = 1;            //校验位 1=8,N,1; 2=8,O,1 3=8,E,1
 
     // 载波
     ctu_cfg.uart_protocol[UART8_NO]     = DLT645_SLAVE; //通信协议 1=modbus协议,2=dlt645协议
     ctu_cfg.uart_baud[UART8_NO]         = 9600;         //波特率
-    ctu_cfg.uart_check[UART8_NO]        = 3;            //校验位
+    ctu_cfg.uart_check[UART8_NO]        = 3;            //校验位 1=8,N,1; 2=8,O,1 3=8,E,1
 
     for(uint8_t i=0; i<6; i++)
     {
@@ -92,6 +97,7 @@ void set_default_para(void)
     ctu_cfg.longitude                   = 1143999;      //经度
     ctu_cfg.latitude                    = 304456;       //纬度
     ctu_cfg.g_vol_cal_coef              = 356.204534;
+    ctu_cfg.altitude                    = 0U;           /* 默认高度为0.00m，645写入位置信息后随配置统一保存。 */
 }
 
 //恢复默认值并保存
