@@ -13,6 +13,7 @@
 #include "main_uart.h"
 
 #include "inv_data.h"
+#include "inverter_protocol_library.h"
 
 #include "upgrade.h"
 
@@ -21,7 +22,8 @@
 #include <rtdbg.h>
 
 
-uint8_t g_packBuf[256] = {0};
+#define DLT645_FRAME_BUFFER_SIZE        512U /* 238字节协议库应答加数据标识、帧头和前导码后需要超过256字节缓冲区。 */
+uint8_t g_packBuf[DLT645_FRAME_BUFFER_SIZE] = {0};
 uint8_t sg_dl645_addr_bcd[DL645_ADDR_SIZE] = {0};
 
 /* 数据块（表） */
@@ -127,6 +129,11 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
     {0x04E62100U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 1U, 1, 0, INVERTER_ARCHIVE_MAX_COUNT, dlt645_read_archive_count, RT_NULL, "inverter archive count"}, /* 固定数据标识仅允许读取，返回当前有效档案数的单字节BCD。 */
     // 光伏逆变器档案
     {0x04E62100U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_DEVICE, INVERTER_ARCHIVE_WIRE_SIZE, 1, 0, 0, dlt645_read_archive, dlt645_write_archive, "inverter archive"}, /* DI0为01～0C，每个档案固定包含地址、厂家、规约版本和端口共36字节。 */
+
+    // 协议库总数必须放在槽位通配点之前，避免04E701FE被通配规则提前匹配。
+    {0x04E701FEU, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_RAW, DLT645_SELECTOR_NONE, 1U, 1, 0, INVERTER_PROTOCOL_LIBRARY_COUNT, dlt645_read_protocol_count, RT_NULL, "protocol library count"}, /* 有效协议数量根据RAM有效标志实时统计，仅支持读取。 */
+    // 协议库槽位01～64分别映射RAM中的100条临时协议。
+    {0x04E70100U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_PROTOCOL, INV_PROTO_SIZE, 1, 0, 0, dlt645_read_protocol, dlt645_write_protocol, "protocol library slot"}, /* 有效槽位返回238字节结构，无效槽位返回全FF，写入不保存到Flash。 */
 };
 
 // const ReadDataTypeDef ReadDataStruct[] = 
@@ -358,9 +365,11 @@ rt_err_t dlt645_pack_base_start_w(uint8_t *buf, uint8_t fun_c, uint32_t id, uint
 rt_err_t dlt645_pack_base_end(uint8_t *buf, uint32_t *len)
 {
     uint8_t  cs = 0;
-    for (uint8_t i=4; i<*len; i++)
+    uint32_t index; /* 校验范围跟随32位报文长度，避免报文超过8位或16位范围时循环变量回绕。 */
+
+    for(index = 4U; index < *len; ++index)
     {
-        cs += buf[i];
+        cs += buf[index];
     }
 
     /* 校验码 */
@@ -403,6 +412,11 @@ static rt_bool_t dlt645_point_selector_valid(const Dlt645PointTypeDef *point, ui
         return RT_TRUE;
     }
     if(((point->selector & DLT645_SELECTOR_ALL) != 0U) && (selector == 0xFFU)) /* 仅声明聚合能力的点接受FF。 */
+    {
+        return RT_TRUE;
+    }
+    if(((point->selector & DLT645_SELECTOR_PROTOCOL) != 0U) &&
+       (selector >= 1U) && (selector <= INVERTER_PROTOCOL_LIBRARY_COUNT)) /* 01～64映射协议库1～100槽位。 */
     {
         return RT_TRUE;
     }
@@ -492,7 +506,7 @@ int dltl645_block_bcd_data_ack(const ReadBlockDataTypeDef *PReadBlockDate, uint8
 
     if(E_D07_CTRL_WRITE_DATA == fun_c)
     {
-        for(uint8_t i=0; i<len; ++i)
+        for(uint16_t i=0; i<len; ++i)
         {
             //传输时数据是反的，这里就反过来
             dl645_power_bcd[len-i-1] = p_buf[i];
@@ -556,7 +570,7 @@ rt_err_t dltl645_ymdw_ack(uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t l
 
     if(E_D07_CTRL_WRITE_DATA == fun_c)
     {
-        for(uint8_t i=0; i<len; ++i)
+        for(uint16_t i=0; i<len; ++i)
         {
             //传输时数据是反的，这里就反过来
             dl645_power_bcd[len-i-1] = p_buf[i];
@@ -609,7 +623,7 @@ rt_err_t dltl645_hms_ack(uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t le
 
     if(E_D07_CTRL_WRITE_DATA == fun_c)
     {
-        for(uint8_t i=0; i<len; ++i)
+        for(uint16_t i=0; i<len; ++i)
         {
             //传输时数据是反的，这里就反过来
             dl645_power_bcd[len-i-1] = p_buf[i];

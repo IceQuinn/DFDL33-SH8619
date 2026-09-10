@@ -381,6 +381,56 @@ class DLT645Tests(unittest.TestCase):
         self.assertEqual(len(self.registry.get("04E60CFF").write_request["fields"]), 72)
         self.assertEqual(sum(int(field["length"]) for field in self.registry.get("04E60CFF").write_request["fields"]), 144)
 
+    def test_protocol_library_count_and_one_hundred_slots(self):
+        count = self.registry.get("04E701FE")  # 协议库总数使用独立只读数据标识，不能被槽位组覆盖。
+        self.assertIsNotNone(count)
+        self.assertEqual(count.access, "read")
+        self.assertEqual(self.registry.encode("04E701FE", {"protocol_count": 15}, "read_response"), b"\x0F")
+        slots = [self.registry.get(f"04E701{index:02X}") for index in range(1, 101)]  # 01～64必须完整生成100个协议槽位。
+        self.assertTrue(all(slot is not None and slot.access == "read_write" for slot in slots))
+        self.assertEqual(sum(int(field["length"]) for field in slots[0].read_response["fields"]), 238)
+        self.assertEqual(sum(int(field["length"]) for field in slots[-1].write_request["fields"]), 238)
+        row_groups = {field["row_group"] for field in slots[0].read_response["fields"]}  # 134个属性应合并为33行寄存器块。
+        self.assertEqual(len(row_groups), 33)
+        self.assertEqual(sum(field["row_group"] == "feature" for field in slots[0].read_response["fields"]), 6)
+
+    def test_protocol_library_wire_layout_and_invalid_slot_display(self):
+        definition = self.registry.get("04E70101")  # 以首槽位验证238字节各结构段的拼接顺序。
+        values = {}
+        for field in definition.write_request["fields"]:  # 为全部134个详细字段生成可编码初值。
+            if field["name"] == "manufacturer":
+                values[field["name"]] = "TEST_MFR"
+            elif field["type"] == "type_descriptor":
+                values[field["name"]] = {"data_type": "uint_16", "byte_order": "ABCD", "decimals": "0"}
+            else:
+                values[field["name"]] = field.get("default", 0)
+        payload = self.registry.encode(definition.di, values)
+        self.assertEqual(len(payload), 238)
+        self.assertEqual(payload[:8], b"TEST_MFR")
+        self.assertEqual(payload[32:34], bytes.fromhex("00 01"))
+        decoded = self.registry.decode(definition.di, payload)
+        self.assertEqual(decoded[0][1], "TEST_MFR")
+        invalid = self.registry.decode(definition.di, b"\xFF" * 238)  # 无效槽位的每个显示字段均应明确呈现为不可用。
+        self.assertTrue(all(value == "--" for _, value, _ in invalid))
+        cached = self.registry.decode_edit_values(definition.di, payload)  # 读到的详细字段必须能够无损回填并再次生成写报文。
+        self.assertEqual(self.registry.encode(definition.di, cached), payload)
+        self.assertEqual(self.registry.decode_edit_values(definition.di, b"\xFF" * 238), {})
+
+        values["feature_lower"] = "1234"  # 特征上下限在写界面使用十进制文本，线上仍编码为4字节小端整数。
+        values["feature_upper"] = "5678"
+        limit_payload = self.registry.encode(definition.di, values)
+        self.assertEqual(limit_payload[40:44], (1234).to_bytes(4, "little"))
+        self.assertEqual(limit_payload[44:48], (5678).to_bytes(4, "little"))
+        limit_cache = self.registry.decode_edit_values(definition.di, limit_payload)
+        self.assertEqual(limit_cache["feature_lower"], "1234")
+        self.assertEqual(limit_cache["feature_upper"], "5678")
+
+        values["ua_address"] = "123"  # 协议库写界面的寄存器地址使用十进制，线上仍按uint16小端编码。
+        address_payload = self.registry.encode(definition.di, values)
+        self.assertEqual(address_payload[48:50], bytes.fromhex("7B 00"))
+        address_cache = self.registry.decode_edit_values(definition.di, address_payload)
+        self.assertEqual(address_cache["ua_address"], "123")
+
 
 if __name__ == "__main__":
     unittest.main()

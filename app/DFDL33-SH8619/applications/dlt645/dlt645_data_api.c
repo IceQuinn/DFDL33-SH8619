@@ -20,6 +20,54 @@
 #define DLT645_ARCHIVE_PORT_OFFSET    35U   /* 档案数据块最后1字节为接入端口号。 */
 #define DLT645_CONVERTER_VOLTAGE_DEFAULT 2200U /* 临时A相电压为220.0V，内存单位固定为0.1V。 */
 
+/* 读取RAM协议库的当前有效数量；协议库数量使用原始整数而不是BCD编码。 */
+rt_err_t dlt645_read_protocol_count(const Dlt645PointTypeDef *point, uint32_t id,
+                                    uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    RT_UNUSED(id); /* 04E701FE是固定数据标识，不使用DI0作为槽位下标。 */
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) || (point->data_len != 1U) || (capacity < 1U)) /* 入口只执行一次必要的参数检查。 */
+    {
+        return -RT_EINVAL;
+    }
+    data[0] = Inv_Proto_Valid_Count(); /* 有效数量随临时协议写入实时变化，范围固定为0～100。 */
+    *data_len = 1U;
+    return RT_EOK;
+}
+
+/* 读取DI0指定的协议槽位，协议模块负责对无效槽位填充238字节FF。 */
+rt_err_t dlt645_read_protocol(const Dlt645PointTypeDef *point, uint32_t id,
+                              uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint16_t proto_number = (uint8_t)id; /* 分发层已将DI0限制为01～64，可直接作为1起始协议编号。 */
+
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) || (point->data_len != INV_PROTO_SIZE) || (capacity < INV_PROTO_SIZE)) /* 完整协议必须一次容纳238字节。 */
+    {
+        return -RT_EINVAL;
+    }
+    if(Inv_Proto_Read_Wire(proto_number, data, capacity) != RT_EOK) /* 槽位读取失败时由645顶层返回无请求数据异常。 */
+    {
+        return -RT_ERROR;
+    }
+    *data_len = INV_PROTO_SIZE;
+    return RT_EOK;
+}
+
+/* 校验并临时写入DI0指定协议槽位，标准写应答不携带额外业务数据。 */
+rt_err_t dlt645_write_protocol(const Dlt645PointTypeDef *point, uint32_t id,
+                               const uint8_t *data, uint16_t data_len,
+                               uint8_t *response, uint16_t response_capacity,
+                               uint16_t *response_len)
+{
+    RT_UNUSED(response); /* 协议库写入成功使用645标准无数据写应答。 */
+    RT_UNUSED(response_capacity);
+    if((point == RT_NULL) || (data == RT_NULL) || (response_len == RT_NULL) || (point->data_len != INV_PROTO_SIZE) || (data_len != INV_PROTO_SIZE)) /* 写请求必须完整携带单条协议。 */
+    {
+        return -RT_EINVAL;
+    }
+    *response_len = 0U; /* 明确禁止沿用上一次带状态写应答的数据长度。 */
+    return Inv_Proto_Write_Wire((uint8_t)id, data, data_len); /* 成功后周期抄读立即使用该槽位的新内容，不执行Flash保存。 */
+}
+
 typedef enum Dlt645VariableType
 {
     DLT645_VARIABLE_VOLTAGE = 0, /* 三相电压，目标格式XXX.X。 */

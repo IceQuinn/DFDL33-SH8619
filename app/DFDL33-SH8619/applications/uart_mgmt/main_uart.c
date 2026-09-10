@@ -18,7 +18,7 @@
 #include "led.h"
 
 /* 最后一个字节之后连续10ms没有新数据时，将当前串口数据截取为一帧。 */
-#define UART_RX_BUF_SIZE          256U
+#define UART_RX_BUF_SIZE          512U /* 238字节协议库写请求加安全字段和645帧开销后最大266字节。 */
 #define UART_FRAME_TIMEOUT_TICKS   10U
 #define UART_RX_POLL_TICKS          1U
 

@@ -105,6 +105,8 @@ class SerialAssistant(tk.Tk):
         self.dlt_flush_jobs: dict[str, str] = {}
         self.dlt_field_vars: dict[str, tk.StringVar] = {}
         self.dlt_decoded_vars: dict[str, tk.StringVar] = {}
+        self.dlt_decoded_defs: dict[str, dict] = {}  # 保存协议库读字段定义，用于按地址、功能码和上下限语义格式化显示。
+        self.dlt_read_values: dict[str, dict[str, object]] = {}  # 按数据标识保存最近一次成功读取值，切换写操作时用于回填。
         self.dlt_followup_payloads: dict[tuple[str, str], bytearray] = {}
         self.dlt_pending_writes: dict[str, str] = {}
         self._build_ui()
@@ -357,9 +359,11 @@ class SerialAssistant(tk.Tk):
             return
         self.dlt_category_value_map: dict[str, str] = {}
         available = self._available_dlt_definitions()
-        for item in available:
-            label = f"{item.category} | {item.category_description}"
-            self.dlt_category_value_map[label] = item.category
+        available_categories = {item.category for item in available}  # 当前读写动作下实际存在数据标识的类别集合。
+        for category, description in self.dlt_registry.categories.items():  # 严格按照配置文件声明顺序显示标准、扩展、其他、协议库。
+            if category in available_categories:  # 没有当前访问权限数据标识的类别不显示空页面。
+                label = f"{category} | {description}"
+                self.dlt_category_value_map[label] = category
         category_values = list(self.dlt_category_value_map)
         self.dlt_category_combo["values"] = category_values
         selected_category = self._selected_category()
@@ -435,6 +439,7 @@ class SerialAssistant(tk.Tk):
             child.destroy()
         self.dlt_field_vars.clear()
         self.dlt_decoded_vars.clear()
+        self.dlt_decoded_defs.clear()
         data_identifier = self._selected_di(silent=True)
         definition = self.dlt_registry.get(data_identifier) if data_identifier else None
         if not definition:
@@ -448,8 +453,13 @@ class SerialAssistant(tk.Tk):
             return
         section = definition.write_request if self.dlt_action_var.get() == "写" else definition.read_response
         fields = section.get("fields", [])
+        cached_values = self.dlt_read_values.get(data_identifier, {}) if self.dlt_action_var.get() == "写" else {}  # 写窗口优先采用同DI最近一次读取值。
         if not fields:
             ttk.Label(self.dlt_fields_frame, text=f"{definition.description}：没有配置数据字段").grid(row=0, column=0, sticky="w")
+            return
+        if any(field_def.get("row_group") for field_def in fields):  # 协议库使用每个寄存器块占一行的紧凑布局。
+            self._render_dlt_grouped_fields(fields, cached_values)
+            self.dlt_fields_canvas.yview_moveto(0.0)
             return
         for row, field_def in enumerate(fields):
             name = str(field_def["name"])
@@ -462,18 +472,20 @@ class SerialAssistant(tk.Tk):
             ttk.Label(self.dlt_fields_frame, text=display_label).grid(row=row, column=0, padx=4, pady=2, sticky="w")
             if self.dlt_action_var.get() == "写":
                 if kind == "type_descriptor":
-                    type_var = tk.StringVar(value=str(field_def.get("default_type", "uint_16")))
-                    order_var = tk.StringVar(value=str(field_def.get("default_order", "ABCD")))
-                    decimals_var = tk.StringVar(value=str(field_def.get("default_decimals", 0)))
+                    cached_descriptor = cached_values.get(name, {})  # 类型描述符由数据类型、字节序和小数位三个控件共同编辑。
+                    cached_descriptor = cached_descriptor if isinstance(cached_descriptor, dict) else {}
+                    type_var = tk.StringVar(value=str(cached_descriptor.get("data_type", field_def.get("default_type", "uint_16"))))
+                    order_var = tk.StringVar(value=str(cached_descriptor.get("byte_order", field_def.get("default_order", "ABCD"))))
+                    decimals_var = tk.StringVar(value=str(cached_descriptor.get("decimals", field_def.get("default_decimals", 0))))
                     self.dlt_field_vars[f"{name}.data_type"] = type_var
                     self.dlt_field_vars[f"{name}.byte_order"] = order_var
                     self.dlt_field_vars[f"{name}.decimals"] = decimals_var
                     widget = ttk.Frame(self.dlt_fields_frame)
-                    ttk.Combobox(widget, textvariable=type_var, values=("int_8", "uint_8", "int_16", "uint_16", "int_32", "uint_32", "float_32", "float_64", "ASCII", "BCD", "BCD_TIME"), state="readonly", width=11).pack(side="left")
+                    ttk.Combobox(widget, textvariable=type_var, values=("int_8", "uint_8", "int_16", "uint_16", "int_32", "uint_32", "float_32", "float_64", "ASCII", "BCD", "BCD_TIME", "BIT_FIELD"), state="readonly", width=11).pack(side="left")
                     ttk.Combobox(widget, textvariable=order_var, values=("ABCD", "CDAB", "BADC", "DCBA"), state="readonly", width=7).pack(side="left", padx=4)
                     ttk.Combobox(widget, textvariable=decimals_var, values=("0", "1", "2", "3", "4", "5"), state="readonly", width=5).pack(side="left")
                 else:
-                    variable = tk.StringVar(value=str(field_def.get("default", "")))
+                    variable = tk.StringVar(value=str(cached_values.get(name, field_def.get("default", ""))))  # 普通字段直接回填读取时保存的可编码文本。
                     self.dlt_field_vars[name] = variable
                     if kind == "enum" and field_def.get("values"):
                         widget = ttk.Combobox(self.dlt_fields_frame, textvariable=variable,
@@ -493,6 +505,83 @@ class SerialAssistant(tk.Tk):
                 ttk.Label(self.dlt_fields_frame, textvariable=decoded_var, foreground="#1565c0").grid(
                     row=row, column=3, padx=(18, 4), pady=2, sticky="w"
                 )
+
+    def _render_dlt_grouped_fields(self, fields, cached_values: dict[str, object]) -> None:
+        """将协议库的同一个寄存器描述块合并到一行，读显示和写输入采用相同字段顺序。"""
+        grouped_fields: dict[str, list[dict]] = {}
+        for field_def in fields:
+            group_name = str(field_def.get("row_group", field_def["name"]))  # row_group相同的地址、数量、功能码和类型归为一个寄存器块。
+            grouped_fields.setdefault(group_name, []).append(field_def)
+
+        for row, group in enumerate(grouped_fields.values()):
+            row_description = str(group[0].get("row_description", group[0].get("description", group[0]["name"])))
+            ttk.Label(self.dlt_fields_frame, text=row_description, width=25).grid(row=row, column=0, padx=(4, 10), pady=4, sticky="w")
+            value_frame = ttk.Frame(self.dlt_fields_frame)  # 当前寄存器的全部属性横向排列在同一行内。
+            value_frame.grid(row=row, column=1, padx=4, pady=2, sticky="w")
+
+            for column, field_def in enumerate(group):
+                name = str(field_def["name"])
+                full_label = str(field_def.get("description", name))
+                column_label = str(field_def.get("column_description", full_label))
+                kind = str(field_def.get("type", "hex"))
+                field_frame = ttk.Frame(value_frame)  # 每个属性在同一行中使用“短标题+值”的小单元显示。
+                field_frame.grid(row=0, column=column, padx=(0, 8), sticky="nw")
+
+                if self.dlt_action_var.get() == "写":
+                    if kind == "type_descriptor":
+                        cached_descriptor = cached_values.get(name, {})
+                        cached_descriptor = cached_descriptor if isinstance(cached_descriptor, dict) else {}
+                        type_var = tk.StringVar(value=str(cached_descriptor.get("data_type", field_def.get("default_type", "uint_16"))))
+                        order_var = tk.StringVar(value=str(cached_descriptor.get("byte_order", field_def.get("default_order", "ABCD"))))
+                        decimals_var = tk.StringVar(value=str(cached_descriptor.get("decimals", field_def.get("default_decimals", 0))))
+                        self.dlt_field_vars[f"{name}.data_type"] = type_var
+                        self.dlt_field_vars[f"{name}.byte_order"] = order_var
+                        self.dlt_field_vars[f"{name}.decimals"] = decimals_var
+                        descriptor_frame = ttk.Frame(field_frame)  # 数据类型、字节序和小数位均使用“标签+输入”横向排列。
+                        descriptor_frame.pack(anchor="w")
+                        ttk.Label(descriptor_frame, text="数据类型：", foreground="#555555").pack(side="left")
+                        ttk.Combobox(descriptor_frame, textvariable=type_var, values=("int_8", "uint_8", "int_16", "uint_16", "int_32", "uint_32", "float_32", "float_64", "ASCII", "BCD", "BCD_TIME", "BIT_FIELD"), state="readonly", width=10).pack(side="left")
+                        ttk.Label(descriptor_frame, text="字节序：", foreground="#555555").pack(side="left", padx=(5, 0))
+                        ttk.Combobox(descriptor_frame, textvariable=order_var, values=("ABCD", "CDAB", "BADC", "DCBA"), state="readonly", width=6).pack(side="left")
+                        ttk.Label(descriptor_frame, text="小数位：", foreground="#555555").pack(side="left", padx=(5, 0))
+                        ttk.Combobox(descriptor_frame, textvariable=decimals_var, values=("0", "1", "2", "3", "4", "5"), state="readonly", width=3).pack(side="left")
+                    else:
+                        variable = tk.StringVar(value=str(cached_values.get(name, field_def.get("default", ""))))
+                        self.dlt_field_vars[name] = variable
+                        width = 24 if kind == "ascii" else 9  # 横向布局缩短普通输入框，确保一个完整寄存器尽量保持在一行。
+                        ttk.Label(field_frame, text=f"{column_label}：", foreground="#555555").pack(side="left")
+                        ttk.Entry(field_frame, textvariable=variable, width=width).pack(side="left")
+                else:
+                    decoded_var = tk.StringVar(value=f"{column_label}：--")
+                    self.dlt_decoded_vars[full_label] = decoded_var  # 接收解析仍使用完整字段名称定位对应显示控件。
+                    self.dlt_decoded_defs[full_label] = field_def  # 接收值更新时根据字段用途选择十进制或十六进制格式。
+                    ttk.Label(field_frame, textvariable=decoded_var, foreground="#1565c0").pack(anchor="w")
+
+    @staticmethod
+    def _format_grouped_dlt_value(field_def: dict, value: object, unit: str) -> str:
+        """按协议库字段语义生成单行显示文本，不添加“解析值”前缀。"""
+        label = str(field_def.get("column_description", field_def.get("description", field_def["name"])))
+        name = str(field_def["name"])
+        text = str(value)
+        if text == "--":
+            return f"{label}：--"
+        if name.endswith("_address"):
+            number = int(text, 0)  # 寄存器地址同时显示便于配置的十进制和对应四位十六进制。
+            return f"地址：{number} (0x{number:04X})"
+        if name.endswith("_count"):
+            return f"数量：{int(text, 0)}"  # 寄存器数量统一使用十进制显示。
+        if name.endswith("_function"):
+            number = int(text, 0)
+            return f"功能码：0x{number:02X}"  # Modbus功能码统一使用两位十六进制显示。
+        if name in ("feature_lower", "feature_upper"):
+            return f"{label}：{int(text, 0)}"  # 特征有效值上下限按用户要求显示十进制。
+        if str(field_def.get("type", "")).lower() == "type_descriptor":
+            parts = [part.strip() for part in text.split("/")]
+            if len(parts) >= 3:
+                decimals = parts[2].split("位", 1)[0].strip()
+                data_type = parts[0].replace("_", "")  # int_16、uint_32等内部名称在界面显示为更紧凑的int16、uint32。
+                return f"数据类型：{data_type}  字节序：{parts[1]}  小数位：{decimals}"
+        return f"{label}：{text}{unit if text != '--' else ''}"
 
     def reload_dlt_config(self) -> None:
         try:
@@ -899,7 +988,20 @@ class SerialAssistant(tk.Tk):
                 for name, value, unit in decoded_values:
                     variable = self.dlt_decoded_vars.get(name)
                     if variable is not None:
-                        variable.set(f"解析值：{value}{unit if value != '--' else ''}")
+                        field_def = self.dlt_decoded_defs.get(name)
+                        if field_def is not None:  # 协议库紧凑行直接显示“地址：值”等字段，不再添加解析值前缀。
+                            variable.set(self._format_grouped_dlt_value(field_def, value, unit))
+                        else:
+                            variable.set(f"解析值：{value}{unit if value != '--' else ''}")
+            cache_payload = combined_payload if combined_payload is not None else result.payload  # 多帧读取只在最后一帧到达后缓存完整业务数据。
+            if(result.valid and result.direction == "从机→主机" and function in (0x11, 0x12)
+                    and not result.follow_up and result.data_identifier and cache_payload):
+                try:
+                    edit_values = self.dlt_registry.decode_edit_values(result.data_identifier, cache_payload)
+                    if edit_values:  # 全FF无效槽位不会清除此前读到并可继续编辑的有效协议。
+                        self.dlt_read_values[result.data_identifier] = edit_values
+                except ValueError as exc:
+                    details.append(f"写入回填缓存失败：{exc}")
         elif combined_payload is not None:
             data_summary = f"累计{len(combined_payload)}字节"
             details.append(f"累计数据={hex_bytes(combined_payload)}")

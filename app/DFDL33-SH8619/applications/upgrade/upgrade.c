@@ -67,11 +67,11 @@ int data_ack(const void* databuf, uint16_t datalen)
     g_packBuf[packLen++] = 0x68;
     g_packBuf[packLen++] = 0x9F;
     g_packBuf[packLen++] = datalen;
-    for (uint8_t i=0; i<datalen; i++)
+    for(uint16_t i = 0U; i < datalen; ++i)
     {
         g_packBuf[packLen++] = p[i] + 0x33;
     }
-    for (uint8_t i=4; i<packLen; i++)
+    for(uint16_t i = 4U; i < packLen; ++i)
     {
         cs += g_packBuf[i];
     }
@@ -79,7 +79,7 @@ int data_ack(const void* databuf, uint16_t datalen)
     g_packBuf[packLen++] = 0x16;
 
     rt_kprintf("ctu addr ack : ");
-    for(uint8_t i=0; i<packLen; i++)
+    for(uint16_t i = 0U; i < packLen; ++i)
     {
         rt_kprintf("%02x", g_packBuf[i]);
     }

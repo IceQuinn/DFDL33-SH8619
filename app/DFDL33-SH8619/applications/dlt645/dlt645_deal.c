@@ -153,7 +153,7 @@ int dlt645_addr_ack(uint8_t uart_no)
     {
         g_packBuf[packLen++] = sg_dl645_addr_bcd[i] + 0x33;
     }
-    for (uint8_t i=4; i<packLen; i++)
+    for(uint16_t i = 4U; i < packLen; ++i)
     {
         cs += g_packBuf[i];
     }
@@ -161,7 +161,7 @@ int dlt645_addr_ack(uint8_t uart_no)
     g_packBuf[packLen++] = 0x16;
 
     rt_kprintf("ctu addr ack : ");
-    for(uint8_t i=0; i<packLen; i++)
+    for(uint16_t i = 0U; i < packLen; ++i)
     {
         rt_kprintf("%02x", g_packBuf[i]);
     }
@@ -206,7 +206,7 @@ void dlt645_deal(uint8_t uart_no, uint8_t *dlt645_addr, uint8_t *bufPtr, uint16_
     DLT645_Pack.Control_Code = newPackPtr[8];   // 控制码
     DLT645_Pack.Data_Length = newPackPtr[9];    // 长度
     DLT645_Pack.Data = &newPackPtr[10];         // 数据
-    for(uint8_t i=0; i< DLT645_Pack.Data_Length; ++i)
+    for(uint16_t i = 0U; i < DLT645_Pack.Data_Length; ++i)
     {
         DLT645_Pack.Data[i] -= 0x33;
     }
@@ -308,7 +308,8 @@ rt_err_t dlt645_data_ack(uint16_t uart_no, const void *buffer, rt_size_t size)
     }
 }
 
-uint8_t dlt645_deal_rx_buf[256] = {0};
+#define DLT645_DEAL_RX_BUFFER_SIZE 512U /* 协议库写请求含4个前导字节时整帧为266字节，处理缓冲必须完整容纳。 */
+uint8_t dlt645_deal_rx_buf[DLT645_DEAL_RX_BUFFER_SIZE] = {0};
 uint16_t dlt645_deal_rx_len = 0;
 
 /* 645协议处理线程 */

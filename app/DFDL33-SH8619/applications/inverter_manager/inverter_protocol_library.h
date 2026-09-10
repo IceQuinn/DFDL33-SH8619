@@ -4,6 +4,7 @@
 #define APPLICATIONS_INVERTER_PROTOCOL_LIBRARY_H
 
 #include <stdint.h>
+#include <rtthread.h>
 
 #include "user_comm.h"
 #include "inverter_archive.h"
@@ -303,6 +304,15 @@ typedef char Inv_ProtoLibSizeCheck_t[
 
 /* 全局逆变器协议库，数组下标范围为0~99，前4项分别对应阳光、华为、固德威和锦浪。 */
 extern Inv_ProtoLib_t g_inv_proto_lib;
+
+/* 统计RAM协议库中有效槽位数量，返回范围为0～100。 */
+uint8_t Inv_Proto_Valid_Count(void);
+
+/* 按1～100槽位读取238字节协议；无效槽位以全FF返回，越界或缓冲区不足返回错误。 */
+rt_err_t Inv_Proto_Read_Wire(uint16_t proto_number, uint8_t *wire_data, uint16_t capacity);
+
+/* 校验并临时覆盖1～100槽位的238字节协议；全FF、重复厂家版本或非法结构返回错误。 */
+rt_err_t Inv_Proto_Write_Wire(uint16_t proto_number, const uint8_t *wire_data, uint16_t data_len);
 
 /* 按厂家枚举轮询各分项配置表，重新组装RAM中的默认协议库。 */
 void inv_proto_default_lib_init(void);

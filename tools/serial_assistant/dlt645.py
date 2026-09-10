@@ -38,7 +38,7 @@ ERROR_BITS = {
 
 DESCRIPTOR_DATA_TYPES = {
     0: "int_8", 1: "uint_8", 2: "int_16", 3: "uint_16", 4: "int_32", 5: "uint_32",
-    6: "float_32", 7: "float_64", 8: "ASCII", 9: "BCD", 10: "BCD_TIME",
+    6: "float_32", 7: "float_64", 8: "ASCII", 9: "BCD", 10: "BCD_TIME", 11: "BIT_FIELD",
 }
 DESCRIPTOR_BYTE_ORDERS = {0: "ABCD", 1: "CDAB", 2: "BADC", 3: "DCBA"}
 
@@ -574,15 +574,73 @@ class DataIdentifierRegistry:
         if not isinstance(schemas, dict):
             raise ValueError("schemas必须是对象")
 
+        def protocol_library_section() -> Mapping[str, Any]:
+            """展开技术规范中的238字节协议库，确保读显示与写输入逐字段一一对应。"""
+            fields: list[dict[str, Any]] = [
+                {"name": "manufacturer", "description": "基本信息 / 厂家名称", "column_description": "厂家名称", "row_group": "basic", "row_description": "基本信息", "type": "ascii", "length": 32},
+                {"name": "protocol_version", "description": "基本信息 / 规约版本", "column_description": "规约版本", "row_group": "basic", "row_description": "基本信息", "type": "hex_uint", "length": 2, "byte_order": "little", "default": "0x0100"},
+            ]
+
+            def append_register(prefix: str, description: str, function_description: str = "读功能码") -> None:
+                fields.extend((
+                    {"name": f"{prefix}_address", "description": f"{description} / 寄存器地址", "column_description": "地址", "row_group": prefix, "row_description": description, "type": "uint", "length": 2, "byte_order": "little", "minimum": 0, "maximum": 65535, "default": 65535},
+                    {"name": f"{prefix}_count", "description": f"{description} / 寄存器数量", "column_description": "数量", "row_group": prefix, "row_description": description, "type": "uint", "length": 1, "byte_order": "little", "default": 0},
+                    {"name": f"{prefix}_function", "description": f"{description} / {function_description}", "column_description": function_description, "row_group": prefix, "row_description": description, "type": "hex_uint", "length": 1, "byte_order": "little", "default": "0x00"},
+                    {"name": f"{prefix}_type", "description": f"{description} / 数据类型、字节序及小数位", "column_description": "数据类型 / 字节序 / 小数位", "row_group": prefix, "row_description": description, "type": "type_descriptor", "length": 2, "byte_order": "little", "default_type": "uint_16", "default_order": "ABCD", "default_decimals": 0},
+                ))
+
+            append_register("feature", "特征数据")  # 特征块前6字节与普通读取寄存器块结构一致。
+            fields.extend((
+                {"name": "feature_lower", "description": "特征数据 / 有效值下限", "column_description": "有效值下限", "row_group": "feature", "row_description": "特征数据", "type": "uint", "length": 4, "byte_order": "little", "minimum": 0, "maximum": 4294967295, "default": 0},
+                {"name": "feature_upper", "description": "特征数据 / 有效值上限", "column_description": "有效值上限", "row_group": "feature", "row_description": "特征数据", "type": "uint", "length": 4, "byte_order": "little", "minimum": 0, "maximum": 4294967295, "default": 0},
+            ))
+            data_points = (
+                ("ua", "数据类 / A相电压"), ("ub", "数据类 / B相电压"), ("uc", "数据类 / C相电压"),
+                ("ia", "数据类 / A相电流"), ("ib", "数据类 / B相电流"), ("ic", "数据类 / C相电流"),
+                ("pa", "数据类 / A相有功功率"), ("pb", "数据类 / B相有功功率"), ("pc", "数据类 / C相有功功率"), ("pt", "数据类 / 总有功功率"),
+                ("qa", "数据类 / A相无功功率"), ("qb", "数据类 / B相无功功率"), ("qc", "数据类 / C相无功功率"), ("qt", "数据类 / 总无功功率"),
+                ("pfa", "数据类 / A相功率因数"), ("pfb", "数据类 / B相功率因数"), ("pfc", "数据类 / C相功率因数"), ("pft", "数据类 / 总功率因数"),
+            )
+            for prefix, description in data_points:
+                append_register(prefix, description)
+            parameter_points = (
+                ("device_number", "参数类 / 设备编号"), ("pn", "参数类 / 额定有功功率Pn"),
+                ("qn", "参数类 / 额定无功功率Qn"), ("set_voltage", "参数类 / 设定电压"),
+                ("output_type", "参数类 / 输出类型"),
+            )
+            for prefix, description in parameter_points:
+                append_register(prefix, description)
+            for prefix, description in (("power_on", "控制类 / 开机"), ("power_off", "控制类 / 关机")):
+                append_register(prefix, description, "写功能码")
+                fields.append({"name": f"{prefix}_default", "description": f"{description} / 默认写入值", "column_description": "默认写入值", "row_group": prefix, "row_description": description, "type": "hex_uint", "length": 2, "byte_order": "little", "default": "0x0000"})
+            control_points = (
+                ("active_power_control", "控制类 / 有功功率数值调节"),
+                ("reactive_power_control", "控制类 / 无功功率数值调节"),
+                ("power_factor_control", "控制类 / 功率因数调节"),
+                ("active_power_percent_control", "控制类 / 有功功率百分比调节"),
+                ("reactive_power_percent_control", "控制类 / 无功功率百分比调节"),
+            )
+            for prefix, description in control_points:
+                append_register(prefix, description, "写功能码")
+            append_register("daily_energy", "日发电量")
+            if sum(int(field["length"]) for field in fields) != 238:  # 配置代码调整字段时立即阻止生成错误长度的协议报文。
+                raise ValueError("协议库展开后的结构长度不是238字节")
+            return {"fields": fields}
+
+        def expand_layout(value: Mapping[str, Any]) -> Mapping[str, Any]:
+            if value.get("layout") == "inverter_protocol_library":  # 协议库使用代码展开，避免JSON中重复维护135个字段。
+                return protocol_library_section()
+            return value
+
         def section(raw: Mapping[str, Any], direct_name: str, reference_name: str) -> Mapping[str, Any]:
             value = raw.get(direct_name, raw.get(reference_name, {}))
             if isinstance(value, str):
                 if value not in schemas or not isinstance(schemas[value], dict):
                     raise ValueError(f"结构体{value}不存在")
-                return schemas[value]
+                return expand_layout(schemas[value])
             if not isinstance(value, dict):
                 raise ValueError(f"{direct_name}必须是对象或结构体名称")
-            return value
+            return expand_layout(value)
 
         def repeated_section(schema: Mapping[str, Any], count: int) -> Mapping[str, Any]:
             if count <= 1:
@@ -712,3 +770,36 @@ class DataIdentifierRegistry:
         if offset < len(payload):
             result.append(("未定义尾部数据", payload[offset:].hex().upper(), ""))
         return result
+
+    def decode_edit_values(self, data_identifier: str, payload: bytes) -> dict[str, Any]:
+        """把读取数据转换为可再次编码的字段值，供同一数据标识从读切换到写时回填。"""
+        definition = self.get(data_identifier)
+        if not definition or (payload and all(value == 0xFF for value in payload)):
+            return {}  # 未配置数据标识或全FF无效槽位不能覆盖写窗口中的已有内容。
+        values: dict[str, Any] = {}
+        offset = 0
+        for field_def in definition.read_response.get("fields", []):
+            length = int(field_def["length"])
+            if offset + length > len(payload):
+                raise ValueError(f"数据标识{definition.di}的数据不足，不能生成写入回填值")
+            raw_value = payload[offset:offset + length]
+            name = str(field_def["name"])
+            kind = str(field_def.get("type", "hex")).lower()
+            if name.endswith("_address"):
+                values[name] = str(int.from_bytes(raw_value, _byte_order(field_def), signed=False))  # FFFF不支持地址仍以十进制65535无损回填。
+            elif kind == "hex_uint":
+                integer = int.from_bytes(raw_value, _byte_order(field_def), signed=False)  # FFFF寄存器地址在编辑缓存中必须保留，不能转换成“--”。
+                values[name] = f"0x{integer:0{length * 2}X}"
+            elif kind == "type_descriptor":
+                descriptor = int.from_bytes(raw_value, _byte_order(field_def), signed=False)
+                values[name] = {
+                    "data_type": DESCRIPTOR_DATA_TYPES.get(descriptor & 0x0F, f"保留({descriptor & 0x0F})"),
+                    "byte_order": DESCRIPTOR_BYTE_ORDERS.get((descriptor >> 4) & 0x0F, f"保留({(descriptor >> 4) & 0x0F})"),
+                    "decimals": str((descriptor >> 8) & 0x0F),
+                }
+            elif kind in ("hex", "raw_bytes"):
+                values[name] = raw_value.hex().upper()
+            else:
+                values[name] = str(decode_field(raw_value, field_def))
+            offset += length
+        return values
