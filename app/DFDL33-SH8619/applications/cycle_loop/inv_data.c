@@ -754,6 +754,20 @@ static rt_bool_t inv_data_point_is_readable(const Inv_Data_Point_Config_t *point
     return RT_TRUE;
 }
 
+/* 清除单个周期抄读数据点的有效标志，保留原数值或字符串内容供故障分析。 */
+static void inv_data_invalidate_point(Inv_Data_Point_Config_t *point)
+{
+    /* 数值型目标存在时清除数值有效标志，后续645读取会把该数据项回复为无效。 */
+    if(point->number_target != RT_NULL) {
+        point->number_target->valid = 0U;
+    }
+
+    /* 字符串目标存在时清除字符串有效标志，设备编号等字符串点不会继续沿用旧协议数据。 */
+    if(point->string_target != RT_NULL) {
+        point->string_target->valid = 0U;
+    }
+}
+
 /* 当前数据点完成后推进游标，29个点结束后切换到下一个档案槽位。 */
 static void inv_data_advance_cursor(Inv_Data_Port_Context_t *context)
 {
@@ -806,10 +820,22 @@ static rt_bool_t inv_data_find_next_point(Inv_Data_Port_Context_t *context, uint
             continue;
         }
 
-        /* 无法取得协议数据点或寄存器未配置时直接检查下一点。 */
-        if((inv_data_get_point(archive_index, point_index, &point) == RT_FALSE) ||
-           (inv_data_point_is_readable(&point) == RT_FALSE)) {
+        /* 档案没有实时协议指针时无法取得数据点目标，直接检查下一点。 */
+        if(inv_data_get_point(archive_index, point_index, &point) == RT_FALSE) {
             /* 当前点是该逆变器最后一项时，即使未配置寄存器也需要进入10秒空闲。 */
+            if(archive_last_point == RT_TRUE) {
+                inv_data_start_device_idle(context, archive_index);
+                return RT_FALSE;
+            }
+
+            continue;
+        }
+
+        /* 当前实时协议中的寄存器不支持或配置不可读时清除旧有效标志，并且不发送Modbus请求。 */
+        if(inv_data_point_is_readable(&point) == RT_FALSE) {
+            inv_data_invalidate_point(&point); /* 每轮都按当前协议库状态刷新该点的无效状态。 */
+
+            /* 当前点是该逆变器最后一项时，清除有效标志后仍需进入10秒设备空闲。 */
             if(archive_last_point == RT_TRUE) {
                 inv_data_start_device_idle(context, archive_index);
                 return RT_FALSE;
@@ -914,15 +940,7 @@ static void inv_data_invalidate_active_point(Inv_Data_Port_Context_t *context)
     for(point_index = 0U; point_index < context->active.read.point_count; ++point_index) {
         Inv_Data_Point_Config_t *point = inv_data_get_active_point(context, point_index); /* 当前待清除有效标志的数据点。 */
 
-        /* 数值型目标存在时清除数值有效标志。 */
-        if(point->number_target != RT_NULL) {
-            point->number_target->valid = 0U;
-        }
-
-        /* 字符串目标存在时清除字符串有效标志。 */
-        if(point->string_target != RT_NULL) {
-            point->string_target->valid = 0U;
-        }
+        inv_data_invalidate_point(point); /* 单点和合并点统一使用同一有效标志清除规则。 */
     }
 }
 
