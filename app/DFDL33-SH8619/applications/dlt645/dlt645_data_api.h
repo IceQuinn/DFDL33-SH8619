@@ -73,6 +73,9 @@ rt_err_t dlt645_read_converter_phase_a_voltage(const Dlt645PointTypeDef *point, 
 /* 为规范要求暂时固定回零的数据标识生成点表指定长度的全零业务数据。 */
 rt_err_t dlt645_read_zero_data(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
 
+/* 读取04800001厂家软件版本号，使用app_firmware_ver_ascll生成固定32字节零填充ASCII数据。 */
+rt_err_t dlt645_read_firmware_version(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
 /* 读取协议转换单元位置信息，依次返回经度、纬度和高度共11字节BCD数据。 */
 rt_err_t dlt645_read_location(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
 
@@ -84,6 +87,39 @@ rt_err_t dlt645_write_location(const Dlt645PointTypeDef *point,
                                uint8_t *response,
                                uint16_t response_capacity,
                                uint16_t *response_len);
+
+/* 读取04000800～04000806对应有线串口的波特率和校验格式，波特率按四字节小端原始整数返回。 */
+rt_err_t dlt645_read_serial_parameter(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
+/* 写入04000800～04000806对应有线串口的波特率和校验格式，保存后等待人工重启生效。 */
+rt_err_t dlt645_write_serial_parameter(const Dlt645PointTypeDef *point,
+                                       uint32_t id,
+                                       const uint8_t *data,
+                                       uint16_t data_len,
+                                       uint8_t *response,
+                                       uint16_t response_capacity,
+                                       uint16_t *response_len);
+
+/* 读取04000900全局逆变器周期抄读间隔，按两字节低字节在前BCD秒数返回。 */
+rt_err_t dlt645_read_poll_interval(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
+/* 写入04000900全局逆变器周期抄读间隔，有效范围5～3600秒并立即保存。 */
+rt_err_t dlt645_write_poll_interval(const Dlt645PointTypeDef *point,
+                                    uint32_t id,
+                                    const uint8_t *data,
+                                    uint16_t data_len,
+                                    uint8_t *response,
+                                    uint16_t response_capacity,
+                                    uint16_t *response_len);
+
+/* 处理04000A00～04000C00写1命令，分别执行设备重启、清除全部事件和恢复出厂设置。 */
+rt_err_t dlt645_write_device_action(const Dlt645PointTypeDef *point,
+                                    uint32_t id,
+                                    const uint8_t *data,
+                                    uint16_t data_len,
+                                    uint8_t *response,
+                                    uint16_t response_capacity,
+                                    uint16_t *response_len);
 
 /* 读取指定逆变器或全部逆变器的三相电压数据块。 */
 rt_err_t dlt645_read_voltage(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);

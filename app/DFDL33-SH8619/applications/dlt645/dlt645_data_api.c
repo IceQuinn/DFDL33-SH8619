@@ -6,8 +6,12 @@
 #include "inv_data.h"
 #include "inverter_protocol_library.h"
 #include "ctu_cfg.h"
+#include "event_deal.h"
+#include "sys.h"
 #include "time_ctrl.h"
+#include "user_iwdg.h"
 #include "user_rtc.h"
+#include "voltage_acq.h"
 
 #define DLT645_VARIABLE_ALL_SELECTOR  0xFFU /* DI0等于FF时按档案顺序返回全部12台逆变器。 */
 #define DLT645_VOLTAGE_LEN            6U    /* 三相电压各占2字节，单台合计6字节。 */
@@ -24,6 +28,11 @@
 #define DLT645_LONGITUDE_MAX           1800000U /* 经度格式XXXX.XXXX，业务有效范围限制为0～180.0000度。 */
 #define DLT645_LATITUDE_MAX             900000U /* 纬度格式XXXX.XXXX，业务有效范围限制为0～90.0000度。 */
 #define DLT645_ALTITUDE_MAX             999999U /* 高度格式XXXX.XX，三字节BCD最大表示9999.99米。 */
+#define DLT645_SERIAL_PARAMETER_LEN          5U /* 串口参数由4字节小端波特率和1字节校验格式组成。 */
+#define DLT645_POLL_INTERVAL_LEN             2U /* 5～3600秒需要两字节低字节在前BCD才能完整表示。 */
+#define DLT645_POLL_INTERVAL_MIN             5U /* 全局周期抄读间隔最小允许5秒。 */
+#define DLT645_POLL_INTERVAL_MAX          3600U /* 全局周期抄读间隔最大允许3600秒。 */
+#define DLT645_FIRMWARE_VERSION_LEN         32U /* 04800001厂家软件版本号固定占32字节ASCII。 */
 
 /* 读取RAM协议库的当前有效数量；协议库数量使用原始整数而不是BCD编码。 */
 rt_err_t dlt645_read_protocol_count(const Dlt645PointTypeDef *point, uint32_t id,
@@ -186,7 +195,8 @@ static rt_err_t dlt645_encode_bcd(int32_t value, uint8_t *data, uint8_t byte_len
 /* 获取协议转换单元A相电压，当前返回0.1V单位的默认值，后续在本函数内接入真实采样接口。 */
 uint16_t dlt645_get_converter_phase_a_voltage(void)
 {
-    return DLT645_CONVERTER_VOLTAGE_DEFAULT; /* 2200表示220.0V，调用方不需要再执行浮点换算。 */
+    return getvoltage_rms();
+//    return DLT645_CONVERTER_VOLTAGE_DEFAULT; /* 2200表示220.0V，调用方不需要再执行浮点换算。 */
 }
 
 /* 读取协议转换单元A相电压，02010100和06100101共用本接口及同一数据来源。 */
@@ -223,6 +233,33 @@ rt_err_t dlt645_read_zero_data(const Dlt645PointTypeDef *point, uint32_t id,
 
     rt_memset(data, 0, point->data_len); /* 这里生成减去0x33后的全零业务数据，顶层组帧时再统一加0x33。 */
     *data_len = point->data_len; /* 返回点表规定的固定业务数据长度，避免不同标识之间长度混用。 */
+    return RT_EOK;
+}
+
+/* 读取04800001厂家软件版本号，将启动时生成的版本字符串组织为固定32字节零填充ASCII。 */
+rt_err_t dlt645_read_firmware_version(const Dlt645PointTypeDef *point, uint32_t id,
+                                      uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint16_t index; /* 当前复制的版本字符串字节下标，最大不超过协议规定的32字节。 */
+
+    RT_UNUSED(id); /* 04800001是固定数据标识，不使用DI0选择档案或数据块。 */
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
+       (point->data_len != DLT645_FIRMWARE_VERSION_LEN) || (capacity < point->data_len)) /* 一次检查接口边界和固定32字节输出容量。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    rt_memset(data, 0, point->data_len); /* 字符串有效内容之后统一补0x00，避免把静态缓冲区旧数据带入应答。 */
+    for(index = 0U; index < point->data_len; ++index) /* 有界复制避免未来版本格式变化时越过32字节协议字段。 */
+    {
+        if(app_show_ver_ascll[index] == '\0') /* 遇到C字符串结束符后保留已经填好的零字节尾部。 */
+        {
+            break;
+        }
+        data[index] = (uint8_t)app_show_ver_ascll[index]; /* 版本号中的数字、点、空格和日期符号按原始ASCII上送。 */
+    }
+
+    *data_len = point->data_len; /* 无论实际字符串多长，04800001都固定返回32字节业务数据。 */
     return RT_EOK;
 }
 
@@ -708,6 +745,183 @@ static rt_err_t dlt645_bcd_decode_u32(const uint8_t *data, uint16_t data_len, in
     }
 
     *value = (int32_t)result; /* 所有范围检查通过后才写入调用方结果变量。 */
+    return RT_EOK;
+}
+
+/* 将040008xx最低字节定义的外部端口号映射到配置结构使用的内部UART编号。 */
+static rt_err_t dlt645_serial_port_to_uart(uint8_t port_number, uint16_t *uart_no)
+{
+    switch(port_number) /* 端口顺序严格对应最新645点表，07无线串口不在支持范围内。 */
+    {
+        case 0x00U: *uart_no = UART3_NO; break; /* 04000800对应RS485-I。 */
+        case 0x01U: *uart_no = UART6_NO; break; /* 04000801对应RS485-II。 */
+        case 0x02U: *uart_no = UART7_NO; break; /* 04000802对应RJ45-1-I。 */
+        case 0x03U: *uart_no = UART5_NO; break; /* 04000803对应RJ45-1-II。 */
+        case 0x04U: *uart_no = UART4_NO; break; /* 04000804对应RJ45-2-I。 */
+        case 0x05U: *uart_no = UART1_NO; break; /* 04000805对应RJ45-2-II。 */
+        case 0x06U: *uart_no = UART8_NO; break; /* 04000806对应载波口。 */
+        default: return -RT_EINVAL; /* 其他编号包括无线口均不允许通过本组数据标识访问。 */
+    }
+    return RT_EOK;
+}
+
+/* 读取04000800～04000806串口参数，返回4字节小端波特率和1字节校验格式。 */
+rt_err_t dlt645_read_serial_parameter(const Dlt645PointTypeDef *point, uint32_t id,
+                                      uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint16_t uart_no; /* DI0映射得到的内部UART配置数组下标。 */
+    uint32_t baud; /* 当前串口波特率，仅允许点表约定的五种枚举值。 */
+    uint16_t check_format; /* 当前校验格式，1/2/3依次表示8N1、8O1和8E1。 */
+
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
+       (point->data_len != DLT645_SERIAL_PARAMETER_LEN) || (capacity < point->data_len)) /* 一次完成处理边界所需的指针、长度和容量检查。 */
+    {
+        return -RT_EINVAL;
+    }
+    if(dlt645_serial_port_to_uart((uint8_t)id, &uart_no) != RT_EOK) /* DI0必须对应七个受支持的有线或载波端口之一。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    baud = ctu_cfg.uart_baud[uart_no]; /* 配置值在启动时已由配置模块完成加载和校验。 */
+    check_format = ctu_cfg.uart_check[uart_no]; /* 读取保存值，不读取尚未重启的硬件寄存器状态。 */
+    if((baud_check(baud) != 0) || (check_format < 1U) || (check_format > 3U)) /* 非法配置不能伪装成正常645参数回复。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    data[0] = (uint8_t)baud; /* 波特率按小端原始整数传输最低字节。 */
+    data[1] = (uint8_t)(baud >> 8); /* 波特率第2字节。 */
+    data[2] = (uint8_t)(baud >> 16); /* 波特率第3字节。 */
+    data[3] = (uint8_t)(baud >> 24); /* 波特率最高字节。 */
+    data[4] = (uint8_t)check_format; /* 校验格式占1字节，数值范围固定为1～3。 */
+    *data_len = point->data_len; /* 串口参数固定返回5字节业务数据。 */
+    return RT_EOK;
+}
+
+/* 写入04000800～04000806串口参数，校验全部字段后保存但不立即重配UART。 */
+rt_err_t dlt645_write_serial_parameter(const Dlt645PointTypeDef *point, uint32_t id,
+                                       const uint8_t *data, uint16_t data_len,
+                                       uint8_t *response, uint16_t response_capacity,
+                                       uint16_t *response_len)
+{
+    uint16_t uart_no; /* DI0映射得到的内部UART配置数组下标。 */
+    uint32_t baud; /* 从4字节小端原始数据解出的目标波特率。 */
+    uint8_t check_format; /* 写请求携带的目标校验格式枚举。 */
+
+    RT_UNUSED(response); /* 标准写成功应答不携带额外业务数据。 */
+    RT_UNUSED(response_capacity);
+    if((point == RT_NULL) || (data == RT_NULL) || (response_len == RT_NULL) ||
+       (point->data_len != DLT645_SERIAL_PARAMETER_LEN) || (data_len != point->data_len)) /* 写数据必须完整包含5字节串口参数。 */
+    {
+        return -RT_EINVAL;
+    }
+    if(dlt645_serial_port_to_uart((uint8_t)id, &uart_no) != RT_EOK) /* 禁止通过未定义或无线端口编号修改配置。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    baud = (uint32_t)data[0] | ((uint32_t)data[1] << 8) |
+           ((uint32_t)data[2] << 16) | ((uint32_t)data[3] << 24); /* 按点表规定的小端原始整数恢复波特率。 */
+    check_format = data[4]; /* 第5字节直接表示1～3校验格式枚举。 */
+    if((baud_check(baud) != 0) || (check_format < 1U) || (check_format > 3U)) /* 任一字段非法时不允许部分更新配置。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    ctu_cfg.uart_baud[uart_no] = baud; /* 仅更新配置值，当前UART硬件继续使用旧参数直到人工重启。 */
+    ctu_cfg.uart_check[uart_no] = check_format; /* 校验格式与波特率在同一次校验通过后一起提交。 */
+    ctu_cfg_save(); /* 串口参数写成功后立即持久化，保证人工重启后生效。 */
+    *response_len = 0U; /* 成功时由顶层发送不带额外数据的标准写应答。 */
+    return RT_EOK;
+}
+
+/* 读取04000900全局周期抄读间隔，按两字节低字节在前BCD返回秒数。 */
+rt_err_t dlt645_read_poll_interval(const Dlt645PointTypeDef *point, uint32_t id,
+                                   uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint16_t interval_seconds = ctu_cfg.poll_interval_seconds; /* 配置中的当前全局轮询秒数。 */
+
+    RT_UNUSED(id); /* 04000900为固定数据标识，不使用DI0选择端口。 */
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
+       (point->data_len != DLT645_POLL_INTERVAL_LEN) || (capacity < point->data_len)) /* 读取固定需要2字节输出空间。 */
+    {
+        return -RT_EINVAL;
+    }
+    if((interval_seconds < DLT645_POLL_INTERVAL_MIN) || (interval_seconds > DLT645_POLL_INTERVAL_MAX) ||
+       (dlt645_encode_bcd(interval_seconds, data, DLT645_POLL_INTERVAL_LEN, RT_FALSE) != RT_EOK)) /* 越界或无法编码的配置值不能正常回复。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    *data_len = point->data_len; /* 周期抄读间隔固定返回2字节BCD。 */
+    return RT_EOK;
+}
+
+/* 写入04000900全局周期抄读间隔，合法值立即用于后续调度并保存到Flash。 */
+rt_err_t dlt645_write_poll_interval(const Dlt645PointTypeDef *point, uint32_t id,
+                                    const uint8_t *data, uint16_t data_len,
+                                    uint8_t *response, uint16_t response_capacity,
+                                    uint16_t *response_len)
+{
+    int32_t interval_seconds; /* 从两字节BCD解码得到的全局轮询秒数。 */
+
+    RT_UNUSED(id); /* 04000900为固定数据标识。 */
+    RT_UNUSED(response); /* 标准写成功应答不携带额外业务数据。 */
+    RT_UNUSED(response_capacity);
+    if((point == RT_NULL) || (data == RT_NULL) || (response_len == RT_NULL) ||
+       (point->data_len != DLT645_POLL_INTERVAL_LEN) || (data_len != point->data_len)) /* 写请求必须携带完整2字节BCD秒数。 */
+    {
+        return -RT_EINVAL;
+    }
+    if((dlt645_bcd_decode_u32(data, data_len, &interval_seconds) != RT_EOK) ||
+       (interval_seconds < DLT645_POLL_INTERVAL_MIN) || (interval_seconds > DLT645_POLL_INTERVAL_MAX)) /* 非法BCD或超出5～3600秒均返回645写错误。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    ctu_cfg.poll_interval_seconds = (uint16_t)interval_seconds; /* 校验成功后更新全局轮询配置，调度器下一次判断即可使用。 */
+    ctu_cfg_save(); /* 周期抄读间隔写成功后立即保存。 */
+    *response_len = 0U; /* 成功时由顶层发送不带额外数据的标准写应答。 */
+    return RT_EOK;
+}
+
+/* 处理04000A00～04000C00设备动作，三个命令都只接受一字节BCD数值1。 */
+rt_err_t dlt645_write_device_action(const Dlt645PointTypeDef *point, uint32_t id,
+                                    const uint8_t *data, uint16_t data_len,
+                                    uint8_t *response, uint16_t response_capacity,
+                                    uint16_t *response_len)
+{
+    int32_t action_value; /* 动作值必须解码为1，其他值统一返回645写错误。 */
+
+    RT_UNUSED(response); /* 标准写成功应答不携带额外业务数据。 */
+    RT_UNUSED(response_capacity);
+    if((point == RT_NULL) || (data == RT_NULL) || (response_len == RT_NULL) ||
+       (point->data_len != 1U) || (data_len != point->data_len)) /* 三个动作数据标识均要求恰好1字节写数据。 */
+    {
+        return -RT_EINVAL;
+    }
+    if((dlt645_bcd_decode_u32(data, data_len, &action_value) != RT_EOK) || (action_value != 1)) /* 写0或其他数值均不执行任何动作。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    switch(id) /* 使用完整数据标识区分动作，防止相邻DI误触发危险操作。 */
+    {
+        case 0x04000A00U:
+            reboot(); /* 自定义reboot只停止喂狗并返回，约10秒后由看门狗完成设备重启。 */
+            break;
+        case 0x04000B00U:
+            Clear_Events(EVT_CLASS_MAX); /* 按用户确认的统一接口清除所有事件记录。 */
+            break;
+        case 0x04000C00U:
+            set_default_data(); /* 恢复默认配置并保存，但不自动重启，等待人工重启后整体生效。 */
+            break;
+        default:
+            return -RT_EINVAL; /* 仅允许点表明确列出的三个动作标识进入执行路径。 */
+    }
+
+    *response_len = 0U; /* 动作调用返回后，由顶层发送不带额外数据的成功应答。 */
     return RT_EOK;
 }
 

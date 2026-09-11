@@ -21,6 +21,17 @@ struct IAP_Master_Updata_Pack
     uint16_t File_Divide_Len;   // 分包长度
     uint8_t  File_Divide_Data[240]; // 升级包
 };
+
+struct Save_Hand_Str
+{
+    uint8_t  Upgrade_Flag;      // 升级标志
+    uint8_t  Upgrade_Type;      // 升级类型，1:Boot，2:App
+    uint16_t Upgrade_Ver;       // 升级版本
+    uint32_t File_Size;         // 程序总大小
+    uint32_t File_CRC;          // 程序CRC32
+    uint16_t Hand_CRC16;
+};
+
 #pragma pack()
 
 /* 升级消息类型 */
@@ -39,9 +50,9 @@ typedef struct {
     uint8_t          data[240];    // 数据载荷
 } upgrd_msg_t;
 
-extern rt_mq_t upgrd_mq;
+extern rt_mq_t upgrade_mq;
 
-
+void upgrade_thread_entry(void *param);
 
 
 #endif

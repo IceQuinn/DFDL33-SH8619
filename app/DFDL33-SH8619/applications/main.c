@@ -26,6 +26,7 @@
 #include "voltage_acq.h"
 #include "dlt645_deal.h"
 #include "HJ02C.h"
+#include "upgrade.h"
 
 
 /* 应用线程创建参数表。 */
@@ -54,6 +55,8 @@ const user_thread_table_typedef user_thread_table[] = {
     {"645_sl",      dlt645_deal_thread_entry,   RT_NULL, 2048,   20, 15},   /* 645解析线程 */
     {"voltage_acq", voltage_acq_thread_entry,   RT_NULL, 1024,   15, 10},   /* 电压采集线程线程 */
     {"hj02c_rx",    hj02c_rx_thread_entry,      RT_NULL, 2048,   14, 10},   /* 蓝牙接收线程 */
+    {"hj02c_rx",    hj02c_rx_thread_entry,      RT_NULL, 2048,   14, 10},   /* 蓝牙接收线程 */
+    {"upgrade",     upgrade_thread_entry,       RT_NULL, 6144,   18, 10},   /* 蓝牙接收线程 */
 };
 
 /* 按线程参数表依次创建并启动全部应用线程。 */

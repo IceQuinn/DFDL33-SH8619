@@ -6,11 +6,13 @@
 #include "drv_ex_flash.h"
 #include "crc32.h"
 #include "HJ02C.h"
+#include "crc16.h"
 
 #define RETRANSMISSION_DEBUG    0
 #define CRC_DEBUG               0
 
 #define EXTFLASH_PAGE_SIZE      (4096)
+#define HAND_PACK_ADDDR         (1049 * EXTFLASH_PAGE_SIZE)         //摘要数据写入外部flash的起始地址
 #define START_ADDR              (1050 * EXTFLASH_PAGE_SIZE)         //APP写入外部flash的起始地址
 #define WRITE_ADDR              (1042 * EXTFLASH_PAGE_SIZE)         //BOOT+APP写入外部flash的起始地址
 #define MY_SET_BIT(x, n)        ((x) |= (1 << ((n - 1) % 8)))       //升级数据错误置位
@@ -90,6 +92,22 @@ int data_ack(const void* databuf, uint16_t datalen)
     return 1;
 }
 
+void Save_Hand_Pack(void)
+{
+    struct Save_Hand_Str save_hand;
+    save_hand.Upgrade_Flag = 1;
+    save_hand.Upgrade_Type = IAP_Hand_Pack.Upgrade_Type;
+    save_hand.Upgrade_Ver  = IAP_Hand_Pack.Upgrade_Ver;
+    save_hand.File_Size    = IAP_Hand_Pack.File_Size;
+    save_hand.File_CRC     = IAP_Hand_Pack.File_CRC;
+    save_hand.Hand_CRC16   = crc16(&save_hand, sizeof(struct Save_Hand_Str)-2);
+
+    if(flash_write(HAND_PACK_ADDDR, &save_hand, sizeof(struct Save_Hand_Str)) != RT_EOK)
+    {
+        rt_kprintf("Save Hand Failed!!!\n");
+    }
+}
+
 
 /****************************摘要帧处理******************************/
 
@@ -162,6 +180,7 @@ uint8_t  updata_buf_r[4096];
 
 int Updata_Pack_Deal(uint32_t UART_Rx_Len, uint8_t UART_Rx_Buf[])
 {
+    rt_kprintf("Updata_Pack start: %08d\n", rt_tick_get());
     uint8_t  updata_buf[4096];              //用于临时存放升级包数据，为写入外部flash做准备
     uint16_t updata_len = IAP_Hand_Pack.File_Divide_Size;
 //    rt_kprintf("DATA_HANDS RngBufDataSize = %d\r\n", UART_Rx_Len);
@@ -196,8 +215,10 @@ int Updata_Pack_Deal(uint32_t UART_Rx_Len, uint8_t UART_Rx_Buf[])
         else if(value < 0x8008000)
         {
             rt_kprintf("Address offset is less than 0x8008000!!!\r\n");
-            start_addr = WRITE_ADDR;
-            write_flash_size = IAP_Hand_Pack.File_Size - (8 * EXTFLASH_PAGE_SIZE);
+//            start_addr = WRITE_ADDR;
+//            write_flash_size = IAP_Hand_Pack.File_Size - (8 * EXTFLASH_PAGE_SIZE);
+            start_addr = START_ADDR;
+            write_flash_size = IAP_Hand_Pack.File_Size;
         }
     }
 
@@ -316,6 +337,7 @@ int Updata_Pack_Deal(uint32_t UART_Rx_Len, uint8_t UART_Rx_Buf[])
 #endif
 //        return 1;   //升级包收满了
 //    }
+    rt_kprintf("Updata_Pack end: %08d\n", rt_tick_get());
     return 0;
 }
 
@@ -345,22 +367,43 @@ int Updata_Pack_Deal(uint32_t UART_Rx_Len, uint8_t UART_Rx_Buf[])
 
 //uint8_t rw_updata_buf[4096];          //升级包(读写外部flash)
 
+//uint8_t test_check_buf[100] = {0};
+//void testbuf_check(void)
+//{
+//    uint32_t test_crc32 = 0;
+//    int i = 0;
+//    for(i = 0; i < sizeof(test_check_buf); i++)
+//    {
+//        test_check_buf[i] = i;
+//    }
+//    test_crc32 = crc32(test_check_buf, sizeof(test_check_buf));
+////    test_crc32 = crc32_part(test_check_buf, sizeof(test_check_buf), &test_crc32);
+////    test_crc32 = test_crc32 ^ 0xffffffff;
+//    rt_kprintf("test_crc32 = %x\r\n", test_crc32);
+//}
+//MSH_CMD_EXPORT(testbuf_check, testbuf_check);
+
+
 int Check_Pack_Deal(void)
 {
     uint8_t  Check_Result = 0;
     uint32_t crc32_r_cal  = 0;
     uint32_t bytes_read   = 0;
-    uint32_t readaddr     = start_addr;
+//    uint32_t readaddr     = start_addr;
+    uint32_t readaddr     = START_ADDR;
     uint8_t  updata_buf[4096];
 
     uint8_t ack_data[256];
     uint32_t di = 0x08800004;
+    rt_kprintf("Check_Pack start: %08d\n", rt_tick_get());
 
     while (bytes_read < IAP_Hand_Pack.File_Size)
+//    while (bytes_read < 100)
     {
         //HAL_IWDG_Refresh(&hiwdg);
         //未读取剩余数量
         uint32_t remaining = IAP_Hand_Pack.File_Size - bytes_read;
+//        uint32_t remaining = 100 - bytes_read;
         uint16_t read_size = (remaining > EXTFLASH_PAGE_SIZE) ? EXTFLASH_PAGE_SIZE : remaining;
         flash_read(readaddr, updata_buf, read_size);
         crc32_r_cal = crc32_part(updata_buf, read_size, &crc32_r_cal);
@@ -368,7 +411,7 @@ int Check_Pack_Deal(void)
         readaddr   += read_size;
             //已读取数量
         bytes_read += read_size;
-//          wk_delay_ms(10);
+        rt_thread_mdelay(10);
     }
 
     //读取完毕
@@ -394,6 +437,14 @@ int Check_Pack_Deal(void)
     memcpy(ack_data, &di, sizeof(di));
     ack_data[4] = Check_Result;
     data_ack(ack_data, 5);
+    rt_kprintf("Check_Pack end: %08d\n", rt_tick_get());
+    if(0x01 == Check_Result)
+    {
+        //保存摘要
+        Save_Hand_Pack();
+        //重启
+
+    }
 
     return 0;
 }
@@ -480,30 +531,36 @@ int Retransmission_Pack_Deal(uint32_t UART_Rx_Len,uint8_t UART_Rx_Buf[])
 //    }
 }
 
-rt_mq_t upgrd_mq;
+rt_mq_t upgrade_mq;
 
 #define UPGRD_MQ_LEN    10   // 队列可缓存的消息数
 
-void upgrd_mq_init(void)
+void upgrade_mq_init(void)
 {
-    upgrd_mq = rt_mq_create("upgrd_mq",
+    upgrade_mq = rt_mq_create("upgrd_mq",
                             sizeof(upgrd_msg_t),  // 每条消息的大小
                             UPGRD_MQ_LEN,
                             RT_IPC_FLAG_FIFO);
-    RT_ASSERT(upgrd_mq != RT_NULL);
+    RT_ASSERT(upgrade_mq != RT_NULL);
 }
 
-void upgrd_thread_entry(void *param)
+int check_flg = 0;
+void upgrade_thread_entry(void *param)
 {
     upgrd_msg_t msg;
     rt_err_t ret;
 
-    upgrd_mq_init();
-    rt_kprintf("Upgrade thread started.\r\n");
+    upgrade_mq_init();
 
     while (1)
     {
-        ret = rt_mq_recv(upgrd_mq, &msg, sizeof(msg), RT_WAITING_FOREVER);
+//        if(1 == check_flg)
+//        {
+//            Check_Pack_Deal();
+//            check_flg = 0;
+//        }
+
+        ret = rt_mq_recv(upgrade_mq, &msg, sizeof(msg), RT_WAITING_FOREVER);
         if (ret != RT_EOK) {
             continue;
         }
@@ -533,6 +590,11 @@ void upgrd_thread_entry(void *param)
     }
 }
 
+//void set_check_flg(void)
+//{
+//    check_flg = 1;
+//}
+//MSH_CMD_EXPORT(set_check_flg, set_check_flg);
 
 
 

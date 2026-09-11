@@ -11,6 +11,8 @@
 
 extern uint16_t g_voltage_rms;
 
+uint16_t getvoltage_rms(void);
+
 int  voltage_acq_init(void);
 void start_voltage_sampling(void);
 float calculate_rms(uint16_t *buf, uint8_t len);

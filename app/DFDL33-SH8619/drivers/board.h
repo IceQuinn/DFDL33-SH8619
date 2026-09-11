@@ -227,6 +227,7 @@ extern "C"
  *                 such as     #define HAL_IWDG_MODULE_ENABLED
  *
  */
+#define HAL_IWDG_MODULE_ENABLED
 
 /*-------------------------- WDT CONFIG END --------------------------*/
 

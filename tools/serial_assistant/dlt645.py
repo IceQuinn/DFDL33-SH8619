@@ -531,7 +531,12 @@ def encode_field(value: Any, definition: Mapping[str, Any]) -> bytes:
     if kind == "enum":
         values = definition.get("values", {})
         reverse = {str(text): int(key) for key, text in values.items()}
-        integer = reverse.get(str(value), int(value) if str(value).lstrip("-").isdigit() else None)
+        value_text = str(value)  # 枚举输入既可使用界面显示文本，也可使用点表定义的数字键。
+        integer = reverse.get(value_text)
+        if integer is None and value_text.lstrip("-").isdigit():
+            normalized_key = str(int(value_text))  # 兼容旧界面使用01表示枚举1，同时仍按枚举键执行白名单校验。
+            if normalized_key in {str(key) for key in values}:  # 数字形式也必须存在于枚举表，禁止绕过波特率等白名单。
+                integer = int(normalized_key)
         if integer is None:
             raise ValueError(f"{label}不是有效枚举值")
         return int(integer).to_bytes(length, order, signed=False)

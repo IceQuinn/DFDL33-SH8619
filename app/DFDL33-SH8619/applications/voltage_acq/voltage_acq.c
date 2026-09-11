@@ -108,10 +108,12 @@ void voltage_acq_thread_entry(void *param)
             float rms_avg = rms_accumulator / 5.0f;
             if(calibration_flg){
                 float average_value = Averaging(rms_buf, rms_buf_idx);
-                ctu_cfg.g_vol_cal_coef = 220 / average_value;
+                ctu_cfg.g_vol_cal_coef = 2200 / average_value;
                 calibration_flg = 0;
+                extern void ctu_cfg_save(void);
+                ctu_cfg_save();
             }
-            g_voltage_rms = rms_avg * ctu_cfg.g_vol_cal_coef * 10;
+            g_voltage_rms = rms_avg * ctu_cfg.g_vol_cal_coef;
 
             rms_accumulator = 0.0f;
             rms_count = 0;
@@ -123,6 +125,11 @@ void voltage_acq_thread_entry(void *param)
         /* 重新启动下一轮采样 */
         start_voltage_sampling();
     }
+}
+
+uint16_t getvoltage_rms(void)
+{
+    return g_voltage_rms;
 }
 
 void show_voltage_rms(void)

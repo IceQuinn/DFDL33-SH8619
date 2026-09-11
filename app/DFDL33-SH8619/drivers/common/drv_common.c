@@ -18,14 +18,14 @@
 #define DBG_LVL                         DBG_INFO
 #include <rtdbg.h>
 
-#ifdef RT_USING_FINSH
-#include <finsh.h>
-static void reboot(uint8_t argc, char **argv)
-{
-    rt_hw_cpu_reset();
-}
-MSH_CMD_EXPORT(reboot, Reboot System);
-#endif /* RT_USING_FINSH */
+//#ifdef RT_USING_FINSH
+//#include <finsh.h>
+//static void reboot(uint8_t argc, char **argv)
+//{
+//    rt_hw_cpu_reset();
+//}
+//MSH_CMD_EXPORT(reboot, Reboot System);
+//#endif /* RT_USING_FINSH */
 
 extern __IO uint32_t uwTick;
 static uint32_t _systick_ms = 1;

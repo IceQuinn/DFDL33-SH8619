@@ -57,7 +57,7 @@ const uint32_t table[] = {
 uint32_t crc32(void* buf, uint32_t len)
 {
     int32_t i;
-    
+
     unsigned char *p_buf = buf;
 
     if (len < 1)
@@ -72,7 +72,7 @@ uint32_t crc32(void* buf, uint32_t len)
 
     crc = crc ^ 0xffffffff;
 
-    return crc;  
+    return crc;
 }
 
 //叠加计算

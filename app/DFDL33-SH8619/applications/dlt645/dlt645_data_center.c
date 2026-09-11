@@ -47,6 +47,18 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
 {
     //DI3～DI1    DI0           读写权限            编码方式            DI0选择器                                    数据长度 定点数倍率 写入值下限 写入值上限 读取回调函数 写入回调函数 点表名称
     {0x0400040FU, 0xFFFFFFFFU, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 11U, 1, 0, 0, dlt645_read_location, dlt645_write_location, "converter location"}, /* 标准位置信息依次包含经度XXXX.XXXX、纬度XXXX.XXXX和高度XXXX.XX。 */
+    {0x04000800U, 0xFFFFFFFFU, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 5U, 1, 0, 0, dlt645_read_serial_parameter, dlt645_write_serial_parameter, "RS485-I parameter"}, /* 波特率4字节小端原始整数，校验格式1字节，保存后重启生效。 */
+    {0x04000801U, 0xFFFFFFFFU, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 5U, 1, 0, 0, dlt645_read_serial_parameter, dlt645_write_serial_parameter, "RS485-II parameter"}, /* 第二路RS485串口参数，不包含通信协议字段。 */
+    {0x04000802U, 0xFFFFFFFFU, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 5U, 1, 0, 0, dlt645_read_serial_parameter, dlt645_write_serial_parameter, "RJ45-1-I parameter"}, /* 第一组RJ45的第一路串口参数。 */
+    {0x04000803U, 0xFFFFFFFFU, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 5U, 1, 0, 0, dlt645_read_serial_parameter, dlt645_write_serial_parameter, "RJ45-1-II parameter"}, /* 第一组RJ45的第二路串口参数。 */
+    {0x04000804U, 0xFFFFFFFFU, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 5U, 1, 0, 0, dlt645_read_serial_parameter, dlt645_write_serial_parameter, "RJ45-2-I parameter"}, /* 第二组RJ45的第一路串口参数。 */
+    {0x04000805U, 0xFFFFFFFFU, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 5U, 1, 0, 0, dlt645_read_serial_parameter, dlt645_write_serial_parameter, "RJ45-2-II parameter"}, /* 第二组RJ45的第二路串口参数。 */
+    {0x04000806U, 0xFFFFFFFFU, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 5U, 1, 0, 0, dlt645_read_serial_parameter, dlt645_write_serial_parameter, "carrier parameter"}, /* 载波串口参数；04000807无线串口按需求不支持。 */
+    {0x04000900U, 0xFFFFFFFFU, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 2U, 1, 5, 3600, dlt645_read_poll_interval, dlt645_write_poll_interval, "poll interval"}, /* 全局周期抄读时间采用两字节BCD秒数，范围5～3600秒。 */
+    {0x04000A00U, 0xFFFFFFFFU, DLT645_ACCESS_WRITE, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 1U, 1, 1, 1, RT_NULL, dlt645_write_device_action, "device reboot"}, /* 写1调用自定义reboot，调用返回后再发送成功应答。 */
+    {0x04000B00U, 0xFFFFFFFFU, DLT645_ACCESS_WRITE, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 1U, 1, 1, 1, RT_NULL, dlt645_write_device_action, "clear all events"}, /* 写1调用Clear_Events(EVT_CLASS_MAX)，其他值返回写错误。 */
+    {0x04000C00U, 0xFFFFFFFFU, DLT645_ACCESS_WRITE, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 1U, 1, 1, 1, RT_NULL, dlt645_write_device_action, "restore factory defaults"}, /* 写1恢复并保存默认配置，不自动重启。 */
+    {0x04800001U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_ASCII, DLT645_SELECTOR_NONE, 32U, 1, 0, 0, dlt645_read_firmware_version, RT_NULL, "manufacturer software version"}, /* 厂家软件版本号使用app_firmware_ver_ascll并固定返回32字节零填充ASCII。 */
     // 协议转换单元其他类数据：A相电压据实回复，当前由临时默认取值接口提供。
     {0x02010100U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 2U, 10, 0, 0, dlt645_read_converter_phase_a_voltage, RT_NULL, "converter phase A voltage"}, /* 格式XXX.X V，内存值单位为0.1V。 */
     // 协议转换单元其他类数据：以下测量量按现阶段规范要求固定回复全零。
@@ -810,7 +822,7 @@ void dlt645_upgrade_manage(uint32_t id, uint8_t *p_buf, uint16_t len)
     rt_memcpy(msg.data, p_buf, msg.len);
 
     /* 发送到消息队列 */
-    if (rt_mq_send(upgrd_mq, &msg, sizeof(msg)) != RT_EOK) {
+    if (rt_mq_send(upgrade_mq, &msg, sizeof(msg)) != RT_EOK) {
         rt_kprintf("Upgrade MQ full! Discard msg.\r\n");
     }
 }

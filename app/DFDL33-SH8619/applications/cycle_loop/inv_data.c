@@ -12,6 +12,7 @@
 #include <limits.h>
 #include <rthw.h>
 
+#include "ctu_cfg.h"
 #include "inverter_protocol_library.h"
 #include "main_uart.h"
 #include "modbus_master.h"
@@ -22,7 +23,6 @@
 #define INV_DATA_PORT_COUNT                3U
 #define INV_DATA_POINT_COUNT              29U
 #define INV_DATA_RESPONSE_TIMEOUT_TICKS  1000U
-#define INV_DATA_DEVICE_IDLE_TICKS      10000U
 #define INV_DATA_POLL_TICKS               10U
 #define INV_DATA_TIME_CHECK_TICKS        1000U
 #define INV_DATA_START_HOUR                  7
@@ -39,7 +39,7 @@
 /* 每个端口的抄读状态独立变化，等待某一路响应时其他端口仍可继续发送或解析。 */
 typedef enum Inv_Data_Port_State {
     INV_DATA_PORT_READY = 0,              /* 当前端口可以查找并发送下一项寄存器请求。 */
-    INV_DATA_PORT_DEVICE_IDLE,            /* 当前端口完成一台逆变器抄读，正在空闲10秒。 */
+    INV_DATA_PORT_DEVICE_IDLE,            /* 当前端口完成一台逆变器抄读，正在等待配置的全局轮询间隔。 */
     INV_DATA_PORT_WAIT_PERIODIC_READ,     /* 当前端口正在等待周期抄读响应。 */
     INV_DATA_PORT_WAIT_CONTROL_WRITE,     /* 当前端口正在等待实时控制写响应。 */
     INV_DATA_PORT_WAIT_CONTROL_REFRESH    /* 当前端口正在等待控制寄存器优先回读响应。 */
@@ -785,10 +785,22 @@ static void inv_data_advance_cursor(Inv_Data_Port_Context_t *context)
     }
 }
 
-/* 当前端口完成一台逆变器后进入独立的10秒空闲状态。 */
+/* 将配置的全局轮询秒数换算为系统tick，异常配置使用10秒保护值避免忙轮询。 */
+static rt_tick_t inv_data_device_idle_ticks(void)
+{
+    uint16_t interval_seconds = ctu_cfg.poll_interval_seconds; /* 当前配置的全局逆变器周期抄读秒数。 */
+
+    if((interval_seconds < 5U) || (interval_seconds > 3600U)) /* Flash异常值不得造成无间隔抄读或超长不可控等待。 */
+    {
+        interval_seconds = 10U; /* 保护回退只影响本次调度，不在后台反复擦写配置Flash。 */
+    }
+    return rt_tick_from_millisecond((rt_int32_t)interval_seconds * 1000); /* 最大3600000ms不会超过32位有符号范围。 */
+}
+
+/* 当前端口完成一台逆变器后进入配置的全局轮询间隔空闲状态。 */
 static void inv_data_start_device_idle(Inv_Data_Port_Context_t *context, uint8_t archive_index)
 {
-    context->idle_tick = rt_tick_get(); /* 记录10秒设备空闲周期的起点。 */
+    context->idle_tick = rt_tick_get(); /* 记录当前设备空闲周期的起点，实际等待长度由配置实时决定。 */
     context->active.read.idle_after_active = RT_FALSE;
     context->state = INV_DATA_PORT_DEVICE_IDLE;
 //    rt_kprintf("%s uart[%d] archive[%d] all data read, wait 10s before next device\n", get_char_time(), inv_data_uart_no(context), archive_index + 1);
@@ -1818,10 +1830,10 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
         return;
     }
 
-    /* 设备空闲状态达到10秒后恢复READY，下一次调度开始读取下一台逆变器。 */
+    /* 设备空闲状态达到配置的全局轮询时间后恢复READY，下一次调度读取下一台逆变器。 */
     if(context->state == INV_DATA_PORT_DEVICE_IDLE) {
-        /* 当前tick与空闲起点差值达到10秒时结束该设备空闲周期。 */
-        if((rt_tick_t)(now - context->idle_tick) >= INV_DATA_DEVICE_IDLE_TICKS) {
+        /* 每次判断读取最新配置，使645修改轮询时间后无需重启即可用于后续调度。 */
+        if((rt_tick_t)(now - context->idle_tick) >= inv_data_device_idle_ticks()) {
             context->state = INV_DATA_PORT_READY;
 //            rt_kprintf("%s uart[%d] 10s wait finished, continue reading\n", get_char_time(), inv_data_uart_no(context));
         }

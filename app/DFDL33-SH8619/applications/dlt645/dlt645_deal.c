@@ -394,7 +394,7 @@ rt_err_t dlt645_data_ack(uint16_t uart_no, const void *buffer, rt_size_t size)
     }
 }
 
-#define DLT645_DEAL_RX_BUFFER_SIZE 512U /* 协议库写请求含4个前导字节时整帧为266字节，处理缓冲必须完整容纳。 */
+#define DLT645_DEAL_RX_BUFFER_SIZE 1024U /* 协议库写请求含4个前导字节时整帧为266字节，处理缓冲必须完整容纳。 */
 uint8_t dlt645_deal_rx_buf[DLT645_DEAL_RX_BUFFER_SIZE] = {0};
 uint16_t dlt645_deal_rx_len = 0;
 

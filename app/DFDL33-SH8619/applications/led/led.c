@@ -286,10 +286,10 @@ void User_Led_Thread_Entry(void* p)
 {
     LED_GPIO_Init();
     LED_Init();
-//    extern void iwdg_entry(void);
+    extern void iwdg_entry(void);
     while(1)
     {
-//        iwdg_entry();
+        iwdg_entry();
         LED_Ctrl_Loop();
         rt_thread_mdelay(DELAY_TICK);
     }

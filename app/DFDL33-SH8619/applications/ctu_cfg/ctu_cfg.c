@@ -11,6 +11,7 @@
 #define DBG_LVL DBG_LOG
 #include <rtdbg.h>
 #include <string.h>
+#include <stddef.h>
 
 #include "crc16.h"
 #include <math.h>
@@ -26,6 +27,8 @@ GSE8625_CfgTypeDef_Vlast ctu_cfg;
 void Ctu_Cfg_Init(void)
 {
     int check_sta = 0;
+    uint16_t saved_payload_len = 0U; /* 保存Flash记录的旧负载长度，用于逐个识别结构体尾部新增字段。 */
+    rt_bool_t config_upgraded = RT_FALSE; /* 标识本次启动是否补充了旧配置中不存在的字段。 */
     check_sta = AB_check(flash_read,       //读接口
                     flash_write,           //写接口
                     CTU_CFG_ADDR_A,         //A区地址
@@ -44,10 +47,20 @@ void Ctu_Cfg_Init(void)
         // 版本升级
 //        CFG_Vx_To_Vlast(ctu_cfg.hdr.ver, ctu_cfg.hdr.len);
 //        ctu_cfg_save();
-        if(ctu_cfg.hdr.len < (sizeof(ctu_cfg) - sizeof(ctu_cfg.hdr))) /* 旧版配置不含结构体尾部的高度字段时执行一次长度兼容。 */
+        saved_payload_len = ctu_cfg.hdr.len; /* 必须在重新保存前保留旧长度，避免后续字段兼容判断失真。 */
+        if(saved_payload_len < (offsetof(GSE8625_CfgTypeDef_Vlast, altitude) + sizeof(ctu_cfg.altitude) - sizeof(ctu_cfg.hdr))) /* 旧版配置不含高度字段时补充默认高度。 */
         {
             ctu_cfg.altitude = 0U; /* 旧配置升级后的默认高度为0.00m，原有字段及偏移保持不变。 */
-            ctu_cfg_save(); /* 用当前结构长度重新保存A/B区，后续启动不再重复执行兼容处理。 */
+            config_upgraded = RT_TRUE; /* 统一在所有尾部字段补齐后只保存一次。 */
+        }
+        if(saved_payload_len < (offsetof(GSE8625_CfgTypeDef_Vlast, poll_interval_seconds) + sizeof(ctu_cfg.poll_interval_seconds) - sizeof(ctu_cfg.hdr))) /* 旧版配置不含轮询时间时补充10秒默认值。 */
+        {
+            ctu_cfg.poll_interval_seconds = 10U; /* 升级旧配置时使用用户确认的默认全局轮询时间。 */
+            config_upgraded = RT_TRUE; /* 标记配置结构已升级，启动阶段需要写回新结构长度。 */
+        }
+        if(config_upgraded == RT_TRUE) /* 仅在确实补充过新增字段时保存，避免每次启动重复擦写Flash。 */
+        {
+            ctu_cfg_save(); /* 用当前结构长度重新保存A/B区，使新增字段在后续启动保持有效。 */
         }
     }
     /* Flash校验成功时保留已经保存的通信参数，禁止再次用默认值覆盖645写地址结果。 */
@@ -96,8 +109,9 @@ void set_default_para(void)
 
     ctu_cfg.longitude                   = 1143999;      //经度
     ctu_cfg.latitude                    = 304456;       //纬度
-    ctu_cfg.g_vol_cal_coef              = 356.204534;
+    ctu_cfg.g_vol_cal_coef              = 3562.04534;
     ctu_cfg.altitude                    = 0U;           /* 默认高度为0.00m，645写入位置信息后随配置统一保存。 */
+    ctu_cfg.poll_interval_seconds       = 10U;          /* 全局逆变器周期抄读时间默认10秒。 */
 }
 
 //恢复默认值并保存

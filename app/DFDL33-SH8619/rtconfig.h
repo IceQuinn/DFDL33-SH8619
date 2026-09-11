@@ -90,6 +90,7 @@
 #define RT_SFUD_USING_SFDP
 #define RT_SFUD_USING_FLASH_INFO_TABLE
 #define RT_SFUD_SPI_MAX_HZ 50000000
+#define RT_USING_WDT
 
 /* Using USB */
 
@@ -135,18 +136,6 @@
 /* Wiced WiFi */
 
 /* end of Wiced WiFi */
-
-/* CYW43012 WiFi */
-
-/* end of CYW43012 WiFi */
-
-/* BL808 WiFi */
-
-/* end of BL808 WiFi */
-
-/* CYW43439 WiFi */
-
-/* end of CYW43439 WiFi */
 /* end of Wi-Fi */
 
 /* IoT Cloud */
@@ -178,6 +167,10 @@
 /* u8g2: a monochrome graphic library */
 
 /* end of u8g2: a monochrome graphic library */
+
+/* PainterEngine: A cross-platform graphics application framework written in C language */
+
+/* end of PainterEngine: A cross-platform graphics application framework written in C language */
 /* end of multimedia packages */
 
 /* tools packages */
@@ -205,85 +198,15 @@
 
 /* peripheral libraries and drivers */
 
-/* HAL & SDK Drivers */
-
-/* STM32 HAL & SDK Drivers */
-
-/* end of STM32 HAL & SDK Drivers */
-
-/* Infineon HAL Packages */
-
-/* end of Infineon HAL Packages */
 
 /* Kendryte SDK */
 
 /* end of Kendryte SDK */
-
-/* MM32 HAL & SDK Drivers */
-
-/* end of MM32 HAL & SDK Drivers */
-
-/* WCH HAL & SDK Drivers */
-
-/* end of WCH HAL & SDK Drivers */
-
-/* AT32 HAL & SDK Drivers */
-
-/* end of AT32 HAL & SDK Drivers */
-
-/* HC32 DDL Drivers */
-
-/* end of HC32 DDL Drivers */
-
-/* NXP HAL & SDK Drivers */
-
-/* end of NXP HAL & SDK Drivers */
-
-/* NUVOTON Drivers */
-
-/* end of NUVOTON Drivers */
-
-/* GD32 Drivers */
-
-/* end of GD32 Drivers */
-
-/* HPMicro SDK */
-
-/* end of HPMicro SDK */
-
-/* FM33 Drivers */
-
-/* end of FM33 Drivers */
-
-/* FT32 HAL & SDK Drivers */
-
-/* end of FT32 HAL & SDK Drivers */
-
-/* NOVOSNS Drivers */
-
-/* end of NOVOSNS Drivers */
-
-/* N32 Drivers */
-
-/* end of N32 Drivers */
-/* end of HAL & SDK Drivers */
-
-/* sensors drivers */
-
-/* end of sensors drivers */
-
-/* touch drivers */
-
-/* end of touch drivers */
 /* end of peripheral libraries and drivers */
 
 /* AI packages */
 
 /* end of AI packages */
-
-/* Signal Processing and Control Algorithm Packages */
-
-/* end of Signal Processing and Control Algorithm Packages */
 
 /* miscellaneous packages */
 
@@ -303,9 +226,9 @@
 /* Arduino libraries */
 
 
-/* Projects and Demos */
+/* Projects */
 
-/* end of Projects and Demos */
+/* end of Projects */
 
 /* Sensors */
 
@@ -327,15 +250,11 @@
 
 /* Communication */
 
-/* end of Communication */
-
 /* Device Control */
 
 /* end of Device Control */
 
 /* Other */
-
-/* end of Other */
 
 /* Signal IO */
 

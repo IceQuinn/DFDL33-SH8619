@@ -98,6 +98,49 @@ class DLT645Tests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.registry.encode("0400040F", {"longitude": "120", "latitude": "90.0001", "altitude": "0"})
 
+    def test_manufacturer_firmware_version_is_fixed_ascii(self):
+        definition = self.registry.get("04800001")
+        self.assertEqual(definition.category, "standard")
+        self.assertEqual(definition.access, "read")
+        payload = b"1.0.0.65 26-09-11" + bytes(32 - len("1.0.0.65 26-09-11"))
+        self.assertEqual(len(payload), 32)
+        self.assertEqual(self.registry.decode("04800001", payload),
+                         [("厂家软件版本号", "1.0.0.65 26-09-11", "")])
+
+    def test_serial_parameter_identifiers_and_codec(self):
+        for suffix in range(7):
+            definition = self.registry.get(f"040008{suffix:02X}")
+            self.assertIsNotNone(definition)
+            self.assertEqual(definition.category, "extended")
+            self.assertEqual(definition.access, "read_write")
+        self.assertIsNone(self.registry.get("04000807"))
+
+        payload = self.registry.encode("04000800", {"baud_rate": "9600", "check_format": "8,E,1"})
+        self.assertEqual(payload, bytes.fromhex("80 25 00 00 03"))
+        self.assertEqual(self.registry.decode("04000800", payload),
+                         [("波特率（重启生效）", "9600", ""), ("校验格式（重启生效）", "8,E,1", "")])
+        with self.assertRaises(ValueError):
+            self.registry.encode("04000800", {"baud_rate": "115200", "check_format": "8,N,1"})
+        with self.assertRaises(ValueError):
+            self.registry.encode("04000800", {"baud_rate": "9600", "check_format": "8,N,2"})
+
+    def test_poll_interval_and_device_actions(self):
+        payload = self.registry.encode("04000900", {"interval_seconds": "3600"})
+        self.assertEqual(payload, bytes.fromhex("00 36"))
+        self.assertEqual(self.registry.decode("04000900", payload), [("全局周期抄读时间", "3600", "s")])
+        for invalid_value in ("4", "3601"):
+            with self.subTest(value=invalid_value):
+                with self.assertRaises(ValueError):
+                    self.registry.encode("04000900", {"interval_seconds": invalid_value})
+
+        for data_identifier in ("04000A00", "04000B00", "04000C00"):
+            definition = self.registry.get(data_identifier)
+            self.assertEqual(definition.category, "extended")
+            self.assertEqual(definition.access, "write")
+            self.assertEqual(self.registry.encode(data_identifier, {"action_value": "1"}), bytes.fromhex("01"))
+            with self.assertRaises(ValueError):
+                self.registry.encode(data_identifier, {"action_value": "0"})
+
     def test_other_identifiers_are_read_only_and_decode_expected_values(self):
         self.assertEqual(self.registry.categories["other"], "其他")
 

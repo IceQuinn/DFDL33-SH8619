@@ -281,7 +281,7 @@ void hj02c_rx_thread_entry(void *parameter)
             len = hj02c_spi_recv(&g_hj02c_dev, rx_buf);
 
             dlt645_rx_callback(rx_buf, len, HJ02C);
-            rt_kprintf("recv len = %d\r\n", len);
+            rt_kprintf("[%08d]recv len = %d\r\n", rt_tick_get(), len);
         }
     }
 }
