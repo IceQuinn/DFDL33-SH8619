@@ -13,6 +13,9 @@ extern uint16_t g_voltage_rms;
 
 uint16_t getvoltage_rms(void);
 
+/* 提交电压校准请求并立即返回，实际校准系数计算与配置保存由采集线程稍后完成。 */
+void voltage_calibration(void);
+
 int  voltage_acq_init(void);
 void start_voltage_sampling(void);
 float calculate_rms(uint16_t *buf, uint8_t len);

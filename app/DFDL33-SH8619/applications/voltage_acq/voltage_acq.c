@@ -65,6 +65,7 @@ float Averaging(float *buf, uint16_t len)
 
 float rms_buf[50] = {0};
 int rms_buf_idx = 0;
+uint8_t rms_num = 0;
 static float rms_accumulator = 0.0f;   /* RMS 累加值 */
 static uint8_t rms_count = 0;           /* 采样次数计数 */
 int calibration_flg = 0;
@@ -93,9 +94,21 @@ void voltage_acq_thread_entry(void *param)
 
         rms_buf[rms_buf_idx] = rms;
         rms_buf_idx++;
+        if(rms_num < 50)
+        {
+            rms_num = rms_buf_idx;  //保证Averaging计算平均值时，取平均值的个数与rms_buf中的实际数据个数对应
+        }
         if(50 == rms_buf_idx)
         {
             rms_buf_idx = 0;
+        }
+
+        if(calibration_flg){
+            float average_value = Averaging(rms_buf, rms_num);
+            ctu_cfg.g_vol_cal_coef = 2200 / average_value;
+            calibration_flg = 0;
+            extern void ctu_cfg_save(void);
+            ctu_cfg_save();
         }
 
 //        g_voltage_rms = rms * VOLTAGE_CALIBRATION_COEFFICIENT;
@@ -106,13 +119,6 @@ void voltage_acq_thread_entry(void *param)
         if (rms_count >= 5)
         {
             float rms_avg = rms_accumulator / 5.0f;
-            if(calibration_flg){
-                float average_value = Averaging(rms_buf, rms_buf_idx);
-                ctu_cfg.g_vol_cal_coef = 2200 / average_value;
-                calibration_flg = 0;
-                extern void ctu_cfg_save(void);
-                ctu_cfg_save();
-            }
             g_voltage_rms = rms_avg * ctu_cfg.g_vol_cal_coef;
 
             rms_accumulator = 0.0f;

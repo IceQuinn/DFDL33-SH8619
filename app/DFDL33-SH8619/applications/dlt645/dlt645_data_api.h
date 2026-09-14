@@ -112,7 +112,7 @@ rt_err_t dlt645_write_poll_interval(const Dlt645PointTypeDef *point,
                                     uint16_t response_capacity,
                                     uint16_t *response_len);
 
-/* 处理04000A00～04000C00写1命令，分别执行设备重启、清除全部事件和恢复出厂设置。 */
+/* 处理04000A00～04000D00写1命令，分别执行设备重启、清除全部事件、恢复出厂设置和受理电压校准。 */
 rt_err_t dlt645_write_device_action(const Dlt645PointTypeDef *point,
                                     uint32_t id,
                                     const uint8_t *data,

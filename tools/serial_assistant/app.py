@@ -12,6 +12,8 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import messagebox, ttk
 
+from app_version import APP_NAME, APP_VERSION
+
 try:
     import serial
     from serial.tools import list_ports
@@ -29,6 +31,7 @@ from dlt645 import (
     build_write_address,
     build_write_data,
     looks_like_frame,
+    normalize_address,
     parse_frame as parse_dlt645_frame,
 )
 from virtual_ports import COM0COM_DOWNLOAD_URL, create_pair_elevated, find_setupc, suggest_com_pair
@@ -61,6 +64,20 @@ def saved_choice(settings: dict[str, str], key: str, default: str, choices: tupl
     return value if value in choices else default
 
 
+def saved_dlt_address(settings: dict[str, str]) -> str:
+    """恢复或保存合法645地址时统一规范化字符串，保留前导零，无记录或非法值使用默认地址。"""
+    try:
+        return normalize_address(settings.get("dlt645_address", "000000000000"))  # 沿用现有地址规则，允许十二位数字或十二个A。
+    except ValueError:
+        return "000000000000"  # 损坏的配置或非法输入不能阻止程序关闭或下次启动。
+
+
+def resource_path(relative_path: str) -> Path:
+    """打包运行时只读取内置资源，源码运行时读取源码目录，外部PNG替换不影响已打包图标。"""
+    root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))  # PyInstaller将嵌入资源解压到临时目录，不能从exe旁取可变图标。
+    return root / relative_path
+
+
 def find_dlt_config() -> Path:
     source_dir = Path(__file__).resolve().parent
     if getattr(sys, "frozen", False):
@@ -80,7 +97,11 @@ def find_dlt_config() -> Path:
 class SerialAssistant(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("串口代理监听与 Modbus RTU / DL/T 645-2007 协议工具")
+        self.title(f"{APP_NAME} V{APP_VERSION}")  # 窗口标题和exe名称使用相同的名称及发布版本定义。
+        try:
+            self.iconbitmap(default=str(resource_path("assets/app_icon.ico")))  # 内置ICO同时设置主窗口及后续对话框的默认图标。
+        except tk.TclError:
+            pass  # 源码环境尚未生成ICO时仍允许运行，正式打包会强制生成并嵌入图标。
         self.geometry("1380x860")
         self.minsize(1080, 700)
         self.serial_port = None
@@ -249,7 +270,7 @@ class SerialAssistant(tk.Tk):
     def _build_dlt_tab(self, parent: ttk.Frame) -> None:
         top = ttk.Frame(parent)
         top.pack(fill="x")
-        self.dlt_address_var = tk.StringVar(value="000000000000")
+        self.dlt_address_var = tk.StringVar(value=saved_dlt_address(self.saved_settings))  # 恢复上次正常关闭时的645地址，旧配置无该字段时兼容默认值。
         self.dlt_preamble_var = tk.IntVar(value=int(self.dlt_registry.defaults.get("preamble_count", 4)))
         ttk.Label(top, text="前导FE").grid(row=0, column=0, padx=(0, 4), sticky="w")
         ttk.Spinbox(top, from_=0, to=16, textvariable=self.dlt_preamble_var, width=5).grid(row=0, column=1, padx=(0, 10))
@@ -1211,11 +1232,12 @@ class SerialAssistant(tk.Tk):
             "data_bits": self.data_var.get(),
             "stop_bits": self.stop_var.get(),
             "parity": self.parity_var.get(),
+            "dlt645_address": saved_dlt_address({"dlt645_address": self.dlt_address_var.get()}),  # 保存关闭时地址框中的实际值，包括读写地址成功后自动回填的新地址。
         }
         try:
             save_settings(settings, self.settings_path)
-        except OSError:
-            pass
+        except OSError as exc:
+            messagebox.showwarning("配置保存失败", f"无法保存上位机设置，下次启动可能无法恢复本次参数。\n{exc}")  # 目录不可写时明确提示，但仍允许继续关闭程序。
         self.close_port()
         self.destroy()
 

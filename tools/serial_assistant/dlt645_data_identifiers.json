@@ -266,6 +266,10 @@
       "write_schema": "device_action"
     },
     {
+      "di": "04000D00", "category": "extended", "group_id": "device_maintenance", "group_description": "通信与设备维护", "description": "电压校准（写1执行）", "access": "write",
+      "write_schema": "device_action"
+    },
+    {
       "di": "02010100",
       "category": "other",
       "group_id": "converter_realtime",

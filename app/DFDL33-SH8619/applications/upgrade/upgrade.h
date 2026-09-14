@@ -47,7 +47,7 @@ typedef enum {
 typedef struct {
     upgrd_msg_type_t type;         // 消息类型
     uint16_t         len;          // 有效数据长度
-    uint8_t          data[244];    // 数据载荷
+    uint8_t          data[512];    // 数据载荷（蓝牙模块单帧最长512字节）
 } upgrd_msg_t;
 
 extern rt_mq_t upgrade_mq;

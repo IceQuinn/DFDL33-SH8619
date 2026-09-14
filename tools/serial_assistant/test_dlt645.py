@@ -205,13 +205,34 @@ class DLT645Tests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.registry.encode("04000900", {"interval_seconds": invalid_value})
 
-        for data_identifier in ("04000A00", "04000B00", "04000C00"):
+        for data_identifier in ("04000A00", "04000B00", "04000C00", "04000D00"):
             definition = self.registry.get(data_identifier)
             self.assertEqual(definition.category, "extended")
             self.assertEqual(definition.access, "write")
             self.assertEqual(self.registry.encode(data_identifier, {"action_value": "1"}), bytes.fromhex("01"))
             with self.assertRaises(ValueError):
                 self.registry.encode(data_identifier, {"action_value": "0"})
+
+    def test_voltage_calibration_write_request(self):
+        """电压校准位于扩展设备维护类别，只允许写1，报文沿用标准密码及操作者代码字段。"""
+        definition = self.registry.get("04000D00")  # 核对上位机与固件一致使用04000D00，而不是相邻维护命令。
+        self.assertEqual(definition.description, "电压校准（写1执行）")
+        self.assertEqual(definition.group_id, "device_maintenance")
+        self.assertEqual(definition.access, "write")
+        self.assertEqual(definition.read_response, {})
+        self.assertEqual(definition.write_request["fields"][0]["default"], "1")
+        payload = self.registry.encode("04000D00", {"action_value": "1"})  # 校准业务数据必须恰好一字节01。
+        frame = build_write_data("000102030405", "04000D00", payload, preamble=4)
+        result = parse_frame(frame, self.registry)
+        self.assertTrue(result.valid)
+        self.assertEqual(result.control, 0x14)
+        self.assertEqual(result.data_identifier, "04000D00")
+        self.assertEqual(result.payload, b"\x01")
+        self.assertEqual(result.clear_data, bytes.fromhex("00 0D 00 04") + bytes(8) + b"\x01")  # DI四字节、安全字段八字节和业务一字节不能缺失。
+        for invalid_value in ("0", "2", "FF"):
+            with self.subTest(value=invalid_value):
+                with self.assertRaises(ValueError):
+                    self.registry.encode("04000D00", {"action_value": invalid_value})  # 不允许其他数值或FF触发校准。
 
     def test_other_identifiers_are_read_only_and_decode_expected_values(self):
         self.assertEqual(self.registry.categories["other"], "其他")

@@ -58,6 +58,7 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
     {0x04000A00U, 0xFFFFFFFFU, DLT645_ACCESS_WRITE, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 1U, 1, 1, 1, RT_NULL, dlt645_write_device_action, "device reboot"}, /* 写1调用自定义reboot，调用返回后再发送成功应答。 */
     {0x04000B00U, 0xFFFFFFFFU, DLT645_ACCESS_WRITE, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 1U, 1, 1, 1, RT_NULL, dlt645_write_device_action, "clear all events"}, /* 写1调用Clear_Events(EVT_CLASS_MAX)，其他值返回写错误。 */
     {0x04000C00U, 0xFFFFFFFFU, DLT645_ACCESS_WRITE, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 1U, 1, 1, 1, RT_NULL, dlt645_write_device_action, "restore factory defaults"}, /* 写1恢复并保存默认配置，不自动重启。 */
+    {0x04000D00U, 0xFFFFFFFFU, DLT645_ACCESS_WRITE, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 1U, 1, 1, 1, RT_NULL, dlt645_write_device_action, "voltage calibration"}, /* 仅允许写一字节1触发voltage_calibration，接口返回后应答请求已受理，不等待实际校准完成。 */
     {0x04800001U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_ASCII, DLT645_SELECTOR_NONE, 32U, 1, 0, 0, dlt645_read_firmware_version, RT_NULL, "manufacturer software version"}, /* 厂家软件版本号使用app_firmware_ver_ascll并固定返回32字节零填充ASCII。 */
     // 协议转换单元其他类数据：A相电压据实回复，当前由临时默认取值接口提供。
     {0x02010100U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 2U, 10, 0, 0, dlt645_read_converter_phase_a_voltage, RT_NULL, "converter phase A voltage"}, /* 格式XXX.X V，内存值单位为0.1V。 */

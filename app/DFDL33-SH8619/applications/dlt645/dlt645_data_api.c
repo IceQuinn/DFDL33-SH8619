@@ -892,7 +892,7 @@ rt_err_t dlt645_write_poll_interval(const Dlt645PointTypeDef *point, uint32_t id
     return RT_EOK;
 }
 
-/* 处理04000A00～04000C00设备动作，三个命令都只接受一字节BCD数值1。 */
+/* 处理04000A00～04000D00设备动作，四个命令都只接受一字节BCD数值1，校准应答仅表示请求已受理。 */
 rt_err_t dlt645_write_device_action(const Dlt645PointTypeDef *point, uint32_t id,
                                     const uint8_t *data, uint16_t data_len,
                                     uint8_t *response, uint16_t response_capacity,
@@ -903,7 +903,7 @@ rt_err_t dlt645_write_device_action(const Dlt645PointTypeDef *point, uint32_t id
     RT_UNUSED(response); /* 标准写成功应答不携带额外业务数据。 */
     RT_UNUSED(response_capacity);
     if((point == RT_NULL) || (data == RT_NULL) || (response_len == RT_NULL) ||
-       (point->data_len != 1U) || (data_len != point->data_len)) /* 三个动作数据标识均要求恰好1字节写数据。 */
+       (point->data_len != 1U) || (data_len != point->data_len)) /* 四个动作数据标识均要求恰好1字节写数据。 */
     {
         return -RT_EINVAL;
     }
@@ -924,11 +924,14 @@ rt_err_t dlt645_write_device_action(const Dlt645PointTypeDef *point, uint32_t id
             Inv_Archive_Default_Init(); // 清空逆变器档案
             set_default_data(); /* 恢复默认配置并保存，但不自动重启，等待人工重启后整体生效。 */
             break;
+        case 0x04000D00U:
+            voltage_calibration(); /* 只调用现有校准接口设置请求标志，实际计算及保存仍由电压采集线程完成。 */
+            break;
         default:
-            return -RT_EINVAL; /* 仅允许点表明确列出的三个动作标识进入执行路径。 */
+            return -RT_EINVAL; /* 仅允许点表明确列出的四个动作标识进入执行路径。 */
     }
 
-    *response_len = 0U; /* 动作调用返回后，由顶层发送不带额外数据的成功应答。 */
+    *response_len = 0U; /* 动作调用返回后由顶层发送不带额外数据的成功应答，校准不等待异步执行结果。 */
     return RT_EOK;
 }
 
