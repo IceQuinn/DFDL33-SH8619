@@ -454,6 +454,16 @@ static void cycle_loop_handle_feature_response(Cycle_Loop_Uart_Context_t *contex
         return;
     }
 
+    {
+        uint8_t archive_port; /* 当前响应端口对应的档案接入端口。 */
+
+        if((cycle_loop_uart_to_archive_port(context->uart_no, &archive_port) == RT_TRUE) &&
+           (Inv_Archive_Port_Is_Occupied(archive_port) != 0U)) { /* 等待响应期间已被手动建档时直接交接，不再自动重复建档。 */
+            cycle_loop_stop_uart(context);
+            return;
+        }
+    }
+
     /* 特征寄存器成功还原且数值位于配置的闭区间时，协议匹配成功。 */
     if((cycle_loop_decode_feature_value(registers,
                                         register_count,
@@ -464,7 +474,9 @@ static void cycle_loop_handle_feature_response(Cycle_Loop_Uart_Context_t *contex
                                          context->feature_upper_limit) == RT_TRUE)) {
         rt_kprintf("%s uart[%d] addr[%d] matched protocol[%d], feature[%u], range[%u, %u]\n", get_char_time(), context->uart_no, context->slave_addr, context->protocol_index, (unsigned int)feature_value, (unsigned int)context->feature_lower_limit, (unsigned int)context->feature_upper_limit);
         /* 识别成功后立即写入档案并保存Flash，无论保存结果如何都结束本串口搜索。 */
-        cycle_loop_add_matched_archive(context);
+        if(cycle_loop_add_matched_archive(context) != RT_TRUE) { /* 匹配成功但建档失败时明确打印，抄读只依据实际有效档案。 */
+            rt_kprintf("%s uart[%d] matched device archive creation failed\n", get_char_time(), context->uart_no);
+        }
         cycle_loop_stop_uart(context);
         return;
     }
@@ -567,22 +579,6 @@ static uint8_t Inv_Archive_Idle_Uarts(void)
     return scan_count;
 }
 
-/* 所有上下文均停止时，空闲端口识别流程已经全部结束。 */
-static rt_bool_t cycle_loop_all_scan_uarts_stopped(void)
-{
-    uint8_t index;                     /* 当前正在检查停止状态的端口下标。 */
-
-    /* 只要任意一个串口没有停止，自动识别流程就仍需继续运行。 */
-    for(index = 0U; index < CYCLE_LOOP_SCAN_PORT_COUNT; ++index) {
-        /* 当前串口仍在发送或等待响应时返回未全部停止。 */
-        if(g_scan_uarts[index].state != CYCLE_LOOP_SCAN_STOPPED) {
-            return RT_FALSE;
-        }
-    }
-
-    return RT_TRUE;
-}
-
 rt_err_t cycle_loop_rx_frame(uint16_t uart_no,
                              const uint8_t *frame,
                              uint16_t frame_len)
@@ -619,6 +615,7 @@ rt_err_t cycle_loop_rx_frame(uint16_t uart_no,
     return RT_EOK;
 }
 
+/* 长期统一推进三个端口的自动识别与周期抄读，每个端口结束识别后独立交接。 */
 void cycle_loop_thread_entry(void *parameter)
 {
     uint8_t index;                     /* 每轮正在推进的自动识别端口下标。 */
@@ -627,31 +624,31 @@ void cycle_loop_thread_entry(void *parameter)
 
     /* 无论存档count为何值都重新校验有效槽位，防止协议库变化后档案仍被误用。 */
     Inv_Archive_Validate_Protocols();
+    Inv_Data_Init(); /* 上电只初始化一次，端口切换时不能清除其他端口的实时数据和事务。 */
     Inv_Archive_Idle_Uarts(); /* 根据有效档案占用情况启动所有空闲端口的自动识别。 */
 
-    /* 任意串口仍在识别时持续轮询三个独立状态机。 */
-    /* 轮询所有尚未停止的空闲端口，直到地址探测和协议识别流程全部结束。 */
-    while(cycle_loop_all_scan_uarts_stopped() == RT_FALSE) {
+    /* 识别与抄读统一长期调度，空档案时也不退出，以支持后续手动建档。 */
+    while(1) {
         rt_tick_t now = rt_tick_get(); /* 本轮三个端口共用同一个系统tick快照。 */
 
         /* 顺序推进三个独立状态机，不会等待前一个串口超时后才处理下一个串口。 */
         for(index = 0U; index < CYCLE_LOOP_SCAN_PORT_COUNT; ++index) {
-            cycle_loop_process_uart(&g_scan_uarts[index], now);
+            Cycle_Loop_Uart_Context_t *context = &g_scan_uarts[index]; /* 当前物理端口的识别事务上下文。 */
+
+            if((context->state != CYCLE_LOOP_SCAN_STOPPED) &&
+               (context->state != CYCLE_LOOP_SCAN_WAIT_RESPONSE) &&
+               (Inv_Archive_Port_Is_Occupied(g_scan_port_map[index].archive_port) != 0U)) { /* 手动建档后先结束已发送事务，再停止识别以免重复建档。 */
+                cycle_loop_stop_uart(context);
+            }
+            if(context->state != CYCLE_LOOP_SCAN_STOPPED) { /* 仅推进仍在识别的端口，不影响已开放端口抄读。 */
+                cycle_loop_process_uart(context, now);
+            }
+            if(context->state == CYCLE_LOOP_SCAN_STOPPED) { /* 本端口结束即可开放，已有档案的端口从首轮开始抄读。 */
+                Inv_Data_Enable_Port(context->uart_no);
+            }
         }
 
-        /* 仍有端口运行时延时10ms，避免轮询线程持续占满CPU。 */
-        if(cycle_loop_all_scan_uarts_stopped() == RT_FALSE) {
-            rt_thread_mdelay(CYCLE_LOOP_THREAD_POLL_MS);
-        }
-    }
-
-    /* 没有有效档案时不进入周期抄读。 */
-    if(g_inv_archive_lib.count == 0U) {
-        rt_kprintf("%s no valid archive, periodic reading will not start\n", get_char_time());
-    }
-    /* 存在有效档案时进入周期抄读，后续由该循环持续推进三个端口状态机。 */
-    else {
-        rt_kprintf("%s periodic reading started for [%d] archives\n", get_char_time(), g_inv_archive_lib.count);
-        Inv_Data_Poll_Loop();
+        Inv_Data_Poll_Step(now); /* 只处理已开放端口的周期读写，识别端口不会发送控制或抄读请求。 */
+        rt_thread_mdelay(CYCLE_LOOP_THREAD_POLL_MS); /* 每轮休眠10ms释放CPU，各端口等待均不阻塞调度。 */
     }
 }

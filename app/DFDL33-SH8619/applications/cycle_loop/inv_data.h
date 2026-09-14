@@ -151,6 +151,12 @@ extern Inv_Data_t g_inv_data[INVERTER_ARCHIVE_MAX_COUNT];
 /* 初始化三个端口的独立周期抄读状态机，并清空全部档案实时数据。 */
 void Inv_Data_Init(void);
 
+/* 统一调度线程在指定串口识别结束后开放其抄读与控制，不清空实时缓存。 */
+void Inv_Data_Enable_Port(uint16_t uart_no);
+
+/* 非阻塞推进所有已开放端口一次，并维护工作时段和运行状态。 */
+void Inv_Data_Poll_Step(rt_tick_t now);
+
 /* 清除指定档案槽位的全部RAM实时数据，删除档案后调用以避免重新建档时显示旧值。 */
 void Inv_Data_Clear_Archive(uint8_t archive_index);
 

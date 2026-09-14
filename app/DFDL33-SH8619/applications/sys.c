@@ -43,8 +43,8 @@
 
 #define PROJECT_NAME    "DFDL33-SH8619"
 
-const APP_Version g_app_version  = {1, 0, 0, 72};       // 研发内部固件版本（对内版本）
-const APP_Version g_show_app_ver = {1, 0, 0, 1};        // 研发发布固件版本（对外版本）
+const APP_Version g_app_version  = {1, 0, 0, 73};       // 研发内部固件版本（对内版本）
+const APP_Version g_show_app_ver = {1, 0, 0, 2};        // 研发发布固件版本（对外版本）
 char PHM_Ver[32] = "PHM V1.0.1.0 2025.07.01";           // 电鸿版本号
 char app_firmware_ver_ascll[32]  = {0};                 //固件版本号以及更新日期
 char app_show_ver_ascll[32] = {0};                      //软件版本号已经更新日期
@@ -87,15 +87,11 @@ void show_ctu_msg(void)
     LOG_D("FIRMWARE VER:  %s", app_firmware_ver_ascll);
 
     /* 研发发布固件版本（对外版本） */
-    rt_sprintf(app_show_ver_ascll, "V%d.%d.%d.%d V%d.%d.%d.%d %02d-%02d-%02d",
+    rt_sprintf(app_show_ver_ascll, "V%d.%d.%d.%d %02d-%02d-%02d",
             g_show_app_ver.major_version_number,
             g_show_app_ver.minor_version_number,
             g_show_app_ver.revision_number,
             g_show_app_ver.build_number,
-            g_app_version.major_version_number,
-            g_app_version.minor_version_number,
-            g_app_version.revision_number,
-            g_app_version.build_number,
             hardware_date.hardware_year-2000,
             hardware_date.hardware_mon,
             hardware_date.hardware_day);

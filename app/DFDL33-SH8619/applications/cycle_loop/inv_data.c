@@ -103,6 +103,7 @@ typedef struct Inv_Data_Port_Config {
 /* 单个端口上下文保存独立档案游标、当前请求、超时tick及接收邮箱。 */
 typedef struct Inv_Data_Port_Context {
     uint8_t port_index;                      /* 只读端口配置表下标，范围0～2。 */
+    volatile rt_bool_t poll_enabled;         /* 识别结束后才允许本端口抄读和控制，防止两类事务占用同一串口。 */
     uint8_t archive_index;                   /* 下一次查找数据点使用的档案槽位游标。 */
     uint8_t point_index;                     /* 下一次查找使用的数据点下标，范围0～28。 */
     uint8_t active_archive_index;            /* 当前已发送请求所属的档案槽位下标。 */
@@ -1908,33 +1909,57 @@ void Inv_Data_Clear_Archive(uint8_t archive_index)
     rt_hw_interrupt_enable(level);
 }
 
-/* 周期抄读主循环顺序推进三个独立状态机，不会串行等待某一路响应超时。 */
+/* 按物理串口开放抄读归属，仅统一调度线程调用，不重置已采集数据和端口事务。 */
+void Inv_Data_Enable_Port(uint16_t uart_no)
+{
+    uint8_t index; /* 当前检查的端口配置下标。 */
+
+    for(index = 0U; index < INV_DATA_PORT_COUNT; ++index) {
+        if(g_inv_data_port_configs[index].uart_no == uart_no) { /* 只开放指定物理端口，其他端口可继续识别。 */
+            if(g_inv_data_ports[index].poll_enabled == RT_TRUE) { /* 已交接端口不重复打印，且保留原有抄读游标。 */
+                return;
+            }
+            g_inv_data_ports[index].poll_enabled = RT_TRUE;
+            rt_kprintf("%s uart[%d] periodic scheduler enabled\n", get_char_time(), uart_no); /* 表示已交接，实际发送仍取决于有效档案和工作时段。 */
+            return;
+        }
+    }
+}
+
+/* 非阻塞推进一次抄读调度，统一线程可在两次调用之间继续处理其他端口识别。 */
+void Inv_Data_Poll_Step(rt_tick_t now)
+{
+    static rt_tick_t time_check_tick; /* 上一次检查RTC的tick，仅由统一调度线程维护。 */
+    uint8_t index; /* 本轮正在推进的抄读端口下标。 */
+
+    if(g_inv_data_initialized != RT_TRUE) { /* 初始化失败时禁止使用未就绪的事务和控制队列。 */
+        return;
+    }
+    if((g_inv_data_work_state_initialized != RT_TRUE) ||
+       ((rt_tick_t)(now - time_check_tick) >= INV_DATA_TIME_CHECK_TICKS)) { /* 首次立即检查，后续每秒维护时段和运行状态。 */
+        time_check_tick = now;
+        inv_data_update_work_state();
+        inv_data_update_run_states(now);
+    }
+    for(index = 0U; index < INV_DATA_PORT_COUNT; ++index) {
+        if(g_inv_data_ports[index].poll_enabled == RT_TRUE) { /* 尚未结束识别的端口不能发送周期读、控制或回读。 */
+            inv_data_process_port(&g_inv_data_ports[index], now);
+        }
+    }
+}
+
+/* 保留纯抄读入口；识别与抄读并行时使用统一线程调用单步接口，不进入此无限循环。 */
 void Inv_Data_Poll_Loop(void)
 {
-    rt_tick_t time_check_tick; /* 上一次检查RTC工作窗口时记录的tick。 */
-    uint8_t index;             /* 三个端口状态机的调度下标。 */
+    uint8_t index; /* 纯抄读模式需要开放的端口下标。 */
 
-    Inv_Data_Init(); /* 在线程循环前初始化实时数据、端口上下文和控制结果同步对象。 */
-    inv_data_update_work_state(); /* 线程启动时立即确定当前是否允许周期抄读和控制。 */
-    time_check_tick = rt_tick_get();
-
-    /* 周期抄读线程持续运行，档案变化后下一轮会自动重新检查有效槽位。 */
+    Inv_Data_Init();
+    for(index = 0U; index < INV_DATA_PORT_COUNT; ++index) {
+        Inv_Data_Enable_Port(g_inv_data_port_configs[index].uart_no);
+    }
     while(1) {
-        rt_tick_t now = rt_tick_get(); /* 本轮三个端口共用同一tick基准进行超时判断。 */
-
-        /* 当前工程1tick等于1ms，每秒检查一次RTC即可及时处理7点和17点切换。 */
-        if((rt_tick_t)(now - time_check_tick) >= INV_DATA_TIME_CHECK_TICKS) {
-            time_check_tick = now;
-            inv_data_update_work_state(); /* 处理07:00启动和17:00停止边界及对应日志。 */
-            inv_data_update_run_states(now); /* 使用最新总有功功率更新逆变器运行状态。 */
-        }
-
-        /* 每次调度分别推进三个端口，不在某个端口内部阻塞等待响应。 */
-        for(index = 0U; index < INV_DATA_PORT_COUNT; ++index) {
-            inv_data_process_port(&g_inv_data_ports[index], now); /* 每个端口每轮只推进一个状态步骤。 */
-        }
-
-        rt_thread_mdelay(INV_DATA_POLL_TICKS); /* 释放CPU并维持约10ms的状态机调度周期。 */
+        Inv_Data_Poll_Step(rt_tick_get());
+        rt_thread_mdelay(INV_DATA_POLL_TICKS);
     }
 }
 
@@ -2004,6 +2029,11 @@ rt_err_t Inv_Control_Submit(const Inv_Control_Request_t *request)
     }
 
     level = rt_hw_interrupt_disable(); /* 防止提交线程同时修改队列计数和读写下标。 */
+
+    if(context->poll_enabled != RT_TRUE) { /* 识别占用目标端口时拒绝控制，避免控制报文干扰识别应答。 */
+        rt_hw_interrupt_enable(level);
+        return -RT_EBUSY;
+    }
 
     /* 非工作时段拒绝新的控制请求，调用方收到错误后不需要等待异步控制结果。 */
     if((g_inv_data_work_enabled != RT_TRUE) && (request->type != INV_CONTROL_POWER_OFF)) {
