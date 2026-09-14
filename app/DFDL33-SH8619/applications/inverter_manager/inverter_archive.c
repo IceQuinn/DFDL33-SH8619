@@ -197,6 +197,35 @@ int8_t Inv_Archive_Set(uint8_t archive_index, const Inv_Archive_t *archive)
     return (int8_t)archive_index;
 }
 
+/* 清空指定档案槽位、有效标志和运行时协议指针，内容发生变化时重新统计数量并保存。 */
+int8_t Inv_Archive_Delete(uint8_t archive_index)
+{
+    Inv_Archive_t empty_archive; /* 全零档案用于判断空槽位是否已经处于完全清空状态。 */
+    rt_bool_t archive_changed; /* 标识有效标志、档案内容或协议指针是否需要清除。 */
+
+    if(archive_index >= INVERTER_ARCHIVE_MAX_COUNT) /* 删除接口只接受0～11固定档案槽位下标。 */
+    {
+        return INVERTER_ARCHIVE_ADD_FAILED;
+    }
+
+    rt_memset(&empty_archive, 0, sizeof(empty_archive)); /* 无效档案的持久化内容统一使用全零。 */
+    archive_changed = ((g_inv_archive_lib.valid[archive_index] != INVERTER_ARCHIVE_INVALID) ||
+                       (rt_memcmp(&g_inv_archive_lib.archives[archive_index], &empty_archive, sizeof(empty_archive)) != 0) ||
+                       (g_inv_archive_proto[archive_index] != RT_NULL)) ? RT_TRUE : RT_FALSE; /* 已完全清空的槽位无需重复擦写Flash。 */
+
+    rt_enter_critical(); /* 先使槽位失效，再清内容，避免周期线程读取到半清空的有效档案。 */
+    g_inv_archive_lib.valid[archive_index] = INVERTER_ARCHIVE_INVALID; /* 删除后该槽位立即从有效档案集合移除。 */
+    g_inv_archive_proto[archive_index] = RT_NULL; /* 清除协议绑定，后续周期抄读不能继续取得旧协议。 */
+    rt_memset(&g_inv_archive_lib.archives[archive_index], 0, sizeof(g_inv_archive_lib.archives[archive_index])); /* 清除地址、厂家、规约版本和端口。 */
+    rt_exit_critical();
+
+    if(archive_changed == RT_TRUE) /* 第一次删除或清理遗留内容时才更新数量并保存档案库。 */
+    {
+        Inv_Archive_Save(); /* 保存接口根据全部有效标志重新计算count后写入Flash A/B区。 */
+    }
+    return (int8_t)archive_index; /* 删除有效档案和重复删除空槽位都返回指定槽位下标。 */
+}
+
 /* 校验全部有效档案，并为能够匹配协议的档案建立运行时协议指针。 */
 void Inv_Archive_Validate_Protocols(void)
 {

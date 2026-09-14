@@ -113,6 +113,9 @@ int8_t Inv_Archive_Add_Device(uint8_t mb_addr,
 /* 将完整档案写入指定槽位，厂家规约不匹配、地址端口非法或设备重复时返回失败。 */
 int8_t Inv_Archive_Set(uint8_t archive_index, const Inv_Archive_t *archive);
 
+/* 清空指定档案槽位并保存，删除空槽位也按成功处理，成功返回槽位下标，失败返回-1。 */
+int8_t Inv_Archive_Delete(uint8_t archive_index);
+
 /* 校验全部有效档案，没有对应有效协议的档案会被置无效并保存。 */
 void Inv_Archive_Validate_Protocols(void);
 
@@ -125,6 +128,10 @@ uint8_t Inv_Archive_Port_Is_Occupied(uint8_t port);
 /* 重新统计有效槽位数量，并将当前档案库保存到Flash A/B区。 */
 void Inv_Archive_Save(void);
 
+/* 清空全部逆变器档案及运行时协议绑定，并将空档案库保存到Flash。 */
+void Inv_Archive_Default_Init(void);
+
+/* 从Flash装载档案库，并为全部有效档案重新关联当前协议库。 */
 void Inv_Archive_Init(void);
 
 #ifdef __cplusplus

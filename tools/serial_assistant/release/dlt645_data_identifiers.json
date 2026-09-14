@@ -134,6 +134,8 @@
       ]
     },
     "inverter_archive": {
+      "allow_all_ff": true,
+      "all_ff_description": "写全FF清空当前档案",
       "fields": [
         {"name": "address", "description": "逆变器地址", "type": "uint", "length": 1, "byte_order": "little", "minimum": 1, "maximum": 247},
         {"name": "brand", "description": "逆变器品牌", "type": "ascii", "length": 32},

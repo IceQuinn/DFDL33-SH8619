@@ -402,9 +402,15 @@ rt_err_t dlt645_write_archive(const Dlt645PointTypeDef *point, uint32_t id,
     {
         return -RT_EINVAL;
     }
-    if(dlt645_archive_is_all_ff(data) == RT_TRUE) /* 当前版本不支持使用全FF写请求删除档案。 */
+    if(dlt645_archive_is_all_ff(data) == RT_TRUE) /* 完整36字节全FF表示删除DI0指定的单个档案槽位。 */
     {
-        return -RT_EINVAL;
+        if(Inv_Archive_Delete(archive_index) == INVERTER_ARCHIVE_ADD_FAILED) /* 槽位删除失败时保持645写错误语义。 */
+        {
+            return -RT_EINVAL;
+        }
+        Inv_Data_Clear_Archive(archive_index); /* 档案失效并保存后清除该槽位全部RAM实时值。 */
+        *response_len = 0U; /* 删除成功使用不携带额外业务数据的标准645写应答。 */
+        return RT_EOK;
     }
 
     rt_memset(&archive, 0, sizeof(archive)); /* 清除结构体填充内容，厂家名称也以零作为统一填充值。 */
@@ -915,6 +921,7 @@ rt_err_t dlt645_write_device_action(const Dlt645PointTypeDef *point, uint32_t id
             Clear_Events(EVT_CLASS_MAX); /* 按用户确认的统一接口清除所有事件记录。 */
             break;
         case 0x04000C00U:
+            Inv_Archive_Default_Init(); // 清空逆变器档案
             set_default_data(); /* 恢复默认配置并保存，但不自动重启，等待人工重启后整体生效。 */
             break;
         default:

@@ -7,6 +7,7 @@
 #include "crc32.h"
 #include "HJ02C.h"
 #include "crc16.h"
+#include "user_iwdg.h"
 
 #define RETRANSMISSION_DEBUG    0
 #define CRC_DEBUG               0
@@ -183,7 +184,7 @@ int Updata_Pack_Deal(uint32_t UART_Rx_Len, uint8_t UART_Rx_Buf[])
     rt_kprintf("Updata_Pack start: %08d\n", rt_tick_get());
     uint8_t  updata_buf[4096];              //用于临时存放升级包数据，为写入外部flash做准备
     uint16_t updata_len = IAP_Hand_Pack.File_Divide_Size;
-//    rt_kprintf("DATA_HANDS RngBufDataSize = %d\r\n", UART_Rx_Len);
+    rt_kprintf("DATA_HANDS RngBufDataSize = %d\r\n", UART_Rx_Len);
     struct IAP_Master_Updata_Pack *Ptr_IAP_Master_Updata_Pack = (struct IAP_Master_Updata_Pack *)UART_Rx_Buf;
 
 //    //需调整!!!
@@ -367,18 +368,24 @@ int Updata_Pack_Deal(uint32_t UART_Rx_Len, uint8_t UART_Rx_Buf[])
 
 //uint8_t rw_updata_buf[4096];          //升级包(读写外部flash)
 
-//uint8_t test_check_buf[100] = {0};
+//uint8_t test_check_buf[4096] = {0};
 //void testbuf_check(void)
 //{
 //    uint32_t test_crc32 = 0;
-//    int i = 0;
+//    uint16_t i = 0;
+//    uint16_t a = 0;
 //    for(i = 0; i < sizeof(test_check_buf); i++)
 //    {
-//        test_check_buf[i] = i;
+//        test_check_buf[i] = a;
+//        a++;
+//        if(a == 100)
+//        {
+//            a = 0;
+//        }
 //    }
-//    test_crc32 = crc32(test_check_buf, sizeof(test_check_buf));
-////    test_crc32 = crc32_part(test_check_buf, sizeof(test_check_buf), &test_crc32);
-////    test_crc32 = test_crc32 ^ 0xffffffff;
+////    test_crc32 = crc32(test_check_buf, sizeof(test_check_buf));
+//    test_crc32 = crc32_part(test_check_buf, sizeof(test_check_buf), &test_crc32);
+//    test_crc32 = test_crc32 ^ 0xffffffff;
 //    rt_kprintf("test_crc32 = %x\r\n", test_crc32);
 //}
 //MSH_CMD_EXPORT(testbuf_check, testbuf_check);
@@ -395,7 +402,11 @@ int Check_Pack_Deal(void)
 
     uint8_t ack_data[256];
     uint32_t di = 0x08800004;
+
     rt_kprintf("Check_Pack start: %08d\n", rt_tick_get());
+
+//    uint16_t i = 0;
+//    uint16_t a = 0;
 
     while (bytes_read < IAP_Hand_Pack.File_Size)
 //    while (bytes_read < 100)
@@ -406,6 +417,21 @@ int Check_Pack_Deal(void)
 //        uint32_t remaining = 100 - bytes_read;
         uint16_t read_size = (remaining > EXTFLASH_PAGE_SIZE) ? EXTFLASH_PAGE_SIZE : remaining;
         flash_read(readaddr, updata_buf, read_size);
+
+//        for(i = 0; i < sizeof(test_check_buf); i++)
+//        {
+//            test_check_buf[i] = a;
+//            if(updata_buf[i] != test_check_buf[i])
+//            {
+//                rt_kprintf("updata_buf[%d] data error, data = %d\n", i, updata_buf[i]);
+//            }
+//            a++;
+//            if(a == 100)
+//            {
+//                a = 0;
+//            }
+//        }
+
         crc32_r_cal = crc32_part(updata_buf, read_size, &crc32_r_cal);
 
         readaddr   += read_size;
@@ -426,11 +452,13 @@ int Check_Pack_Deal(void)
     if(crc32_r_cal == IAP_Hand_Pack.File_CRC)
     {
         Check_Result = 0x01;
+        rt_kprintf("Check Pack Success\n");
         //升级标志写入外部flash
     }
     else
     {
         Check_Result = 0x02;
+        rt_kprintf("Check Pack Failed\n");
     }
 
     //回复校验结果
@@ -443,7 +471,7 @@ int Check_Pack_Deal(void)
         //保存摘要
         Save_Hand_Pack();
         //重启
-
+        reboot();
     }
 
     return 0;

@@ -1530,7 +1530,8 @@ static void inv_data_handle_response(Inv_Data_Port_Context_t *context)
 //    show_arr(frame_name, frame, frame_len);
 
     /* 报文解析成功并且实时数据转换成功时打印本次保存结果。 */
-    if((result == MODBUS_M_PARSE_OK) &&
+    if((g_inv_archive_lib.valid[context->active_archive_index] == INVERTER_ARCHIVE_VALID) && /* 档案在请求期间被删除时丢弃迟到响应，禁止恢复旧实时值。 */
+       (result == MODBUS_M_PARSE_OK) &&
        (register_count == context->active.read.reg_count) &&
        (inv_data_store_active_values(context, registers) == RT_TRUE)) {
 //        rt_kprintf("%s uart[%d] archive[%d] saved data[%s], values[%d]\n", get_char_time(), inv_data_uart_no(context), context->active_archive_index + 1, context->active.read.points[0].name, context->active.read.point_count);
@@ -1747,7 +1748,8 @@ static void inv_control_handle_refresh_response(Inv_Data_Port_Context_t *context
     point.decimal_places = context->active.control.decimal_places;
 
     /* 报文、寄存器数量和数值转换全部有效时才用实际回读值更新实时数据。 */
-    if((parse_result == MODBUS_M_PARSE_OK) &&
+    if((g_inv_archive_lib.valid[context->active_archive_index] == INVERTER_ARCHIVE_VALID) && /* 档案删除后不得用迟到的控制回读恢复旧控制值。 */
+       (parse_result == MODBUS_M_PARSE_OK) &&
        (register_count == context->active.control.reg_count) &&
        (inv_data_decode_number(&point, registers, &value) == RT_TRUE)) {
         context->active.control.target->value = value;
@@ -1888,6 +1890,22 @@ void Inv_Data_Init(void)
     g_inv_data_ports[1].port_index = 1U;
     g_inv_data_ports[2].port_index = 2U;
     g_inv_data_initialized = RT_TRUE;
+}
+
+/* 清除指定档案槽位的全部实时数据，并把运行状态恢复为未知。 */
+void Inv_Data_Clear_Archive(uint8_t archive_index)
+{
+    rt_base_t level; /* 清除共享实时数据前保存的中断级别。 */
+
+    if(archive_index >= INVERTER_ARCHIVE_MAX_COUNT) /* 公共接口拒绝越界槽位，避免破坏相邻运行内存。 */
+    {
+        return;
+    }
+
+    level = rt_hw_interrupt_disable(); /* 防止周期线程或接收回调观察到只清除一部分的实时数据。 */
+    rt_memset(&g_inv_data[archive_index], 0, sizeof(g_inv_data[archive_index])); /* 数据、参数、控制及日发电量统一恢复无效。 */
+    g_inv_data[archive_index].run_state = INV_RUN_STATE_UNKNOWN; /* 全零对应关机，因此必须显式恢复未知状态。 */
+    rt_hw_interrupt_enable(level);
 }
 
 /* 周期抄读主循环顺序推进三个独立状态机，不会串行等待某一路响应超时。 */

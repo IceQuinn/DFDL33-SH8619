@@ -6,6 +6,7 @@ import json
 import re
 import struct
 from dataclasses import dataclass, field
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
@@ -109,6 +110,15 @@ def build_frame(address: str, control: int, clear_data: bytes = b"", preamble: i
 
 def build_read_address(preamble: int = 4) -> bytes:
     return build_frame("AAAAAAAAAAAA", 0x13, preamble=preamble)
+
+
+def build_broadcast_time_sync(local_time: datetime | None = None, preamble: int = 4) -> bytes:
+    """按电脑本地时间生成0x08广播校时报文，数据域只有秒、分、时、日、月、年六字节BCD。"""
+    clock = datetime.now() if local_time is None else local_time  # 未显式指定时间时取电脑本地时间，不使用UTC时间。
+    if not 2000 <= clock.year <= 2099:  # 单片机把两位BCD年份解释为2000～2099，拒绝无法准确表示的年份。
+        raise ValueError("645广播校时仅支持2000～2099年")
+    clear_data = bytes.fromhex(clock.strftime("%S%M%H%d%m%y"))  # 业务数据按秒、分、时、日、月、年线序编码，不包含星期或数据标识。
+    return build_frame("AAAAAAAAAAAA", 0x08, clear_data, preamble)  # 固定使用广播地址，由通用组帧统一处理前导FE、加0x33及CS。
 
 
 def build_write_address(new_address: str, preamble: int = 4) -> bytes:
@@ -242,6 +252,23 @@ def parse_frame(frame: bytes, registry: Optional["DataIdentifierRegistry"] = Non
             details.append(error_text)
         else:
             details.append("异常响应缺少错误码")
+            structure_ok = False
+    elif function == 0x08 and direction == "主机→从机":  # 广播校时没有DI和安全字段，必须独立解析六字节时间。
+        payload = clear_data  # 保留减0x33后的时间字节，便于人工核对秒、分、时、日、月、年线序。
+        if len(clear_data) == 6:  # 完整六字节时间才允许继续读取各日期字段，避免解析越界。
+            try:
+                if any((value >> 4) > 9 or (value & 0x0F) > 9 for value in clear_data):  # 每个半字节必须是十进制BCD数字。
+                    raise ValueError("广播校时时间包含无效BCD")
+                time_values = tuple((value >> 4) * 10 + (value & 0x0F) for value in clear_data)  # BCD依次转换为秒、分、时、日、月、两位年。
+                clock = datetime(2000 + time_values[5], time_values[4], time_values[3],
+                                 time_values[2], time_values[1], time_values[0])  # 日期对象统一校验闰年、每月天数及时间范围。
+                decoded = (("校时时间", clock.strftime("%Y-%m-%d %H:%M:%S"), ""),)  # 主界面和结构化详情同时显示实际校时时间。
+                details.append("广播校时命令不返回应答")
+            except ValueError as exc:
+                details.append(f"广播校时时间无效：{exc}")
+                structure_ok = False
+        else:
+            details.append(f"广播校时数据域长度为{len(clear_data)}字节，应为6字节")
             structure_ok = False
     elif function in (0x11, 0x12, 0x14) and len(clear_data) >= 4:
         data_identifier = decode_di(clear_data[:4])
@@ -772,6 +799,13 @@ class DataIdentifierRegistry:
         if not definition:
             raise ValueError(f"未配置数据标识{data_identifier}")
         schema = getattr(definition, section)
+        if values.get("__all_ff__") is True:  # 整块FF是显式操作，禁止通过单字段FF组合误触发档案删除。
+            if not bool(schema.get("allow_all_ff", False)):
+                raise ValueError(f"数据标识{definition.di}不支持整块全FF写入")
+            payload_length = sum(int(field["length"]) for field in schema.get("fields", []))  # 档案结构当前固定计算为36字节。
+            if payload_length <= 0:
+                raise ValueError(f"数据标识{definition.di}没有可写数据字段")
+            return b"\xFF" * payload_length
         result = bytearray()
         for field_def in schema.get("fields", []):
             name = str(field_def["name"])

@@ -23,6 +23,7 @@ from modbus_rtu import hex_bytes, parse_hex, parse_master_request
 from dlt645 import (
     DLT645StreamParser,
     DataIdentifierRegistry,
+    build_broadcast_time_sync,
     build_read_address,
     build_read_data,
     build_write_address,
@@ -108,6 +109,8 @@ class SerialAssistant(tk.Tk):
         self.dlt_decoded_vars: dict[str, tk.StringVar] = {}
         self.dlt_decoded_defs: dict[str, dict] = {}  # 保存协议库读字段定义，用于按地址、功能码和上下限语义格式化显示。
         self.dlt_read_values: dict[str, dict[str, object]] = {}  # 按数据标识保存最近一次成功读取值，切换写操作时用于回填。
+        self.dlt_all_ff_var: tk.BooleanVar | None = None  # 仅支持整块FF操作的数据标识会创建该复选状态。
+        self.dlt_all_ff_widgets: list[tuple[tk.Widget, str]] = []  # 保存整块FF启用时需要禁用及恢复状态的普通字段控件。
         self.dlt_followup_payloads: dict[tuple[str, str], bytearray] = {}
         self.dlt_pending_writes: dict[str, str] = {}
         self._build_ui()
@@ -248,21 +251,30 @@ class SerialAssistant(tk.Tk):
         top.pack(fill="x")
         self.dlt_address_var = tk.StringVar(value="000000000000")
         self.dlt_preamble_var = tk.IntVar(value=int(self.dlt_registry.defaults.get("preamble_count", 4)))
-        ttk.Label(top, text="通信地址").grid(row=0, column=0, padx=(0, 4), sticky="w")
-        ttk.Entry(top, textvariable=self.dlt_address_var, width=16).grid(row=0, column=1, padx=(0, 10))
-        ttk.Label(top, text="前导FE").grid(row=0, column=2, padx=(0, 4))
-        ttk.Spinbox(top, from_=0, to=16, textvariable=self.dlt_preamble_var, width=5).grid(row=0, column=3, padx=(0, 10))
-        ttk.Button(top, text="生成读地址报文", command=self.generate_dlt_read_address).grid(row=0, column=4, padx=4)
-        ttk.Button(top, text="读取通信地址", command=lambda: self.generate_dlt_read_address(send=True)).grid(row=0, column=5, padx=4)
-        ttk.Button(top, text="重新加载配置", command=self.reload_dlt_config).grid(row=0, column=6, padx=4)
+        ttk.Label(top, text="前导FE").grid(row=0, column=0, padx=(0, 4), sticky="w")
+        ttk.Spinbox(top, from_=0, to=16, textvariable=self.dlt_preamble_var, width=5).grid(row=0, column=1, padx=(0, 10))
+        ttk.Label(top, text="通信地址").grid(row=0, column=2, padx=(0, 4), sticky="w")
+        ttk.Entry(top, textvariable=self.dlt_address_var, width=16).grid(row=0, column=3, padx=(0, 10))
+        self.dlt_address_action_var = tk.StringVar(value="读")  # 通信地址操作使用独立读写选择，不影响下方数据标识读写状态。
+        address_action = ttk.Combobox(top, textvariable=self.dlt_address_action_var, values=("读", "写"), width=5, state="readonly")
+        address_action.grid(row=0, column=4, padx=(0, 8), sticky="w")
+        address_action.bind("<<ComboboxSelected>>", self._dlt_address_action_changed)
+        self.dlt_address_generate_button = ttk.Button(top, command=self.generate_dlt_address_operation)  # 按地址读写选择生成对应0x13或0x15报文。
+        self.dlt_address_generate_button.grid(row=0, column=5, padx=4)
+        self.dlt_address_execute_button = ttk.Button(top, command=lambda: self.generate_dlt_address_operation(send=True))  # 按地址读写选择生成并发送对应报文。
+        self.dlt_address_execute_button.grid(row=0, column=6, padx=4)
+        ttk.Button(top, text="重新加载配置", command=self.reload_dlt_config).grid(row=0, column=7, padx=4)
         self.dlt_config_var = tk.StringVar(value=f"配置：{self.dlt_config_path}")
-        ttk.Label(top, textvariable=self.dlt_config_var).grid(row=0, column=7, padx=8, sticky="w")
-        self.dlt_new_address_var = tk.StringVar(value=self.dlt_address_var.get())  # 新地址单独输入，收到0x95成功应答前不改变当前通信地址。
-        ttk.Label(top, text="新通信地址").grid(row=1, column=0, padx=(0, 4), pady=(7, 0), sticky="w")
-        ttk.Entry(top, textvariable=self.dlt_new_address_var, width=16).grid(row=1, column=1, padx=(0, 10), pady=(7, 0))
-        ttk.Button(top, text="生成写地址报文", command=self.generate_dlt_write_address).grid(row=1, column=4, padx=4, pady=(7, 0))
-        ttk.Button(top, text="写入通信地址", command=lambda: self.generate_dlt_write_address(send=True)).grid(row=1, column=5, padx=4, pady=(7, 0))
-        top.columnconfigure(7, weight=1)
+        ttk.Label(top, textvariable=self.dlt_config_var).grid(row=0, column=8, padx=8, sticky="w")
+        top.columnconfigure(8, weight=1)
+        self._dlt_address_action_changed()  # 初始化两个地址操作按钮的文字。
+
+        clockbar = ttk.Frame(top)  # 校时按钮单独占一行，避免挤压现有通信地址读写区域。
+        clockbar.grid(row=1, column=0, columnspan=9, pady=(6, 0), sticky="w")
+        ttk.Button(clockbar, text="生成校时报文", command=self.generate_dlt_broadcast_time_sync).pack(side="left", padx=(0, 8))
+        ttk.Button(clockbar, text="广播校时（电脑时间）", command=lambda: self.generate_dlt_broadcast_time_sync(send=True)).pack(side="left", padx=(0, 10))
+        self.dlt_sync_time_var = tk.StringVar(value="取电脑本地时间；广播命令不返回应答")  # 显示本次实际组帧时间，避免把无应答误认为失败。
+        ttk.Label(clockbar, textvariable=self.dlt_sync_time_var).pack(side="left")
 
         choose = ttk.Frame(parent)
         choose.pack(fill="x", pady=(9, 5))
@@ -446,6 +458,8 @@ class SerialAssistant(tk.Tk):
         self.dlt_field_vars.clear()
         self.dlt_decoded_vars.clear()
         self.dlt_decoded_defs.clear()
+        self.dlt_all_ff_var = None  # 切换数据标识后清除上一档案槽位的删除选择，避免误删新选择的槽位。
+        self.dlt_all_ff_widgets.clear()  # 新数据标识会重新登记自己的可编辑字段控件。
         data_identifier = self._selected_di(silent=True)
         definition = self.dlt_registry.get(data_identifier) if data_identifier else None
         if not definition:
@@ -460,6 +474,13 @@ class SerialAssistant(tk.Tk):
         section = definition.write_request if self.dlt_action_var.get() == "写" else definition.read_response
         fields = section.get("fields", [])
         cached_values = self.dlt_read_values.get(data_identifier, {}) if self.dlt_action_var.get() == "写" else {}  # 写窗口优先采用同DI最近一次读取值。
+        field_row_offset = 0  # 普通数据标识从首行开始显示，档案全FF选项会占用额外一行。
+        if self.dlt_action_var.get() == "写" and bool(section.get("allow_all_ff", False)):
+            self.dlt_all_ff_var = tk.BooleanVar(value=False)  # 每次选择档案写入时默认保持普通档案编辑模式。
+            all_ff_text = str(section.get("all_ff_description", "写全FF清空当前数据"))
+            ttk.Checkbutton(self.dlt_fields_frame, text=all_ff_text, variable=self.dlt_all_ff_var,
+                            command=self._toggle_dlt_all_ff_fields).grid(row=0, column=0, columnspan=4, padx=4, pady=(2, 6), sticky="w")
+            field_row_offset = 1  # 删除复选项位于首行，档案字段整体下移一行。
         if not fields:
             ttk.Label(self.dlt_fields_frame, text=f"{definition.description}：没有配置数据字段").grid(row=0, column=0, sticky="w")
             return
@@ -475,7 +496,8 @@ class SerialAssistant(tk.Tk):
             display_label = label
             if self.dlt_action_var.get() == "写" and field_def.get("allow_ff"):
                 display_label += "（FF=不控制）"
-            ttk.Label(self.dlt_fields_frame, text=display_label).grid(row=row, column=0, padx=4, pady=2, sticky="w")
+            display_row = row + field_row_offset  # 同一字段的标题、输入、单位和解析值必须保持在同一显示行。
+            ttk.Label(self.dlt_fields_frame, text=display_label).grid(row=display_row, column=0, padx=4, pady=2, sticky="w")
             if self.dlt_action_var.get() == "写":
                 if kind == "type_descriptor":
                     cached_descriptor = cached_values.get(name, {})  # 类型描述符由数据类型、字节序和小数位三个控件共同编辑。
@@ -500,17 +522,25 @@ class SerialAssistant(tk.Tk):
                             variable.set(next(iter(field_def["values"].values())))
                     else:
                         widget = ttk.Entry(self.dlt_fields_frame, textvariable=variable, width=24)
-                widget.grid(row=row, column=1, padx=4, pady=2, sticky="w")
+                widget.grid(row=display_row, column=1, padx=4, pady=2, sticky="w")
+                normal_state = "readonly" if isinstance(widget, ttk.Combobox) else "normal"  # 取消全FF后恢复下拉框只读或输入框普通状态。
+                self.dlt_all_ff_widgets.append((widget, normal_state))
             else:
                 format_hint = f" / {field_def.get('format')}" if field_def.get("format") else ""
-                ttk.Label(self.dlt_fields_frame, text=f"{kind} / {field_def.get('length')}字节{format_hint}").grid(row=row, column=1, padx=4, pady=2, sticky="w")
-            ttk.Label(self.dlt_fields_frame, text=unit).grid(row=row, column=2, padx=4, pady=2, sticky="w")
+                ttk.Label(self.dlt_fields_frame, text=f"{kind} / {field_def.get('length')}字节{format_hint}").grid(row=display_row, column=1, padx=4, pady=2, sticky="w")
+            ttk.Label(self.dlt_fields_frame, text=unit).grid(row=display_row, column=2, padx=4, pady=2, sticky="w")
             if self.dlt_action_var.get() == "读":
                 decoded_var = tk.StringVar(value="解析值：--")
                 self.dlt_decoded_vars[label] = decoded_var
                 ttk.Label(self.dlt_fields_frame, textvariable=decoded_var, foreground="#1565c0").grid(
-                    row=row, column=3, padx=(18, 4), pady=2, sticky="w"
+                    row=display_row, column=3, padx=(18, 4), pady=2, sticky="w"
                 )
+
+    def _toggle_dlt_all_ff_fields(self) -> None:
+        """整块全FF操作启用时禁用普通字段，取消后恢复各控件原来的编辑状态。"""
+        disabled = self.dlt_all_ff_var is not None and self.dlt_all_ff_var.get()  # 只有当前数据标识明确选择全FF时才锁定字段。
+        for widget, normal_state in self.dlt_all_ff_widgets:
+            widget.configure(state="disabled" if disabled else normal_state)
 
     def _render_dlt_grouped_fields(self, fields, cached_values: dict[str, object]) -> None:
         """将协议库的同一个寄存器描述块合并到一行，读显示和写输入采用相同字段顺序。"""
@@ -609,6 +639,33 @@ class SerialAssistant(tk.Tk):
         self.send_text.delete("1.0", "end")
         self.send_text.insert("1.0", text)
 
+    def _dlt_address_action_changed(self, _event=None) -> None:
+        """根据通信地址读写选择同步更新生成和执行按钮文字。"""
+        write_selected = self.dlt_address_action_var.get() == "写"  # 地址写操作生成0x15，地址读操作生成0x13。
+        self.dlt_address_generate_button.configure(text="生成写地址报文" if write_selected else "生成读地址报文")
+        self.dlt_address_execute_button.configure(text="写入通信地址" if write_selected else "读取通信地址")
+
+    def generate_dlt_address_operation(self, send: bool = False) -> None:
+        """按照通信地址区域的读写选择生成报文，并在需要时立即发送。"""
+        if self.dlt_address_action_var.get() == "写":  # 写地址使用同一个通信地址输入框作为待写入的新地址。
+            self.generate_dlt_write_address(send)
+            return
+        self.generate_dlt_read_address(send)  # 读地址使用广播地址组帧，不依赖输入框中的当前地址。
+
+    def generate_dlt_broadcast_time_sync(self, send: bool = False) -> None:
+        """点击时读取电脑本地时间生成广播校时报文，直接发送时使用本次新获取的时间而不是旧预览。"""
+        try:
+            local_time = datetime.now()  # 每次点击重新取得本地时间，同一次操作的报文和显示值使用同一时间快照。
+            frame = build_broadcast_time_sync(local_time, int(self.dlt_preamble_var.get()))  # 广播地址固定为12个A，沿用界面配置的前导FE数量。
+            time_text = local_time.strftime("%Y-%m-%d %H:%M:%S")  # 显示精确到秒的实际校时时间，与六字节BCD数据一致。
+            self._set_dlt_generated(frame)
+            self.dlt_sync_time_var.set(f"已生成：{time_text}；电脑本地时间，广播命令不返回应答")
+            if send:  # 生成按钮只预览，广播校时按钮通过当前设备串口立即发送，不登记等待回复。
+                self._send_bytes(frame)
+                self.dlt_sync_time_var.set(f"已发送：{time_text}；电脑本地时间，广播命令不返回应答")
+        except Exception as exc:
+            messagebox.showerror("广播校时失败", str(exc))
+
     def generate_dlt_read_address(self, send: bool = False) -> None:
         try:
             frame = build_read_address(int(self.dlt_preamble_var.get()))
@@ -621,7 +678,7 @@ class SerialAssistant(tk.Tk):
     def generate_dlt_write_address(self, send: bool = False) -> None:
         """生成或发送0x15写通信地址报文，设备成功回复后再更新界面的当前地址。"""
         try:
-            frame = build_write_address(self.dlt_new_address_var.get(), int(self.dlt_preamble_var.get()))  # 地址校验和字节序转换集中由645编解码模块完成。
+            frame = build_write_address(self.dlt_address_var.get(), int(self.dlt_preamble_var.get()))  # 简化后的单一通信地址输入框同时用于写入新地址。
             self._set_dlt_generated(frame)
             if send:  # 仅“写入通信地址”按钮实际发送，“生成写地址报文”只便于人工核对HEX。
                 self._send_bytes(frame)
@@ -636,7 +693,9 @@ class SerialAssistant(tk.Tk):
             if self.dlt_action_var.get() == "读":
                 frame = build_read_data(address, data_identifier, preamble)
             else:
-                if "__raw__" in self.dlt_field_vars:
+                if self.dlt_all_ff_var is not None and self.dlt_all_ff_var.get():
+                    payload = self.dlt_registry.encode(data_identifier, {"__all_ff__": True})  # 档案删除必须由配置允许并生成完整36字节FF。
+                elif "__raw__" in self.dlt_field_vars:
                     payload = parse_hex(self.dlt_field_vars["__raw__"].get())
                 else:
                     configured_values: dict[str, object] = {}
@@ -1044,7 +1103,6 @@ class SerialAssistant(tk.Tk):
         if(result.valid and result.operation in ("读通信地址", "写通信地址")
                 and result.direction == "从机→主机" and result.address):  # 0x93和0x95正常回复的地址域均代表设备当前生效地址。
             self.dlt_address_var.set(result.address)
-            self.dlt_new_address_var.set(result.address)  # 成功写地址后同步两个输入框，后续读写数据直接使用新地址。
         self._scroll_to_last()
 
     def _add_dlt_unparsed(self, direction: str, data: bytes) -> None:

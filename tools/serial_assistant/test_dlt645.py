@@ -1,12 +1,16 @@
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from dlt645 import (
     DLT645StreamParser,
     DataIdentifierDefinition,
     DataIdentifierRegistry,
     add_33,
+    build_broadcast_time_sync,
     build_frame,
     build_read_address,
     build_read_data,
@@ -20,7 +24,7 @@ from dlt645 import (
     parse_frame,
     subtract_33,
 )
-from app import load_settings, save_settings, saved_choice
+from app import SerialAssistant, load_settings, save_settings, saved_choice
 
 
 CONFIG_PATH = Path(__file__).with_name("dlt645_data_identifiers.json")
@@ -47,6 +51,74 @@ class DLT645Tests(unittest.TestCase):
         self.assertTrue(result.valid)
         self.assertEqual(result.operation, "读通信地址")
         self.assertEqual(result.direction, "主机→从机")
+
+    def test_broadcast_time_sync_request(self):
+        """核对广播地址、控制码、六字节BCD线序、加0x33和CS，以及日志中的实际校时时间。"""
+        local_time = datetime(2026, 9, 14, 15, 26, 37)  # 固定时间用于独立核对每个线上字节。
+        frame = build_broadcast_time_sync(local_time, preamble=4)
+        self.assertEqual(frame, bytes.fromhex("FE FE FE FE 68 AA AA AA AA AA AA 68 08 06 6A 59 48 47 3C 59 C1 16"))
+        result = parse_frame(frame)
+        self.assertTrue(result.valid)
+        self.assertEqual(result.address, "AAAAAAAAAAAA")
+        self.assertEqual(result.control, 0x08)
+        self.assertEqual(result.operation, "广播校时")
+        self.assertEqual(result.direction, "主机→从机")
+        self.assertIsNone(result.data_identifier)  # 广播校时不携带数据标识、密码或操作者代码。
+        self.assertEqual(result.payload, bytes.fromhex("37 26 15 14 09 26"))
+        self.assertEqual(result.decoded_values, (("校时时间", "2026-09-14 15:26:37", ""),))
+        self.assertIn("不返回应答", result.detail)
+
+    def test_broadcast_time_sync_uses_local_clock_and_year_limits(self):
+        """默认使用电脑本地时钟，允许2000～2099年并保留合法闰日。"""
+        local_time = datetime(2000, 2, 29, 23, 59, 59)  # 2000年是合法闰年，不能按普通年份误拒绝。
+        with patch("dlt645.datetime") as clock:
+            clock.now.return_value = local_time
+            frame = build_broadcast_time_sync()
+            clock.now.assert_called_once_with()
+        self.assertEqual(parse_frame(frame).payload, bytes.fromhex("59 59 23 29 02 00"))
+        self.assertTrue(parse_frame(build_broadcast_time_sync(datetime(2099, 12, 31))).valid)
+        for year in (1999, 2100):
+            with self.subTest(year=year):
+                with self.assertRaises(ValueError):
+                    build_broadcast_time_sync(datetime(year, 1, 1))  # 两位年份不能准确表示范围外年份。
+
+    def test_broadcast_time_sync_rejects_invalid_received_time(self):
+        """收到的校时报文必须包含完整合法BCD日期和时间，结构异常记录应判为无效。"""
+        invalid_payloads = (b"", bytes.fromhex("00 00 00 30 02 26"),
+                            bytes.fromhex("00 60 12 14 09 26"), bytes.fromhex("00 00 12 14 09 FA"))  # 分别覆盖长度、非法日期、时间范围和BCD编码。
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload):
+                result = parse_frame(build_frame("AAAAAAAAAAAA", 0x08, payload))
+                self.assertFalse(result.valid)
+                self.assertTrue(result.checksum_ok)  # 测试业务结构错误，而不是依赖CS错误来拒绝报文。
+
+    def test_broadcast_time_sync_button_refreshes_time_before_sending(self):
+        """直接校时重新取本地时间，不能发送之前预览的旧时间，也不能改变单播通信地址。"""
+        preview_time = datetime(2026, 9, 14, 23, 59, 59)  # 跨日案例同时验证重新取时和日期切换。
+        send_time = datetime(2026, 9, 15, 0, 0, 0)
+        window = SimpleNamespace(dlt_preamble_var=Mock(), dlt_sync_time_var=Mock(), dlt_address_var=Mock(),
+                                 _set_dlt_generated=Mock(), _send_bytes=Mock())  # 使用无GUI替身验证按钮逻辑，不打开窗口或实际串口。
+        window.dlt_preamble_var.get.return_value = 4
+        with patch("app.datetime") as clock:
+            clock.now.side_effect = (preview_time, send_time)
+            SerialAssistant.generate_dlt_broadcast_time_sync(window)
+            window._send_bytes.assert_not_called()  # 生成按钮只能预览，不允许实际发送。
+            SerialAssistant.generate_dlt_broadcast_time_sync(window, send=True)
+            self.assertEqual(clock.now.call_count, 2)
+        window._send_bytes.assert_called_once_with(build_broadcast_time_sync(send_time, 4))
+        self.assertEqual(window._set_dlt_generated.call_count, 2)
+        window.dlt_address_var.set.assert_not_called()  # 广播地址只用于组帧，不能覆盖用户正在使用的通信地址。
+        self.assertIn("已发送：2026-09-15 00:00:00", window.dlt_sync_time_var.set.call_args.args[0])
+
+    def test_broadcast_time_sync_button_reports_send_error(self):
+        """设备串口未打开等发送错误必须显示失败，不得把仅生成的报文提示为已发送。"""
+        window = SimpleNamespace(dlt_preamble_var=Mock(), dlt_sync_time_var=Mock(),
+                                 _set_dlt_generated=Mock(), _send_bytes=Mock(side_effect=RuntimeError("请先打开设备串口")))  # 模拟现有发送接口拒绝未连接设备。
+        window.dlt_preamble_var.get.return_value = 4
+        with patch("app.messagebox.showerror") as error_dialog:
+            SerialAssistant.generate_dlt_broadcast_time_sync(window, send=True)
+            error_dialog.assert_called_once_with("广播校时失败", "请先打开设备串口")
+        self.assertTrue(window.dlt_sync_time_var.set.call_args.args[0].startswith("已生成："))
 
     def test_write_address_request(self):
         frame = build_write_address("123456789012", 4)
@@ -369,6 +441,18 @@ class DLT645Tests(unittest.TestCase):
         })
         self.assertEqual(wireless_archive[0], 247)
         self.assertEqual(wireless_archive[33:36], bytes.fromhex("00 03 04"))
+
+    def test_inverter_archive_all_ff_delete_payload(self):
+        delete_payload = self.registry.encode("04E62103", {"__all_ff__": True})  # 档案删除业务数据必须是完整36字节全FF。
+        self.assertEqual(delete_payload, b"\xFF" * 36)
+
+        frame = build_write_data("000102030405", "04E62103", delete_payload, preamble=4)
+        parsed = parse_frame(frame, self.registry)
+        self.assertTrue(parsed.valid)
+        self.assertEqual(parsed.payload, delete_payload)  # 经过645减0x33解析后仍应恢复为36字节全FF业务数据。
+
+        with self.assertRaises(ValueError):
+            self.registry.encode("04000900", {"__all_ff__": True})  # 非档案数据标识不能借用整块全FF删除操作。
 
     def test_complex_datetime_and_type_descriptor_fields(self):
         datetime_field = {"name": "time", "description": "时间", "type": "bcd_datetime", "length": 5,
