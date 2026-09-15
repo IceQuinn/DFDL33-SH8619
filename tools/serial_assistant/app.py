@@ -13,6 +13,7 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 
 from app_version import APP_NAME, APP_VERSION
+from windows_icon import install_window_icons
 
 try:
     import serial
@@ -102,6 +103,7 @@ class SerialAssistant(tk.Tk):
             self.iconbitmap(default=str(resource_path("assets/app_icon.ico")))  # 内置ICO同时设置主窗口及后续对话框的默认图标。
         except tk.TclError:
             pass  # 源码环境尚未生成ICO时仍允许运行，正式打包会强制生成并嵌入图标。
+        install_window_icons(self, resource_path("assets/app_icon.ico"))  # 原生窗口按DPI加载独立尺寸图标，避免任务栏使用放大的小图。
         self.geometry("1380x860")
         self.minsize(1080, 700)
         self.serial_port = None

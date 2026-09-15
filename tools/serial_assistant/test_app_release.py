@@ -10,7 +10,7 @@ from PIL import Image
 
 from app import SerialAssistant, load_settings, save_settings, saved_dlt_address, resource_path
 from app_version import APP_NAME, APP_VERSION, EXE_NAME
-from build_assets import prepare_icon
+from build_assets import ICON_SIZES, prepare_icon
 
 
 class AppReleaseTests(unittest.TestCase):
@@ -65,7 +65,7 @@ class AppReleaseTests(unittest.TestCase):
             with Image.open(target) as icon:
                 self.assertEqual(icon.format, "ICO")
                 self.assertEqual(icon.mode, "RGBA")
-                self.assertEqual(icon.ico.sizes(), {(size, size) for size in (16, 24, 32, 48, 64, 128, 256)})
+                self.assertEqual(icon.ico.sizes(), {(size, size) for size in ICON_SIZES})
         self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(), original_hash)
 
 

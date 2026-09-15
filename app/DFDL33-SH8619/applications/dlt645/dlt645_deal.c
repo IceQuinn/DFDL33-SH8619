@@ -8,6 +8,7 @@
 #include "rng_buf.h"
 
 #include "HJ02C.h"
+#include "led.h"
 
 #define DBG_TAG "dlt645"
 #define DBG_LVL DBG_LOG
@@ -387,6 +388,7 @@ rt_err_t dlt645_data_ack(uint16_t uart_no, const void *buffer, rt_size_t size)
 {
     if(HJ02C == uart_no)
     {
+        LED_Ctrl(LED_WH_TX, LED_FAST, 1000);
         return hj02c_send(buffer, size);
     }
     else{
