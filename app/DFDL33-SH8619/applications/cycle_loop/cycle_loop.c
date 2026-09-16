@@ -634,6 +634,7 @@ void cycle_loop_thread_entry(void *parameter)
         /* 顺序推进三个独立状态机，不会等待前一个串口超时后才处理下一个串口。 */
         for(index = 0U; index < CYCLE_LOOP_SCAN_PORT_COUNT; ++index) {
             Cycle_Loop_Uart_Context_t *context = &g_scan_uarts[index]; /* 当前物理端口的识别事务上下文。 */
+            rt_bool_t was_waiting_response; /* 本轮进入前是否正在等待一项识别回复。 */
 
             if((context->state != CYCLE_LOOP_SCAN_STOPPED) &&
                (context->state != CYCLE_LOOP_SCAN_WAIT_RESPONSE) &&
@@ -641,7 +642,19 @@ void cycle_loop_thread_entry(void *parameter)
                 cycle_loop_stop_uart(context);
             }
             if(context->state != CYCLE_LOOP_SCAN_STOPPED) { /* 仅推进仍在识别的端口，不影响已开放端口抄读。 */
+                /* 一项识别结束后最多插入一帧转发；转发等待期间识别状态保持不变。 */
+                if(Inv_Forward_Scan_Step(context->uart_no, now) == RT_TRUE) {
+                    continue;
+                }
+                was_waiting_response = (context->state == CYCLE_LOOP_SCAN_WAIT_RESPONSE) ? RT_TRUE : RT_FALSE;
+                if(context->state == CYCLE_LOOP_SCAN_READY) {
+                    Inv_Forward_Consume_Allowance(context->uart_no); /* 即将发送下一识别请求，未使用机会到此结束。 */
+                }
                 cycle_loop_process_uart(context, now);
+                if((was_waiting_response == RT_TRUE) &&
+                   (context->state != CYCLE_LOOP_SCAN_WAIT_RESPONSE)) { /* 收到回复或超时都表示一项识别事务已经完成。 */
+                    Inv_Forward_Allow(context->uart_no);
+                }
             }
             if(context->state == CYCLE_LOOP_SCAN_STOPPED) { /* 本端口结束即可开放，已有档案的端口从首轮开始抄读。 */
                 Inv_Data_Enable_Port(context->uart_no);

@@ -166,6 +166,18 @@ void Inv_Data_Poll_Loop(void);
 /* 串口管理层调用本接口提交周期抄读阶段收到的一帧完整响应。 */
 rt_err_t Inv_Data_Rx_Frame(uint16_t uart_no, const uint8_t *frame, uint16_t frame_len);
 
+/* 第二路串口提交完整原始报文到对应第一路转发队列，队列满时返回RT_EFULL并丢弃新报文。 */
+rt_err_t Inv_Forward_Submit(uint16_t secondary_uart_no, const uint8_t *frame, uint16_t frame_len);
+
+/* 自动识别的一项请求结束后允许对应第一路最多转发一帧。 */
+void Inv_Forward_Allow(uint16_t primary_uart_no);
+
+/* 自动识别发送下一项前收回未使用的旧转发机会。 */
+void Inv_Forward_Consume_Allowance(uint16_t primary_uart_no);
+
+/* 在自动识别请求之间推进透明转发，返回RT_TRUE表示本轮识别不能使用该第一路。 */
+rt_bool_t Inv_Forward_Scan_Step(uint16_t primary_uart_no, rt_tick_t now);
+
 /* 异步提交逆变器控制请求，返回RT_EOK仅表示请求已经进入目标端口队列。 */
 rt_err_t Inv_Control_Submit(const Inv_Control_Request_t *request);
 

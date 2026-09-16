@@ -138,31 +138,47 @@ rt_err_t hj02c_send_cmd_and_get_resp(const char *cmd, char *resp,
 
 rt_err_t hj02c_read_cmd(const char *cmd, char *ver, uint16_t max_len)
 {
+    if(!cmd) return RT_ERROR;
+    rt_pin_irq_enable(HJ02C_IRQ_PIN, PIN_IRQ_DISABLE);
+
     char resp[64]; uint16_t len;
     rt_err_t err = hj02c_send_cmd_and_get_resp(cmd, resp, sizeof(resp), &len);
-    if (err) return err;
+    if(err)
+    {
+        rt_pin_irq_enable(HJ02C_IRQ_PIN, PIN_IRQ_ENABLE);
+        return err;
+    }
     char *p = memchr(resp, '<', len);
-    if (!p) return RT_ERROR;
+    if(!p)
+    {
+        rt_pin_irq_enable(HJ02C_IRQ_PIN, PIN_IRQ_ENABLE);
+        return RT_ERROR;
+    }
 //    uint16_t vlen = len - (p - resp + 1) - 1;
     uint16_t vlen = len;
     if (vlen >= max_len) vlen = max_len - 1;
     memcpy(ver, p, vlen);
     ver[vlen] = '\0';
+    rt_pin_irq_enable(HJ02C_IRQ_PIN, PIN_IRQ_ENABLE);
     return RT_EOK;
 }
 
 rt_err_t hj02c_send_set_cmd(const char *cmd)
 {
-    if (!cmd) return RT_ERROR;
+    if(!cmd) return RT_ERROR;
 
+    rt_pin_irq_enable(HJ02C_IRQ_PIN, PIN_IRQ_DISABLE);
     char resp[32];
     uint16_t len = 0;
 
     rt_err_t err = hj02c_send_cmd_and_get_resp(cmd, resp, sizeof(resp), &len);
-    if (err != RT_EOK){
+    if(err != RT_EOK)
+    {
+        rt_pin_irq_enable(HJ02C_IRQ_PIN, PIN_IRQ_ENABLE);
         return err;
     }
 
+    rt_pin_irq_enable(HJ02C_IRQ_PIN, PIN_IRQ_ENABLE);
     return memmem(resp, len, "=ok>", 4) ? RT_EOK : RT_ERROR;
 }
 
@@ -233,10 +249,18 @@ rt_err_t hj02c_reset(void)
 }
 MSH_CMD_EXPORT(hj02c_reset, hj02c_reset);
 
+/* 恢复出厂 */
 rt_err_t hj02c_factory(void)
 {
     return hj02c_send_set_cmd("<ST_FACTORY=1>");
 }
+
+/* 主动断开连接 */
+rt_err_t hj02c_disconnect(void)
+{
+    return hj02c_send_set_cmd("<ST_CLIENT_LINK=0>");
+}
+
 
 /* 初始化 */
 rt_err_t hj02c_basic_init(const char *device_name)
@@ -244,15 +268,22 @@ rt_err_t hj02c_basic_init(const char *device_name)
     char ver[64];
 
     hj02c_spi4_init();
+//    HJ02C_IRQ_irq_enable();
 
     rt_thread_mdelay(1000); // 等待 SPI4 初始化完成
 
     if (hj02c_factory() != RT_EOK)
+    {
+        rt_kprintf("hj02c factory failed\n");
         return RT_ERROR;
+    }
     rt_thread_mdelay(500);
 
     if(hj02c_read_cmd("<RD_SOFT_VERSION>", ver, sizeof(ver)) != RT_EOK)
-        return RT_ETIMEOUT;
+    {
+            rt_kprintf("hj02c read verssion failed\n");
+            return RT_ERROR;
+    }
     rt_kprintf("[HJ02C] reply data: %s\n", ver);
 
 //    if(hj02c_read_cmd("<RD_CLIENT_LINK>", ver, sizeof(ver)) != RT_EOK)
@@ -260,7 +291,10 @@ rt_err_t hj02c_basic_init(const char *device_name)
 //    rt_kprintf("[HJ02C] reply data: %s\n", ver);
 
     if (hj02c_set_name(device_name) != RT_EOK)
+    {
+        rt_kprintf("hj02c set name failed\n");
         return RT_ERROR;
+    }
     rt_thread_mdelay(500);
 
     HJ02C_IRQ_irq_enable();

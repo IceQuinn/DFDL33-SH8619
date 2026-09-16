@@ -165,7 +165,8 @@ static void uart_dispatch_frame(uint16_t uart_no)
         LED_Ctrl(LED_DN_RX, LED_FAST, 1000);
     }
     else if((UART5_NO == uart_no) || (UART1_NO == uart_no)){   // 逆变器通信棒
-        uart_mgmt_write(uart_no, rx->frame_buf, (uint16_t)rx->frame_len);
+        /* 第二路报文只复制到对应第一路队列，由统一状态机在周期项目之间安全转发。 */
+        Inv_Forward_Submit(uart_no, rx->frame_buf, (uint16_t)rx->frame_len);
     }
 
 

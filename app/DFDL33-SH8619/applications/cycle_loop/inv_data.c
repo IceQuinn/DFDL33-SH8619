@@ -35,6 +35,7 @@
 #define INV_CONTROL_QUEUE_SIZE             4U
 #define INV_CONTROL_RESULT_QUEUE_SIZE     16U
 #define INV_CONTROL_REGISTER_MAX          (INV_DATA_NUMERIC_BYTE_MAX / 2U)
+#define INV_FORWARD_QUEUE_SIZE             4U
 
 /* 每个端口的抄读状态独立变化，等待某一路响应时其他端口仍可继续发送或解析。 */
 typedef enum Inv_Data_Port_State {
@@ -42,8 +43,23 @@ typedef enum Inv_Data_Port_State {
     INV_DATA_PORT_DEVICE_IDLE,            /* 当前端口完成一台逆变器抄读，正在等待配置的全局轮询间隔。 */
     INV_DATA_PORT_WAIT_PERIODIC_READ,     /* 当前端口正在等待周期抄读响应。 */
     INV_DATA_PORT_WAIT_CONTROL_WRITE,     /* 当前端口正在等待实时控制写响应。 */
-    INV_DATA_PORT_WAIT_CONTROL_REFRESH    /* 当前端口正在等待控制寄存器优先回读响应。 */
+    INV_DATA_PORT_WAIT_CONTROL_REFRESH,   /* 当前端口正在等待控制寄存器优先回读响应。 */
+    INV_DATA_PORT_WAIT_FORWARD_RESPONSE   /* 第一路已发送第二路报文，正在等待逆变器原始回复。 */
 } Inv_Data_Port_State_t;
+
+/* 第二路接收到的一帧原始报文，入队时复制内容，不能引用串口接收复用缓冲区。 */
+typedef struct Inv_Forward_Frame {
+    uint16_t frame_len;                    /* 当前报文的实际字节数。 */
+    uint8_t frame[INV_DATA_RX_FRAME_SIZE]; /* 当前待转发的完整原始报文。 */
+} Inv_Forward_Frame_t;
+
+/* 每个RJ45端口使用独立环形队列，队列满时丢弃新报文，不覆盖旧报文。 */
+typedef struct Inv_Forward_Queue {
+    Inv_Forward_Frame_t frames[INV_FORWARD_QUEUE_SIZE]; /* 按接收先后保存的待转发报文。 */
+    uint8_t read_index;                                  /* 下一帧待取报文下标。 */
+    uint8_t write_index;                                 /* 下一帧待写报文下标。 */
+    uint8_t count;                                       /* 当前有效报文数量。 */
+} Inv_Forward_Queue_t;
 
 /* 当前待抄读点的统一描述，数据类、参数类和控制类最终都转换为该格式。 */
 typedef struct Inv_Data_Point_Config {
@@ -98,6 +114,7 @@ typedef union Inv_Data_Active {
 typedef struct Inv_Data_Port_Config {
     uint16_t uart_no;                  /* 串口管理模块使用的逻辑串口编号。 */
     uint8_t archive_port;              /* 当前串口对应的逆变器档案接入端口。 */
+    uint16_t secondary_uart_no;        /* 同一RJ45的第二路串口；UART_NO_MAXS表示不支持转发。 */
 } Inv_Data_Port_Config_t;
 
 /* 单个端口上下文保存独立档案游标、当前请求、超时tick及接收邮箱。 */
@@ -119,13 +136,17 @@ typedef struct Inv_Data_Port_Context {
     uint8_t rx_frame[INV_DATA_RX_FRAME_SIZE]; /* 当前端口接收到的完整Modbus响应报文。 */
     uint16_t rx_frame_len;                   /* rx_frame缓冲区中的有效响应报文长度。 */
     volatile rt_bool_t rx_ready;             /* RT_TRUE表示接收邮箱中存在待解析响应。 */
+    Inv_Forward_Queue_t forward_queue;       /* 第二路提交并等待从当前第一路发出的原始报文队列。 */
+    Inv_Forward_Frame_t forward_active;      /* 当前已经通过第一路发送并等待回复的原始报文。 */
+    Inv_Data_Port_State_t forward_resume_state; /* 转发结束后恢复的周期READY或设备空闲状态。 */
+    rt_bool_t forward_allowed;               /* 每完成一项周期读或识别请求，最多允许转发一帧。 */
 } Inv_Data_Port_Context_t;
 
 /* 三个物理串口与档案接入端口保持固定映射，运行上下文只需保存本表下标。 */
 static const Inv_Data_Port_Config_t g_inv_data_port_configs[INV_DATA_PORT_COUNT] = {
-        {UART6_NO, INV_PORT_RS485_2},       /* UART1连接RS485-II。 */
-        {UART4_NO, INV_PORT_RJ45_1},        /* UART3连接RJ45-I。 */
-        {UART7_NO, INV_PORT_RJ45_2},        /* UART5连接RJ45-II。 */
+        {UART6_NO, INV_PORT_RS485_2, UART_NO_MAXS}, /* 独立RS485-II没有配对的第二路串口。 */
+        {UART4_NO, INV_PORT_RJ45_1, UART1_NO},      /* RJ45-2-II收到的报文通过RJ45-2-I转发。 */
+        {UART7_NO, INV_PORT_RJ45_2, UART5_NO},      /* RJ45-1-II收到的报文通过RJ45-1-I转发。 */
 };
 
 /* 实时数据数组下标与档案槽位下标固定对应，数据不写入Flash。 */
@@ -165,13 +186,14 @@ static uint8_t inv_data_archive_port(const Inv_Data_Port_Context_t *context)
     return g_inv_data_port_configs[context->port_index].archive_port;
 }
 
-/* 三种等待状态都表示串口已有在线事务，接收层只在这些状态下接收响应。 */
+/* 所有等待状态都表示串口已有在线事务，接收层只在这些状态下接收响应。 */
 static rt_bool_t inv_data_state_waiting_response(Inv_Data_Port_State_t state)
 {
-    /* 周期读、控制写和控制回读三种状态都已经占用串口并等待对应响应。 */
+    /* 周期读、控制及透明转发等待状态都已经独占第一路串口。 */
     if((state == INV_DATA_PORT_WAIT_PERIODIC_READ) ||
        (state == INV_DATA_PORT_WAIT_CONTROL_WRITE) ||
-       (state == INV_DATA_PORT_WAIT_CONTROL_REFRESH)) {
+       (state == INV_DATA_PORT_WAIT_CONTROL_REFRESH) ||
+       (state == INV_DATA_PORT_WAIT_FORWARD_RESPONSE)) {
         return RT_TRUE;
     }
 
@@ -960,6 +982,8 @@ static void inv_data_invalidate_active_point(Inv_Data_Port_Context_t *context)
 /* 当前已发送数据点结束后，根据档案边界进入下一数据点或10秒空闲。 */
 static void inv_data_finish_active_point(Inv_Data_Port_Context_t *context)
 {
+    context->forward_allowed = RT_TRUE; /* 一项周期请求结束后只发放一次第二路转发机会。 */
+
     /* 当前点是该逆变器最后一项时，完成后进入该端口独立的10秒空闲。 */
     if(context->active.read.idle_after_active == RT_TRUE) {
         inv_data_start_device_idle(context, context->active_archive_index);
@@ -1506,6 +1530,116 @@ static uint16_t inv_data_take_rx_frame(Inv_Data_Port_Context_t *context, uint8_t
     return frame_len;
 }
 
+/* 判断当前第一路端口是否至少存在一个有效档案，无档案时透明转发无需等待周期机会。 */
+static rt_bool_t inv_forward_port_has_archive(const Inv_Data_Port_Context_t *context)
+{
+    uint8_t archive_index; /* 当前检查的固定档案槽位下标。 */
+
+    for(archive_index = 0U; archive_index < INVERTER_ARCHIVE_MAX_COUNT; ++archive_index) {
+        if((g_inv_archive_lib.valid[archive_index] == INVERTER_ARCHIVE_VALID) &&
+           (g_inv_archive_lib.archives[archive_index].port == inv_data_archive_port(context))) {
+            return RT_TRUE;
+        }
+    }
+    return RT_FALSE;
+}
+
+/* 从第二路环形队列取出最早报文，队列内容和下标在同一临界区内更新。 */
+static rt_bool_t inv_forward_queue_take(Inv_Data_Port_Context_t *context)
+{
+    Inv_Forward_Queue_t *queue = &context->forward_queue; /* 当前RJ45对应的第二路报文队列。 */
+    rt_base_t level = rt_hw_interrupt_disable();          /* 防止串口线程同时写入队列。 */
+
+    if(queue->count == 0U) {
+        rt_hw_interrupt_enable(level);
+        return RT_FALSE;
+    }
+    context->forward_active = queue->frames[queue->read_index]; /* 完整复制后才能释放队列槽位。 */
+    queue->read_index = (queue->read_index + 1U) % INV_FORWARD_QUEUE_SIZE;
+    --queue->count;
+    rt_hw_interrupt_enable(level);
+    return RT_TRUE;
+}
+
+/* 结束当前透明转发事务并恢复此前周期状态，已经出队的报文不自动重试。 */
+static void inv_forward_finish(Inv_Data_Port_Context_t *context)
+{
+    context->state = context->forward_resume_state;
+    context->rx_ready = RT_FALSE;
+    rt_memset(&context->forward_active, 0, sizeof(context->forward_active));
+}
+
+/* 校验第一路回复的CRC、地址和功能码，只把属于当前第二路请求的Modbus帧转回。 */
+static rt_bool_t inv_forward_response_matches(const Inv_Forward_Frame_t *request,
+                                              const uint8_t *response,
+                                              uint16_t response_len)
+{
+    uint16_t received_crc;   /* 回复末尾携带的Modbus CRC低字节在前数值。 */
+    uint16_t calculated_crc; /* 对回复中除CRC外全部字节重新计算的数值。 */
+
+    if((request == RT_NULL) || (response == RT_NULL) ||
+       (request->frame_len < 2U) || (response_len < 5U)) {
+        return RT_FALSE;
+    }
+    received_crc = response[response_len - 2U] |
+                   ((uint16_t)response[response_len - 1U] << 8U);
+    calculated_crc = modbus_m_crc16(response, response_len - 2U);
+    if((received_crc != calculated_crc) || (response[0] != request->frame[0])) {
+        return RT_FALSE;
+    }
+    return ((response[1] == request->frame[1]) ||
+            (response[1] == (uint8_t)(request->frame[1] | 0x80U))) ? RT_TRUE : RT_FALSE;
+}
+
+/* 将第一路收到的原始回复完整转回配对第二路，再释放第一路事务。 */
+static void inv_forward_handle_response(Inv_Data_Port_Context_t *context)
+{
+    uint8_t frame[INV_DATA_RX_FRAME_SIZE]; /* 从第一路单帧邮箱取出的完整回复。 */
+    uint16_t frame_len = inv_data_take_rx_frame(context, frame); /* 先释放邮箱再进行第二路发送。 */
+    uint16_t secondary_uart_no = g_inv_data_port_configs[context->port_index].secondary_uart_no; /* 回复目标第二路。 */
+    rt_size_t written_size; /* 第二路串口实际接收的回复字节数。 */
+
+    /* 地址、功能码或CRC不匹配时丢弃本帧并继续等待，避免把前一事务迟到回复转错。 */
+    if(inv_forward_response_matches(&context->forward_active, frame, frame_len) != RT_TRUE) {
+        rt_kprintf("%s uart[%d] ignored unmatched frame while forwarding for uart[%d]\n", get_char_time(), inv_data_uart_no(context), secondary_uart_no);
+        return;
+    }
+    written_size = uart_mgmt_write(secondary_uart_no, frame, frame_len); /* 匹配后保持异常帧或正常帧原始内容。 */
+
+    if(written_size != frame_len) {
+        rt_kprintf("%s uart[%d] forward reply to uart[%d] failed, expected[%d], sent[%d]\n", get_char_time(), inv_data_uart_no(context), secondary_uart_no, frame_len, written_size);
+    }
+    inv_forward_finish(context);
+}
+
+/* 当前第一路空闲且获得转发机会时，从队列取一帧发送并进入独占等待状态。 */
+static rt_bool_t inv_forward_send_next(Inv_Data_Port_Context_t *context)
+{
+    uint16_t secondary_uart_no = g_inv_data_port_configs[context->port_index].secondary_uart_no; /* 当前配对第二路。 */
+    rt_size_t written_size; /* 第一路串口实际接收的发送字节数。 */
+
+    if((secondary_uart_no >= UART_NO_MAXS) || (inv_forward_queue_take(context) != RT_TRUE)) {
+        return RT_FALSE;
+    }
+    context->forward_allowed = RT_FALSE; /* 一次机会只允许取一帧，剩余报文等待下一周期项目。 */
+    written_size = uart_mgmt_write(inv_data_uart_no(context), context->forward_active.frame,
+                                   context->forward_active.frame_len);
+    if(written_size != context->forward_active.frame_len) {
+        rt_kprintf("%s uart[%d] forward request from uart[%d] failed, expected[%d], sent[%d]\n", get_char_time(), inv_data_uart_no(context), secondary_uart_no, context->forward_active.frame_len, written_size);
+        rt_memset(&context->forward_active, 0, sizeof(context->forward_active)); /* 发送失败也不重新入队。 */
+        return RT_TRUE;
+    }
+    /* Modbus广播地址0没有回复，完整发出后直接结束，不占用第一路等待时间。 */
+    if((context->forward_active.frame_len > 0U) && (context->forward_active.frame[0] == 0U)) {
+        rt_memset(&context->forward_active, 0, sizeof(context->forward_active));
+        return RT_TRUE;
+    }
+    context->forward_resume_state = context->state; /* READY和DEVICE_IDLE都按原状态恢复。 */
+    context->request_tick = rt_tick_get();
+    context->state = INV_DATA_PORT_WAIT_FORWARD_RESPONSE;
+    return RT_TRUE;
+}
+
 /* 解析当前端口收到的响应，成功时更新实时数据，失败时立即进入下一数据点。 */
 static void inv_data_handle_response(Inv_Data_Port_Context_t *context)
 {
@@ -1782,8 +1916,12 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
     if(inv_data_state_waiting_response(context->state) == RT_TRUE) {
         /* 收到完整响应时直接按等待状态解析，状态本身已经包含事务类型。 */
         if(context->rx_ready == RT_TRUE) {
+            /* 透明转发回复不参与本机协议解析，直接按原始字节转回对应第二路。 */
+            if(context->state == INV_DATA_PORT_WAIT_FORWARD_RESPONSE) {
+                inv_forward_handle_response(context);
+            }
             /* 等待控制写响应时按写回显规则解析并生成异步结果。 */
-            if(context->state == INV_DATA_PORT_WAIT_CONTROL_WRITE) {
+            else if(context->state == INV_DATA_PORT_WAIT_CONTROL_WRITE) {
                 inv_control_handle_response(context);
             }
             /* 等待优先回读响应时解析实际控制值并更新实时数据。 */
@@ -1799,8 +1937,13 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
 
         /* 只有没有收到报文并且等待达到1秒时，才结束当前读写事务。 */
         if((rt_tick_t)(now - context->request_tick) >= INV_DATA_RESPONSE_TIMEOUT_TICKS) {
+            /* 透明转发超时后不伪造第二路回复，也不自动重试已经出队的报文。 */
+            if(context->state == INV_DATA_PORT_WAIT_FORWARD_RESPONSE) {
+                rt_kprintf("%s uart[%d] forward request from uart[%d] no reply within 1s\n", get_char_time(), inv_data_uart_no(context), g_inv_data_port_configs[context->port_index].secondary_uart_no);
+                inv_forward_finish(context);
+            }
             /* 控制写无报文时生成超时结果并安排一次控制值回读。 */
-            if(context->state == INV_DATA_PORT_WAIT_CONTROL_WRITE) {
+            else if(context->state == INV_DATA_PORT_WAIT_CONTROL_WRITE) {
                 inv_control_handle_timeout(context);
             }
             /* 控制回读超时时保持实时值无效并恢复此前周期状态。 */
@@ -1828,18 +1971,32 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
         return;
     }
 
+    /* 设备空闲时间到达时先恢复周期抄读，防止连续第二路报文超过轮询时间后仍长期占线。 */
+    if((g_inv_data_work_enabled == RT_TRUE) &&
+       (context->state == INV_DATA_PORT_DEVICE_IDLE) &&
+       ((rt_tick_t)(now - context->idle_tick) >= inv_data_device_idle_ticks())) {
+        context->state = INV_DATA_PORT_READY;
+        context->forward_allowed = RT_FALSE; /* 空闲期未使用的旧机会不能抢在新一轮周期首项之前。 */
+        return;
+    }
+
+    /* 周期项目完成后最多转发一帧；无周期任务、非工作时段或设备空闲时可直接使用空闲线路。 */
+    if((context->forward_allowed == RT_TRUE) ||
+       (context->state == INV_DATA_PORT_DEVICE_IDLE) ||
+       (g_inv_data_work_enabled != RT_TRUE) ||
+       (inv_forward_port_has_archive(context) != RT_TRUE)) {
+        if(inv_forward_send_next(context) == RT_TRUE) {
+            return;
+        }
+    }
+
     /* 非工作时段不再推进设备空闲或发送新周期请求，已发送及已受理控制已在前面完成处理。 */
     if(g_inv_data_work_enabled != RT_TRUE) {
         return;
     }
 
-    /* 设备空闲状态达到配置的全局轮询时间后恢复READY，下一次调度读取下一台逆变器。 */
+    /* 设备空闲时间尚未到达时保持原计时，期间已经在前面允许第二路使用空闲线路。 */
     if(context->state == INV_DATA_PORT_DEVICE_IDLE) {
-        /* 每次判断读取最新配置，使645修改轮询时间后无需重启即可用于后续调度。 */
-        if((rt_tick_t)(now - context->idle_tick) >= inv_data_device_idle_ticks()) {
-            context->state = INV_DATA_PORT_READY;
-//            rt_kprintf("%s uart[%d] 10s wait finished, continue reading\n", get_char_time(), inv_data_uart_no(context));
-        }
         return;
     }
 
@@ -2095,6 +2252,99 @@ rt_err_t Inv_Control_Get_Result(Inv_Control_Result_Info_t *result, int32_t timeo
     --g_inv_control_result_count;
     rt_hw_interrupt_enable(level);
     return RT_EOK;
+}
+
+/* 第二路串口提交一帧待转发报文，队列满时按约定丢弃新报文并保留旧队列顺序。 */
+rt_err_t Inv_Forward_Submit(uint16_t secondary_uart_no, const uint8_t *frame, uint16_t frame_len)
+{
+    Inv_Data_Port_Context_t *context = RT_NULL; /* 与第二路串口配对的第一路端口上下文。 */
+    Inv_Forward_Queue_t *queue;                /* 目标RJ45的独立环形队列。 */
+    rt_base_t level;                           /* 写队列期间保存的中断状态。 */
+    uint8_t index;                             /* 三个第一路端口配置的查找下标。 */
+
+    if((g_inv_data_initialized != RT_TRUE) || (frame == RT_NULL) ||
+       (frame_len == 0U) || (frame_len > INV_DATA_RX_FRAME_SIZE)) {
+        return -RT_EINVAL;
+    }
+    for(index = 0U; index < INV_DATA_PORT_COUNT; ++index) {
+        if(g_inv_data_port_configs[index].secondary_uart_no == secondary_uart_no) {
+            context = &g_inv_data_ports[index];
+            break;
+        }
+    }
+    if(context == RT_NULL) {
+        return -RT_EINVAL;
+    }
+    queue = &context->forward_queue;
+    level = rt_hw_interrupt_disable(); /* 报文内容、写下标和数量必须作为一个整体发布。 */
+    if(queue->count >= INV_FORWARD_QUEUE_SIZE) {
+        rt_hw_interrupt_enable(level);
+        rt_kprintf("%s uart[%d] forward queue full, new frame[%d] dropped\n", get_char_time(), secondary_uart_no, frame_len);
+        return -RT_EFULL;
+    }
+    queue->frames[queue->write_index].frame_len = frame_len;
+    rt_memcpy(queue->frames[queue->write_index].frame, frame, frame_len);
+    queue->write_index = (queue->write_index + 1U) % INV_FORWARD_QUEUE_SIZE;
+    ++queue->count;
+    rt_hw_interrupt_enable(level);
+    return RT_EOK;
+}
+
+/* 按第一路串口查找转发上下文，供自动识别调度与周期调度共享同一事务状态。 */
+static Inv_Data_Port_Context_t *inv_forward_find_primary(uint16_t primary_uart_no)
+{
+    uint8_t index; /* 当前检查的第一路端口配置下标。 */
+
+    for(index = 0U; index < INV_DATA_PORT_COUNT; ++index) {
+        if(g_inv_data_port_configs[index].uart_no == primary_uart_no) {
+            return &g_inv_data_ports[index];
+        }
+    }
+    return RT_NULL;
+}
+
+/* 自动识别的一项请求完成后发放一次转发机会，独立RS485端口没有队列但无需特殊处理。 */
+void Inv_Forward_Allow(uint16_t primary_uart_no)
+{
+    Inv_Data_Port_Context_t *context = inv_forward_find_primary(primary_uart_no); /* 对应第一路上下文。 */
+
+    if(context != RT_NULL) {
+        context->forward_allowed = RT_TRUE;
+    }
+}
+
+/* 自动识别准备发送下一项时收回旧机会，防止识别等待期间到达的报文抢占线上事务。 */
+void Inv_Forward_Consume_Allowance(uint16_t primary_uart_no)
+{
+    Inv_Data_Port_Context_t *context = inv_forward_find_primary(primary_uart_no); /* 对应第一路上下文。 */
+
+    if(context != RT_NULL) {
+        context->forward_allowed = RT_FALSE;
+    }
+}
+
+/* 自动识别请求之间推进一次透明转发；返回RT_TRUE表示本轮由转发占用，识别不得发送。 */
+rt_bool_t Inv_Forward_Scan_Step(uint16_t primary_uart_no, rt_tick_t now)
+{
+    Inv_Data_Port_Context_t *context = inv_forward_find_primary(primary_uart_no); /* 对应第一路上下文。 */
+
+    if((context == RT_NULL) || (g_inv_data_initialized != RT_TRUE)) {
+        return RT_FALSE;
+    }
+    if(context->state == INV_DATA_PORT_WAIT_FORWARD_RESPONSE) {
+        if(context->rx_ready == RT_TRUE) {
+            inv_forward_handle_response(context);
+        }
+        else if((rt_tick_t)(now - context->request_tick) >= INV_DATA_RESPONSE_TIMEOUT_TICKS) {
+            rt_kprintf("%s uart[%d] scan-gap forward from uart[%d] no reply within 1s\n", get_char_time(), primary_uart_no, g_inv_data_port_configs[context->port_index].secondary_uart_no);
+            inv_forward_finish(context);
+        }
+        return RT_TRUE;
+    }
+    if((context->forward_allowed == RT_TRUE) && (inv_forward_send_next(context) == RT_TRUE)) {
+        return RT_TRUE;
+    }
+    return RT_FALSE;
 }
 
 /* 在临界区内分配唯一请求流水号，发生uint32_t回绕时跳过保留值0。 */

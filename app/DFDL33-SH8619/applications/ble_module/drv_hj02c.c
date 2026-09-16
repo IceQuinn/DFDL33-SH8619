@@ -96,6 +96,9 @@ int hj02c_spi4_init(void)
 
     irq_sem  = rt_sem_create("hj_irq", 0, RT_IPC_FLAG_FIFO);
 
+//    rt_pin_attach_irq(HJ02C_IRQ_PIN, PIN_IRQ_MODE_FALLING, hj02c_irq_callback, RT_NULL);
+//    rt_pin_irq_enable(HJ02C_IRQ_PIN, PIN_IRQ_ENABLE);
+
     return RT_EOK;
 }
 

@@ -7,7 +7,7 @@
 #define  M_PI    3.14159265358979
 #define  VOLTAGE_CALIBRATION_COEFFICIENT   356.204534
 
-uint16_t g_voltage_rms = 0;;
+uint16_t g_voltage_rms = 0;
 static rt_sem_t  g_adc_sem = RT_NULL;
 
 /* ================================================================== */

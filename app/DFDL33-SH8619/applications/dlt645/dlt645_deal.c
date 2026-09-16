@@ -259,6 +259,17 @@ static void dlt645_write_address(uint8_t uart_no, const uint8_t *address, uint8_
     LOG_I("dlt645 address changed to %02x%02x%02x%02x%02x%02x",
           address[5], address[4], address[3], address[2], address[1], address[0]); /* 日志按高位到低位显示12位地址。 */
     dlt645_write_address_ack(uart_no, E_D07_W_OK); /* 使用新地址返回0x95正常应答。 */
+
+    rt_thread_mdelay(100);
+    char BLE_Name[32] = {0};
+    rt_sprintf(BLE_Name, "%02x%02x%02x%02x%02x%02x", ctu_cfg.dlt645_bcd_addr[5], ctu_cfg.dlt645_bcd_addr[4],
+                                                     ctu_cfg.dlt645_bcd_addr[3], ctu_cfg.dlt645_bcd_addr[2],
+                                                     ctu_cfg.dlt645_bcd_addr[1], ctu_cfg.dlt645_bcd_addr[0] );
+    if (hj02c_set_name(BLE_Name) != RT_EOK)
+    {
+        rt_kprintf("Set ble name failed\n");
+    }
+//    rt_thread_mdelay(500);
 }
 
 /* 645协议解析 */
