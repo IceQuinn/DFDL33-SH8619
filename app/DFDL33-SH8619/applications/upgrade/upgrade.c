@@ -142,15 +142,7 @@ int Hand_Pack_Deal(uint32_t UART_Rx_Len, uint8_t UART_Rx_Buf[])
 
 /*****************************升级帧处理*****************************/
 
-////存外部Flash缓冲区
-//struct rng_buf w_flash_buf;
-//uint8_t  flash_buf[4096];
-
-//uint8_t  max_pack_number;               //用于记录外部flash一个扇区可写最大数据包数
-//uint8_t  cache_count;                   //用来记录写入缓冲区的次数
-//uint16_t updata_buf_idx;                //用来记录缓冲区偏移
 uint16_t updata_len;                    //用来记录升级包长度
-//uint16_t buf_sector_number = 1;         //缓冲区扇区编号
 uint16_t rx_successful_count;           //用来记录成功接收数据包的个数
 
 #if RETRANSMISSION_DEBUG
@@ -187,19 +179,6 @@ int Updata_Pack_Deal(uint32_t UART_Rx_Len, uint8_t UART_Rx_Buf[])
     rt_kprintf("DATA_HANDS RngBufDataSize = %d\r\n", UART_Rx_Len);
     struct IAP_Master_Updata_Pack *Ptr_IAP_Master_Updata_Pack = (struct IAP_Master_Updata_Pack *)UART_Rx_Buf;
 
-//    //需调整!!!
-//    if(1 == UART_Rx_Len)
-//    {
-//        // 处理最后一包丢包,升级包缓冲区还有数据未写入外部Flash问题
-//        if(cache_count != 0)
-//        {
-//            uint32_t current_addr = (start_addr + 4096 * (buf_sector_number - 1));
-//            flash_write(current_addr, updata_buf, sizeof(updata_buf));
-//            memset(updata_buf, 0, sizeof(updata_buf));
-//            cache_count = 0;
-//        }
-//        return 1;
-//    }
 
     if((1 == Ptr_IAP_Master_Updata_Pack->File_Divide_idx))
     {
@@ -239,52 +218,6 @@ int Updata_Pack_Deal(uint32_t UART_Rx_Len, uint8_t UART_Rx_Buf[])
     //置位
     MY_SET_BIT(BitMap_Data[(Ptr_IAP_Master_Updata_Pack->File_Divide_idx - 1) / 8], Ptr_IAP_Master_Updata_Pack->File_Divide_idx);
 
-//    //用来记录包长和一个扇区容纳的最大包数（除最后一包）!!!
-//    if(Ptr_IAP_Master_Updata_Pack->File_Divide_idx != IAP_Hand_Pack.File_All_Divids)
-//    {
-//        updata_len = Ptr_IAP_Master_Updata_Pack->File_Divide_Len;
-////            max_pack_number = (4096 / updata_len);              //(4096 / Ptr_IAP_Master_Updata_Pack->File_Divide_Len)
-//    }
-
-//    //对应扇区（缓冲区）偏移
-//    uint32_t offset_in_sector = (updata_len * (Ptr_IAP_Master_Updata_Pack->File_Divide_idx - 1)) % 4096;
-//
-//    if(offset_in_sector + Ptr_IAP_Master_Updata_Pack->File_Divide_Len > EXTFLASH_PAGE_SIZE)
-//    {
-//        uint32_t bytes_in_current = EXTFLASH_PAGE_SIZE - offset_in_sector;
-//        uint32_t bytes_in_next = Ptr_IAP_Master_Updata_Pack->File_Divide_Len - bytes_in_current;
-//
-//        memcpy(&updata_buf[offset_in_sector], Ptr_IAP_Master_Updata_Pack->File_Divide_Data, bytes_in_current);
-//        updata_buf_idx += bytes_in_current;
-//
-//        // 刷入当前逻辑扇区
-//        uint32_t current_addr = ((start_addr + updata_len * (Ptr_IAP_Master_Updata_Pack->File_Divide_idx - 1)) / 4096) * 4096;
-//        flash_write(current_addr, updata_buf, updata_buf_idx);
-//        memset(updata_buf, 0, sizeof(updata_buf));
-//        updata_buf_idx = 0;
-//
-//
-//        // 切换到新扇区
-//        buf_sector_number++;
-//        memcpy(&updata_buf[offset_in_sector], Ptr_IAP_Master_Updata_Pack->File_Divide_Data + bytes_in_current, bytes_in_next);
-//        updata_buf_idx += bytes_in_next;
-//    }
-//    else {
-//        memcpy(&updata_buf[updata_buf_idx], Ptr_IAP_Master_Updata_Pack->File_Divide_Data, Ptr_IAP_Master_Updata_Pack->File_Divide_Len);
-//        updata_buf_idx += Ptr_IAP_Master_Updata_Pack->File_Divide_Len;
-//    }
-//
-//    //缓冲区满4096 或 数据收满了 或 帧数满了
-//    if((EXTFLASH_PAGE_SIZE == updata_buf_idx) ||
-//            (Get_Updata_Pack_Size == IAP_Hand_Pack.File_Size) ||
-//            (Ptr_IAP_Master_Updata_Pack->File_Divide_idx == IAP_Hand_Pack.File_All_Divids))
-//    {
-//        uint32_t current_addr = ((start_addr + updata_len * (Ptr_IAP_Master_Updata_Pack->File_Divide_idx - 1)) / 4096) * 4096;
-//        flash_write(current_addr, updata_buf, updata_buf_idx);
-//        memset(updata_buf, 0, sizeof(updata_buf));
-//        updata_buf_idx = 0;
-//    }
-
     //计算出该帧对应的扇区；
     uint32_t addr = ((start_addr + updata_len * (Ptr_IAP_Master_Updata_Pack->File_Divide_idx - 1)) / 4096) * 4096;
 
@@ -304,7 +237,6 @@ int Updata_Pack_Deal(uint32_t UART_Rx_Len, uint8_t UART_Rx_Buf[])
         memcpy(&updata_buf[offset_in_sector], Ptr_IAP_Master_Updata_Pack->File_Divide_Data, bytes_in_current);
 
         // 刷入当前逻辑扇区
-//        uint32_t current_addr = ((start_addr + updata_len * (Ptr_IAP_Master_Updata_Pack->File_Divide_idx - 1)) / 4096) * 4096;
         flash_write(addr, updata_buf, sizeof(updata_buf));
         memset(updata_buf, 0, sizeof(updata_buf));
         offset_in_sector = 0;
@@ -320,14 +252,10 @@ int Updata_Pack_Deal(uint32_t UART_Rx_Len, uint8_t UART_Rx_Buf[])
     else {
         //将数据插入
         memcpy(&updata_buf[offset_in_sector], Ptr_IAP_Master_Updata_Pack->File_Divide_Data, Ptr_IAP_Master_Updata_Pack->File_Divide_Len);
-//                updata_buf_idx += Ptr_IAP_Master_Updata_Pack->File_Divide_Len;
         flash_write(addr, updata_buf, sizeof(updata_buf));
         memset(updata_buf, 0, sizeof(updata_buf));
     }
 
-    //数据收满了或者帧数满了
-//    if((Get_Updata_Pack_Size == IAP_Hand_Pack.File_Size) || (Ptr_IAP_Master_Updata_Pack->File_Divide_idx == IAP_Hand_Pack.File_All_Divids))
-//    {
 #if RETRANSMISSION_DEBUG
 //                BitMap_test();
 #endif
@@ -336,12 +264,10 @@ int Updata_Pack_Deal(uint32_t UART_Rx_Len, uint8_t UART_Rx_Buf[])
 //                crc32_cal_r = crc32_cal_r ^ 0xffffffff;
 //                MyPrintf("[%08d]crc32_cal_w = %x, crc32_cal_r = %x\r\n", AT32_GetTick(), crc32_cal_w,crc32_cal_r);
 #endif
-//        return 1;   //升级包收满了
-//    }
+
     rt_kprintf("Updata_Pack end: %08d\n", rt_tick_get());
     return 0;
 }
-
 
 
 //void test_flash_rw(void)
@@ -366,31 +292,6 @@ int Updata_Pack_Deal(uint32_t UART_Rx_Len, uint8_t UART_Rx_Buf[])
 //
 /*****************************校验帧处理*****************************/
 
-//uint8_t rw_updata_buf[4096];          //升级包(读写外部flash)
-
-//uint8_t test_check_buf[4096] = {0};
-//void testbuf_check(void)
-//{
-//    uint32_t test_crc32 = 0;
-//    uint16_t i = 0;
-//    uint16_t a = 0;
-//    for(i = 0; i < sizeof(test_check_buf); i++)
-//    {
-//        test_check_buf[i] = a;
-//        a++;
-//        if(a == 100)
-//        {
-//            a = 0;
-//        }
-//    }
-////    test_crc32 = crc32(test_check_buf, sizeof(test_check_buf));
-//    test_crc32 = crc32_part(test_check_buf, sizeof(test_check_buf), &test_crc32);
-//    test_crc32 = test_crc32 ^ 0xffffffff;
-//    rt_kprintf("test_crc32 = %x\r\n", test_crc32);
-//}
-//MSH_CMD_EXPORT(testbuf_check, testbuf_check);
-
-
 int Check_Pack_Deal(void)
 {
     uint8_t  Check_Result = 0;
@@ -405,32 +306,12 @@ int Check_Pack_Deal(void)
 
     rt_kprintf("Check_Pack start: %08d\n", rt_tick_get());
 
-//    uint16_t i = 0;
-//    uint16_t a = 0;
-
     while (bytes_read < IAP_Hand_Pack.File_Size)
-//    while (bytes_read < 100)
     {
-        //HAL_IWDG_Refresh(&hiwdg);
         //未读取剩余数量
         uint32_t remaining = IAP_Hand_Pack.File_Size - bytes_read;
-//        uint32_t remaining = 100 - bytes_read;
         uint16_t read_size = (remaining > EXTFLASH_PAGE_SIZE) ? EXTFLASH_PAGE_SIZE : remaining;
         flash_read(readaddr, updata_buf, read_size);
-
-//        for(i = 0; i < sizeof(test_check_buf); i++)
-//        {
-//            test_check_buf[i] = a;
-//            if(updata_buf[i] != test_check_buf[i])
-//            {
-//                rt_kprintf("updata_buf[%d] data error, data = %d\n", i, updata_buf[i]);
-//            }
-//            a++;
-//            if(a == 100)
-//            {
-//                a = 0;
-//            }
-//        }
 
         crc32_r_cal = crc32_part(updata_buf, read_size, &crc32_r_cal);
 
@@ -446,7 +327,6 @@ int Check_Pack_Deal(void)
         crc32_r_cal = crc32_r_cal ^ 0xffffffff;
         rt_kprintf("[%08d]full_crc32_r_cal = %x\r\n", rt_tick_get(), crc32_r_cal);
     }
-//      rt_kprintf("Stop_Check = %08d\r\n", HAL_GetTick());
 
     //校验结果判断
     if(crc32_r_cal == IAP_Hand_Pack.File_CRC)
@@ -477,86 +357,26 @@ int Check_Pack_Deal(void)
     return 0;
 }
 
+
 /*****************************重传帧处理*****************************/
 
-//uint8_t data_buf[4096];
 int Retransmission_Pack_Deal(uint32_t UART_Rx_Len,uint8_t UART_Rx_Buf[])
 {
-//    uint8_t  updata_buf[4096];              //用于临时存放升级包数据，为写入外部flash做准备
-//    uint16_t updata_len = IAP_Hand_Pack.File_Divide_Size;
-    rt_kprintf("RETRANSMISSION_HANDS RngBufDataSize = %d\r\n", UART_Rx_Len);
     uint8_t ack_data[256];
     uint32_t di = 0x08800003;
 
     //回复BitMap
-//    if(1 == UART_Rx_Len)
-//    {
-        memcpy(ack_data, &di, sizeof(di));
-        memcpy(ack_data + 4, BitMap_Data, sizeof(BitMap_Data));
-        data_ack(ack_data, sizeof(BitMap_Data) + 4);
+    memcpy(ack_data, &di, sizeof(di));
+    memcpy(ack_data + 4, BitMap_Data, sizeof(BitMap_Data));
+    data_ack(ack_data, sizeof(BitMap_Data) + 4);
 
-        rt_kprintf("[%08d]Successfully Sent The Bitmap\r\n", rt_tick_get());
-        if(1 == is_bitmap_complete())
-        {
+    rt_kprintf("[%08d]Successfully Sent The Bitmap\r\n", rt_tick_get());
+    if(1 == is_bitmap_complete())
+    {
 //            rt_thread_mdelay(200);
-            Check_Pack_Deal();
-        }
-        return 0;
-//    }
-//    else if(UART_Rx_Len > 4)     //重传数据处理
-//    {
-//        struct IAP_Master_Updata_Pack *Ptr_IAP_Master_Updata_Pack = (struct IAP_Master_Updata_Pack *)UART_Rx_Buf;
-//
-//        rt_kprintf("[%08d]IAP UpDate Get, File_Divide_idx = %03d/%d, File_Divide_Len = %d\r\n",
-//                rt_tick_get(),
-//                Ptr_IAP_Master_Updata_Pack->File_Divide_idx,
-//                IAP_Hand_Pack.File_All_Divids,
-//                Ptr_IAP_Master_Updata_Pack->File_Divide_Len);
-//
-//        //升级数据处理
-//        //BitMap对该帧置位
-//        MY_SET_BIT(BitMap_Data[(Ptr_IAP_Master_Updata_Pack->File_Divide_idx - 1) / 8], Ptr_IAP_Master_Updata_Pack->File_Divide_idx);
-//
-//        //计算出该帧对应的扇区；
-//        uint32_t addr = ((start_addr + updata_len * (Ptr_IAP_Master_Updata_Pack->File_Divide_idx - 1)) / 4096) * 4096;
-//
-//        //读出该扇区中的数据;
-//        flash_read(addr, updata_buf, sizeof(updata_buf));
-//
-//        uint32_t offset_in_sector = (updata_len * (Ptr_IAP_Master_Updata_Pack->File_Divide_idx - 1)) % 4096;
-//
-//        if (offset_in_sector + Ptr_IAP_Master_Updata_Pack->File_Divide_Len > EXTFLASH_PAGE_SIZE)
-//        {
-//            uint32_t bytes_in_current = EXTFLASH_PAGE_SIZE - offset_in_sector;
-//            uint32_t bytes_in_next = Ptr_IAP_Master_Updata_Pack->File_Divide_Len - bytes_in_current;
-//
-//            //将重传数据插入
-//            memcpy(&updata_buf[offset_in_sector], Ptr_IAP_Master_Updata_Pack->File_Divide_Data, bytes_in_current);
-//
-//            // 刷入当前逻辑扇区
-////                uint32_t current_addr = ((start_addr + updata_len * (Ptr_IAP_Master_Updata_Pack->File_Divide_idx - 1)) / 4096) * 4096;
-//            flash_write(addr, updata_buf, sizeof(updata_buf));
-//            memset(updata_buf, 0, sizeof(updata_buf));
-//            offset_in_sector = 0;
-//
-//            // 切换到新扇区
-//            addr += 4096;
-//            flash_read(addr, updata_buf, sizeof(updata_buf));
-//            //将重传数据插入
-//            memcpy(&updata_buf[offset_in_sector], Ptr_IAP_Master_Updata_Pack->File_Divide_Data + bytes_in_current, bytes_in_next);
-//            flash_write(addr, updata_buf, sizeof(updata_buf));
-//            memset(updata_buf, 0, sizeof(updata_buf));
-//        }
-//        else {
-//            //将重传数据插入
-//            memcpy(&updata_buf[offset_in_sector], Ptr_IAP_Master_Updata_Pack->File_Divide_Data, Ptr_IAP_Master_Updata_Pack->File_Divide_Len);
-////                updata_buf_idx += Ptr_IAP_Master_Updata_Pack->File_Divide_Len;
-//            flash_write(addr, updata_buf, sizeof(updata_buf));
-//            memset(updata_buf, 0, sizeof(updata_buf));
-//        }
-//
-//        return 0;
-//    }
+        Check_Pack_Deal();
+    }
+    return 0;
 }
 
 rt_mq_t upgrade_mq;
@@ -582,12 +402,6 @@ void upgrade_thread_entry(void *param)
 
     while (1)
     {
-//        if(1 == check_flg)
-//        {
-//            Check_Pack_Deal();
-//            check_flg = 0;
-//        }
-
         ret = rt_mq_recv(upgrade_mq, &msg, sizeof(msg), RT_WAITING_FOREVER);
         if (ret != RT_EOK) {
             continue;
@@ -618,11 +432,6 @@ void upgrade_thread_entry(void *param)
     }
 }
 
-//void set_check_flg(void)
-//{
-//    check_flg = 1;
-//}
-//MSH_CMD_EXPORT(set_check_flg, set_check_flg);
 
 
 
