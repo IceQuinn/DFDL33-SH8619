@@ -81,6 +81,7 @@ int hj02c_spi4_init(void)
     rt_pin_write(HJ02C_RST_PIN, PIN_LOW);    // 模块正常工作
     rt_thread_mdelay(10);
     rt_pin_write(HJ02C_RST_PIN, PIN_HIGH);    // 模块正常工作
+    rt_thread_mdelay(100);
 
     rt_err_t ret = rt_spi_bus_attach_device(&g_hj02c_dev, "spi40", "spi4", RT_NULL);
     if (ret != RT_EOK) {
@@ -96,17 +97,17 @@ int hj02c_spi4_init(void)
 
     irq_sem  = rt_sem_create("hj_irq", 0, RT_IPC_FLAG_FIFO);
 
-//    rt_pin_attach_irq(HJ02C_IRQ_PIN, PIN_IRQ_MODE_FALLING, hj02c_irq_callback, RT_NULL);
-//    rt_pin_irq_enable(HJ02C_IRQ_PIN, PIN_IRQ_ENABLE);
+    rt_pin_attach_irq(HJ02C_IRQ_PIN, PIN_IRQ_MODE_FALLING, hj02c_irq_callback, RT_NULL);
+    rt_pin_irq_enable(HJ02C_IRQ_PIN, PIN_IRQ_ENABLE);
 
     return RT_EOK;
 }
 
-void HJ02C_IRQ_irq_enable(void)
-{
-    rt_pin_attach_irq(HJ02C_IRQ_PIN, PIN_IRQ_MODE_FALLING, hj02c_irq_callback, RT_NULL);
-    rt_pin_irq_enable(HJ02C_IRQ_PIN, PIN_IRQ_ENABLE);
-}
+//void HJ02C_IRQ_irq_enable(void)
+//{
+//    rt_pin_attach_irq(HJ02C_IRQ_PIN, PIN_IRQ_MODE_FALLING, hj02c_irq_callback, RT_NULL);
+//    rt_pin_irq_enable(HJ02C_IRQ_PIN, PIN_IRQ_ENABLE);
+//}
 
 /* 等待 IRQ 恢复高 */
 rt_err_t wait_irq_high(uint32_t timeout_ms)

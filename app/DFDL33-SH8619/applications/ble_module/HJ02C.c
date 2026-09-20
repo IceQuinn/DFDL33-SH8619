@@ -2,6 +2,7 @@
 #include "drv_hj02c.h"
 #include <string.h>
 #include <stdio.h>
+#include "ctu_cfg.h"
 
 static void *memmem(const void *haystack, size_t hlen,
                     const void *needle, size_t nlen)
@@ -263,7 +264,7 @@ rt_err_t hj02c_disconnect(void)
 
 
 /* 初始化 */
-rt_err_t hj02c_basic_init(const char *device_name)
+rt_err_t hj02c_basic_init(void)
 {
     char ver[64];
 
@@ -290,15 +291,20 @@ rt_err_t hj02c_basic_init(const char *device_name)
 //        return RT_ETIMEOUT;
 //    rt_kprintf("[HJ02C] reply data: %s\n", ver);
 
-    if (hj02c_set_name(device_name) != RT_EOK)
+    char BLE_Name[32] = {0};
+    rt_sprintf(BLE_Name, "%02x%02x%02x%02x%02x%02x", ctu_cfg.dlt645_bcd_addr[5], ctu_cfg.dlt645_bcd_addr[4],
+                                                     ctu_cfg.dlt645_bcd_addr[3], ctu_cfg.dlt645_bcd_addr[2],
+                                                     ctu_cfg.dlt645_bcd_addr[1], ctu_cfg.dlt645_bcd_addr[0] );
+
+    if (hj02c_set_name(BLE_Name) != RT_EOK)
     {
         rt_kprintf("hj02c set name failed\n");
         return RT_ERROR;
     }
     rt_thread_mdelay(500);
 
-    HJ02C_IRQ_irq_enable();
-    rt_kprintf("[HJ02C] Basic init done, advertising...\n");
+//    HJ02C_IRQ_irq_enable();
+    rt_kprintf("BLE is ready!\n");
     return RT_EOK;
 }
 

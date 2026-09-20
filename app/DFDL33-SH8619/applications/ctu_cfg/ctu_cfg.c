@@ -102,10 +102,10 @@ void set_default_para(void)
     ctu_cfg.uart_baud[UART8_NO]         = 9600;         //波特率
     ctu_cfg.uart_check[UART8_NO]        = 3;            //校验位 1=8,N,1; 2=8,O,1 3=8,E,1
 
-    for(uint8_t i=0; i<6; i++)
-    {
-        ctu_cfg.dlt645_bcd_addr[i]      = i;        //dlt645通信地址
-    }
+//    for(uint8_t i=0; i<6; i++)
+//    {
+//        ctu_cfg.dlt645_bcd_addr[i]      = i;        //dlt645通信地址
+//    }
 
     ctu_cfg.longitude                   = 1143999;      //经度
     ctu_cfg.latitude                    = 304456;       //纬度

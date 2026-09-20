@@ -20,7 +20,7 @@ rt_err_t hj02c_set_high_speed(uint8_t on);
 rt_err_t hj02c_reset(void);
 
 
-rt_err_t hj02c_basic_init(const char *device_name);
+rt_err_t hj02c_basic_init(void);
 
 void hj02c_rx_thread_entry(void *parameter);
 
