@@ -23,7 +23,7 @@ enum {
 };
 
 /* --------------------------------------------------------------------------------------------配置参数 */
-#define CTU_CFG_VER        1       //配置参数版本号
+#define CTU_CFG_VER        2       //配置参数版本号
 
 #pragma pack(1) //一字节对齐
 /* Ver:1 */
@@ -51,7 +51,6 @@ extern GSE8625_CfgTypeDef_Vlast ctu_cfg;
 
 
 void Ctu_Cfg_Init(void);
-void set_default_para(void);        //设置默认值
 void set_default_data(void);
 void ctu_cfg_save(void);
 
