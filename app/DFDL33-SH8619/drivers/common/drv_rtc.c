@@ -180,6 +180,8 @@ static rt_err_t rt_rtc_config(void)
         /* wait until last write operation on rtc registers has finished */
         rtc_wait_config_finish();
     }
+    // 每天快5s，5/86400*10^6 = 28.94ppm, RTC校准分辨率为：10^5/2^20=0.9537ppm, 校准值为 28.94/0.9537=30.42，取整为30
+    bpr_rtc_clock_calibration_value_set(30); 
 #endif
 
     return RT_EOK;
