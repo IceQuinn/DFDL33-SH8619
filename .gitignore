@@ -1,6 +1,8 @@
 # Build output
 Debug/
 .svn/
+.workbuddy/
 app/DFDL33-SH8619/Debug/
-tools/serial_assistant/serial_assistant_settings.json
-tools/serial_assistant/release/serial_assistant_settings.json
+tools/serial_assistant/
+tools/InverterModbusSim/
+output/

@@ -3,6 +3,7 @@
   "templateName": "三晶PLUS-R5",
   "addressOffset": 0,
   "writeFunctionCode": 16,
+  "undefinedAddressMode": 0,
   "registers": [
     {
       "name": "MPVMode",
@@ -719,6 +720,5 @@
       "notes": "0x1046 PV输入模式 0x00独立 0x08并联",
       "selected": true
     }
-  ],
-  "undefinedAddressMode": 0
+  ]
 }

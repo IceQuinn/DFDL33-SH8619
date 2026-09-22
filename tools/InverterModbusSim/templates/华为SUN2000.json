@@ -1,6 +1,9 @@
 {
   "version": "1.0",
-  "templateName": "华为SUN2000户用逆变器",
+  "templateName": "华为SUN2000",
+  "addressOffset": 0,
+  "writeFunctionCode": 0,
+  "undefinedAddressMode": 0,
   "registers": [
     {
       "name": "机型名称",
@@ -89,7 +92,7 @@
       "scale": 1000,
       "access": "RO",
       "formula": "$value",
-      "value": 10.0,
+      "value": 100.0,
       "notes": "kW，增益1000",
       "selected": true
     },
@@ -492,7 +495,7 @@
       "scale": 1000,
       "access": "RO",
       "formula": "$value",
-      "value": 0.5,
+      "value": -0.5,
       "notes": "kVar",
       "selected": true
     },
@@ -856,7 +859,7 @@
       "scale": 10,
       "access": "RW",
       "formula": "$value",
-      "value": 100.0,
+      "value": 95.0,
       "notes": "% [0,100]，0.1%精度",
       "selected": true
     },
@@ -1757,8 +1760,5 @@
       "notes": "只写；写入停止逆变器",
       "selected": true
     }
-  ],
-  "addressOffset": 0,
-  "writeFunctionCode": 0,
-  "undefinedAddressMode": 0
+  ]
 }

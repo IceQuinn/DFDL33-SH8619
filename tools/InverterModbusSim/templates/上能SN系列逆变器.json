@@ -1,10 +1,13 @@
 {
   "version": "1.0",
   "templateName": "上能SN系列逆变器",
+  "addressOffset": 0,
+  "writeFunctionCode": 0,
+  "undefinedAddressMode": 0,
   "registers": [
     {
       "name": "运行状态",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 30100,
       "byteOrder": "ABCD",
@@ -17,7 +20,7 @@
     },
     {
       "name": "R相相电压",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 31000,
       "byteOrder": "ABCD",
@@ -30,7 +33,7 @@
     },
     {
       "name": "R相输出电流",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 31001,
       "byteOrder": "ABCD",
@@ -43,7 +46,7 @@
     },
     {
       "name": "电网频率",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint32",
       "regAddr": 31002,
       "byteOrder": "ABCD",
@@ -56,7 +59,7 @@
     },
     {
       "name": "S相相电压",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 31006,
       "byteOrder": "ABCD",
@@ -69,7 +72,7 @@
     },
     {
       "name": "S相输出电流",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 31007,
       "byteOrder": "ABCD",
@@ -82,7 +85,7 @@
     },
     {
       "name": "T相相电压",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 31012,
       "byteOrder": "ABCD",
@@ -95,7 +98,7 @@
     },
     {
       "name": "T相输出电流",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 31013,
       "byteOrder": "ABCD",
@@ -108,11 +111,11 @@
     },
     {
       "name": "电网侧有功功率",
-      "fc": 3,
+      "fc": 4,
       "dataType": "int32",
       "regAddr": 31018,
       "byteOrder": "ABCD",
-      "scale": 1,
+      "scale": 1000,
       "access": "RW",
       "formula": "$value",
       "value": 100,
@@ -121,7 +124,7 @@
     },
     {
       "name": "电网侧无功功率",
-      "fc": 3,
+      "fc": 4,
       "dataType": "int32",
       "regAddr": 31020,
       "byteOrder": "ABCD",
@@ -134,7 +137,7 @@
     },
     {
       "name": "功率因数",
-      "fc": 3,
+      "fc": 4,
       "dataType": "int16",
       "regAddr": 31022,
       "byteOrder": "ABCD",
@@ -147,7 +150,7 @@
     },
     {
       "name": "输出漏电流",
-      "fc": 3,
+      "fc": 4,
       "dataType": "int16",
       "regAddr": 31027,
       "byteOrder": "ABCD",
@@ -160,7 +163,7 @@
     },
     {
       "name": "总发电量",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint32",
       "regAddr": 34001,
       "byteOrder": "ABCD",
@@ -173,14 +176,14 @@
     },
     {
       "name": "当日发电量",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 34025,
       "byteOrder": "ABCD",
       "scale": 10,
       "access": "RW",
       "formula": "$value",
-      "value": 0,
+      "value": 2000.0,
       "notes": "34025 当日发电量 (scale=10.0)",
       "selected": true
     },
@@ -333,10 +336,10 @@
       "dataType": "int32",
       "regAddr": 46050,
       "byteOrder": "ABCD",
-      "scale": 1,
+      "scale": 1000,
       "access": "RW",
       "formula": "$value",
-      "value": 100,
+      "value": 99.0,
       "notes": "46050 输出有功调度功率 (scale=1.0)",
       "selected": true
     },
@@ -359,10 +362,10 @@
       "dataType": "int16",
       "regAddr": 46054,
       "byteOrder": "ABCD",
-      "scale": 1,
+      "scale": 100,
       "access": "RW",
       "formula": "$value",
-      "value": 100,
+      "value": 99.0,
       "notes": "46054 额定有功百分比 (scale=1.0)",
       "selected": true
     },
@@ -372,10 +375,10 @@
       "dataType": "int16",
       "regAddr": 46055,
       "byteOrder": "ABCD",
-      "scale": 1,
+      "scale": 100,
       "access": "RW",
       "formula": "$value",
-      "value": 0,
+      "value": 0.0,
       "notes": "46055 额定无功百分比 (scale=1.0)",
       "selected": true
     },
@@ -385,7 +388,7 @@
       "dataType": "int16",
       "regAddr": 46056,
       "byteOrder": "ABCD",
-      "scale": 1.25,
+      "scale": 10000,
       "access": "RW",
       "formula": "$value",
       "value": 1,
@@ -411,15 +414,12 @@
       "dataType": "uint32",
       "regAddr": 46058,
       "byteOrder": "ABCD",
-      "scale": 1,
+      "scale": 10,
       "access": "RW",
       "formula": "$value",
       "value": 100,
       "notes": "46058 当前功率百分比 (scale=1.0)",
       "selected": true
     }
-  ],
-  "addressOffset": 0,
-  "writeFunctionCode": 0,
-  "undefinedAddressMode": 0
+  ]
 }
