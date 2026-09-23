@@ -8,12 +8,30 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from PIL import Image
 
-from app import SerialAssistant, load_settings, save_settings, saved_dlt_address, resource_path
+from app import (SerialAssistant, combobox_width, display_column_width, load_settings, resource_path,
+                 save_settings, saved_dlt_address)
 from app_version import APP_NAME, APP_VERSION, EXE_NAME
 from build_assets import ICON_SIZES, prepare_icon
 
 
 class AppReleaseTests(unittest.TestCase):
+    def test_dlt_selector_width_handles_chinese_and_minimum(self):
+        """标识组和具体标识宽度应按最长中英文混排选项计算。"""
+        self.assertEqual(display_column_width("AB厂家"), 6)
+        self.assertEqual(combobox_width(("短", "ABC"), 5), 5)
+        self.assertEqual(combobox_width(("厂家软件版本号", "ABC"), 1), 14)
+
+    def test_dlt_fields_scrollbar_is_only_visible_for_overflow(self):
+        """数据区内容可完整显示时隐藏滚动条，溢出后恢复显示。"""
+        scrollbar = Mock()
+        window = SimpleNamespace(dlt_fields_scroll=scrollbar, dlt_fields_scroll_visible=True)
+        SerialAssistant._update_dlt_fields_scrollbar(window, "0.0", "1.0")
+        scrollbar.grid_remove.assert_called_once_with()
+        self.assertFalse(window.dlt_fields_scroll_visible)
+        SerialAssistant._update_dlt_fields_scrollbar(window, "0.0", "0.5")
+        scrollbar.grid.assert_called_once_with()
+        self.assertTrue(window.dlt_fields_scroll_visible)
+
     def test_address_restore_and_legacy_settings(self):
         """合法地址保留前导零及广播格式，旧配置或非法记录兼容回退默认地址。"""
         for value, expected in (("000102030405", "000102030405"), ("00 01 02 03 04 05", "000102030405"),

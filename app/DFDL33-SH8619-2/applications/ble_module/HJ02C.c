@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include "ctu_cfg.h"
 
+#include "led.h"
+
 static void *memmem(const void *haystack, size_t hlen,
                     const void *needle, size_t nlen)
 {
@@ -320,6 +322,7 @@ void hj02c_rx_thread_entry(void *parameter)
         {
             len = hj02c_spi_recv(&g_hj02c_dev, rx_buf);
 
+            LED_Ctrl(LED_WH_RX, LED_FAST, 1000);
             dlt645_rx_callback(rx_buf, len, HJ02C);
             rt_kprintf("[%08d]recv len = %d\r\n", rt_tick_get(), len);
         }

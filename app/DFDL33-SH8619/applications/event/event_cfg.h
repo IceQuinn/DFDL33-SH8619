@@ -49,6 +49,7 @@ enum EVENT_TYPE_2
     ETP_RES_DEFAULT_PARA,           //参数初始化
     ETP_REBOOT,                     //重启
     ETP_SCAP_ERR,                   //超级电容故障
+    
 };
 
 

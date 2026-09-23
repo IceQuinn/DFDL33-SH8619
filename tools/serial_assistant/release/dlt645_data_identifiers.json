@@ -65,12 +65,12 @@
     },
     "inverter_active_power_percentage_adjustment": {
       "fields": [
-        {"name": "active_power_percentage_adjustment", "description": "有功功率百分比调节值", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "sign_bit": {"byte": 0, "mask": "80"}, "minimum": -100.0, "maximum": 100.0, "unit": "%", "allow_ff": true, "default": "FF"}
+        {"name": "active_power_percentage_adjustment", "description": "有功功率百分比调节值", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "sign_bit": {"byte": 0, "mask": "80"}, "minimum": -100.0, "maximum": 100.0, "unit": "%", "write_hint": "范围：-100.0～100.0%，支持1位小数", "allow_ff": true, "default": "FF"}
       ]
     },
     "inverter_reactive_power_percentage_adjustment": {
       "fields": [
-        {"name": "reactive_power_percentage_adjustment", "description": "无功功率百分比调节值", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "sign_bit": {"byte": 0, "mask": "80"}, "minimum": -100.0, "maximum": 100.0, "unit": "%", "allow_ff": true, "default": "FF"}
+        {"name": "reactive_power_percentage_adjustment", "description": "无功功率百分比调节值", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "sign_bit": {"byte": 0, "mask": "80"}, "minimum": -100.0, "maximum": 100.0, "unit": "%", "write_hint": "范围：-100.0～100.0%，支持1位小数", "allow_ff": true, "default": "FF"}
       ]
     },
     "inverter_three_phase_voltage": {

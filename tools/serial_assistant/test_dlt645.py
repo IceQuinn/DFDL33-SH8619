@@ -526,6 +526,9 @@ class DLT645Tests(unittest.TestCase):
                 self.assertEqual(decoded[1][1], "--")
                 self.assertNotEqual(decoded[-1][1], "--")
 
+        active_percent_field = self.registry.get("04E60801").write_request["fields"][0]
+        self.assertEqual(active_percent_field["write_hint"], "范围：-100.0～100.0%，支持1位小数")
+
     def test_active_power_time_controls_use_independent_hhmm_blocks(self):
         power_values = {
             "period1_start": "07:30", "period1_end": "08:45",

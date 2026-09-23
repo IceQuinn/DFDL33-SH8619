@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+import unicodedata
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -40,6 +41,16 @@ from virtual_ports import COM0COM_DOWNLOAD_URL, create_pair_elevated, find_setup
 
 CONFIG_NAME = "dlt645_data_identifiers.json"
 SETTINGS_NAME = "serial_assistant_settings.json"
+
+
+def display_column_width(value: str) -> int:
+    """按终端显示列估算中英文混排文本宽度，用于让下拉框完整容纳最长选项。"""
+    return sum(2 if unicodedata.east_asian_width(char) in ("W", "F", "A") else 1 for char in value)
+
+
+def combobox_width(values, minimum: int) -> int:
+    """返回 ttk.Combobox 的字符列宽，空选项时保留最小宽度。"""
+    return max(minimum, max((display_column_width(str(value)) for value in values), default=0))
 
 
 def application_directory() -> Path:
@@ -314,16 +325,15 @@ class SerialAssistant(tk.Tk):
         ttk.Label(choose, text="标识组").grid(row=0, column=4, sticky="w")
         self.dlt_group_var = tk.StringVar()
         self.dlt_group_combo = ttk.Combobox(choose, textvariable=self.dlt_group_var, width=29, state="readonly")
-        self.dlt_group_combo.grid(row=0, column=5, padx=(4, 0), sticky="ew")
+        self.dlt_group_combo.grid(row=0, column=5, padx=(4, 12), sticky="w")
         self.dlt_group_combo.bind("<<ComboboxSelected>>", self._dlt_group_changed)
-        ttk.Label(choose, text="具体标识").grid(row=1, column=0, pady=(7, 0), sticky="w")
+        ttk.Label(choose, text="具体标识").grid(row=0, column=6, sticky="w")
         self.dlt_di_var = tk.StringVar()
         self.dlt_di_combo = ttk.Combobox(choose, textvariable=self.dlt_di_var, width=50, state="normal")
-        self.dlt_di_combo.grid(row=1, column=1, columnspan=5, padx=(4, 10), pady=(7, 0), sticky="ew")
+        self.dlt_di_combo.grid(row=0, column=7, padx=(4, 10), sticky="w")
         self.dlt_di_combo.bind("<<ComboboxSelected>>", self._dlt_selection_changed)
-        ttk.Button(choose, text="生成报文", command=self.generate_dlt_operation).grid(row=1, column=6, padx=4, pady=(7, 0))
-        ttk.Button(choose, text="生成并发送", command=lambda: self.generate_dlt_operation(send=True)).grid(row=1, column=7, padx=4, pady=(7, 0))
-        choose.columnconfigure(5, weight=1)
+        ttk.Button(choose, text="生成报文", command=self.generate_dlt_operation).grid(row=0, column=8, padx=4)
+        ttk.Button(choose, text="生成并发送", command=lambda: self.generate_dlt_operation(send=True)).grid(row=0, column=9, padx=4)
 
         content_paned = ttk.Panedwindow(parent, orient="vertical")
         content_paned.pack(fill="both", expand=True, pady=(3, 0))
@@ -331,10 +341,12 @@ class SerialAssistant(tk.Tk):
         fields_container = ttk.LabelFrame(content_paned, text="数据区结构（可滚动）", padding=4)
         fields_canvas = tk.Canvas(fields_container, highlightthickness=0)
         fields_scroll = ttk.Scrollbar(fields_container, orient="vertical", command=fields_canvas.yview)
-        fields_canvas.configure(yscrollcommand=fields_scroll.set)
         self.dlt_fields_canvas = fields_canvas
+        self.dlt_fields_scroll = fields_scroll
+        self.dlt_fields_scroll_visible = True
         fields_canvas.grid(row=0, column=0, sticky="nsew")
         fields_scroll.grid(row=0, column=1, sticky="ns")
+        fields_canvas.configure(yscrollcommand=self._update_dlt_fields_scrollbar)
         fields_container.rowconfigure(0, weight=1)
         fields_container.columnconfigure(0, weight=1)
         self.dlt_fields_frame = ttk.Frame(fields_canvas, padding=3)
@@ -366,9 +378,23 @@ class SerialAssistant(tk.Tk):
         )
         if not inside:
             return None
+        first, last = canvas.yview()
+        if float(first) <= 0.0 and float(last) >= 1.0:
+            return None
         units = linux_units if linux_units is not None else (-1 if event.delta > 0 else 1)
         canvas.yview_scroll(units, "units")
         return "break"
+
+    def _update_dlt_fields_scrollbar(self, first: str, last: str) -> None:
+        """仅在数据区内容高度超过 Canvas 可视高度时显示垂直滚动条。"""
+        self.dlt_fields_scroll.set(first, last)
+        should_show = float(first) > 0.0 or float(last) < 1.0
+        if should_show and not self.dlt_fields_scroll_visible:
+            self.dlt_fields_scroll.grid()
+            self.dlt_fields_scroll_visible = True
+        elif not should_show and self.dlt_fields_scroll_visible:
+            self.dlt_fields_scroll.grid_remove()
+            self.dlt_fields_scroll_visible = False
 
     def refresh_ports(self) -> None:
         ports = [p.device for p in list_ports.comports()] if list_ports else []
@@ -400,6 +426,10 @@ class SerialAssistant(tk.Tk):
             return
         self.dlt_category_value_map: dict[str, str] = {}
         available = self._available_dlt_definitions()
+        all_group_labels = list(dict.fromkeys(item.group_description for item in available))
+        all_item_labels = [self._dlt_item_label(item) for item in available]
+        self.dlt_group_combo.configure(width=combobox_width(all_group_labels, 12))
+        self.dlt_di_combo.configure(width=combobox_width(all_item_labels, 24))
         available_categories = {item.category for item in available}  # 当前读写动作下实际存在数据标识的类别集合。
         for category, description in self.dlt_registry.categories.items():  # 严格按照配置文件声明顺序显示标准、扩展、其他、协议库。
             if category in available_categories:  # 没有当前访问权限数据标识的类别不显示空页面。
@@ -428,6 +458,13 @@ class SerialAssistant(tk.Tk):
     def _selected_group(self) -> str:
         return getattr(self, "dlt_group_value_map", {}).get(self.dlt_group_var.get(), "")
 
+    @staticmethod
+    def _dlt_item_label(item) -> str:
+        """生成具体标识下拉项的统一显示文本。"""
+        spaced = " ".join(item.di[index:index + 2] for index in range(0, 8, 2))
+        selector = f"{item.selector} | " if item.group_id != "standard" else ""
+        return f"{selector}{spaced} | {item.description}"
+
     def _refresh_dlt_groups(self) -> None:
         category = self._selected_category()
         self.dlt_group_value_map: dict[str, str] = {}
@@ -446,9 +483,7 @@ class SerialAssistant(tk.Tk):
         self.dlt_di_value_map: dict[str, str] = {}
         for item in self._available_dlt_definitions():
             if item.category == category and item.group_id == group:
-                spaced = " ".join(item.di[index:index + 2] for index in range(0, 8, 2))
-                selector = f"{item.selector} | " if item.group_id != "standard" else ""
-                self.dlt_di_value_map[f"{selector}{spaced} | {item.description}"] = item.di
+                self.dlt_di_value_map[self._dlt_item_label(item)] = item.di
         values = list(self.dlt_di_value_map)
         self.dlt_di_combo["values"] = values
         if self._selected_di(silent=True) not in self.dlt_di_value_map.values():
@@ -515,6 +550,7 @@ class SerialAssistant(tk.Tk):
             name = str(field_def["name"])
             label = str(field_def.get("description", name))
             unit = str(field_def.get("unit", ""))
+            write_hint = str(field_def.get("write_hint", "")) if self.dlt_action_var.get() == "写" else ""
             kind = str(field_def.get("type", "hex"))
             display_label = label
             if self.dlt_action_var.get() == "写" and field_def.get("allow_ff"):
@@ -551,7 +587,8 @@ class SerialAssistant(tk.Tk):
             else:
                 format_hint = f" / {field_def.get('format')}" if field_def.get("format") else ""
                 ttk.Label(self.dlt_fields_frame, text=f"{kind} / {field_def.get('length')}字节{format_hint}").grid(row=display_row, column=1, padx=4, pady=2, sticky="w")
-            ttk.Label(self.dlt_fields_frame, text=unit).grid(row=display_row, column=2, padx=4, pady=2, sticky="w")
+            trailing_text = f"{unit}（{write_hint}）" if write_hint else unit
+            ttk.Label(self.dlt_fields_frame, text=trailing_text).grid(row=display_row, column=2, padx=4, pady=2, sticky="w")
             if self.dlt_action_var.get() == "读":
                 decoded_var = tk.StringVar(value="解析值：--")
                 self.dlt_decoded_vars[label] = decoded_var
