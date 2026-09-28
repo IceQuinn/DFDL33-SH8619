@@ -29,10 +29,35 @@
 #define DLT645_LATITUDE_MAX             900000U /* 纬度格式XXXX.XXXX，业务有效范围限制为0～90.0000度。 */
 #define DLT645_ALTITUDE_MAX             999999U /* 高度格式XXXX.XX，三字节BCD最大表示9999.99米。 */
 #define DLT645_SERIAL_PARAMETER_LEN          5U /* 串口参数由4字节小端波特率和1字节校验格式组成。 */
-#define DLT645_POLL_INTERVAL_LEN             2U /* 5～3600秒需要两字节低字节在前BCD才能完整表示。 */
+#define DLT645_POLL_INTERVAL_LEN             2U /* 0或5～3600秒需要两字节低字节在前BCD才能完整表示。 */
 #define DLT645_POLL_INTERVAL_MIN             5U /* 全局周期抄读间隔最小允许5秒。 */
 #define DLT645_POLL_INTERVAL_MAX          3600U /* 全局周期抄读间隔最大允许3600秒。 */
 #define DLT645_FIRMWARE_VERSION_LEN         32U /* 04800001厂家软件版本号固定占32字节ASCII。 */
+#define DLT645_REALTIME_READ_TIMEOUT_MS   55000U /* 为主站60秒超时保留5秒组帧和发送余量。 */
+#define DLT645_CONTROL_WAIT_TICKS          3000  /* 单台控制最多等待3秒，FF逐台执行仍可控制在60秒内。 */
+
+/* 对单台或DI0=FF的全部档案顺序执行实时读，失败及未完成点保持无效。 */
+static void dlt645_refresh_selected(uint32_t id, uint32_t point_mask)
+{
+    uint8_t selector = (uint8_t)id;
+    uint8_t first_archive = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? 0U : (uint8_t)(selector - 1U);
+    uint8_t archive_count = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? INVERTER_ARCHIVE_MAX_COUNT : 1U;
+    rt_tick_t start_tick = rt_tick_get();
+    rt_tick_t timeout_ticks = rt_tick_from_millisecond(DLT645_REALTIME_READ_TIMEOUT_MS);
+    uint8_t offset;
+
+    /* 整批发送前先排除所有旧缓存，确保截止时尚未执行的档案返回FF。 */
+    for(offset = 0U; offset < archive_count; ++offset) {
+        Inv_Data_Invalidate(first_archive + offset, point_mask);
+    }
+    if(Inv_Control_Is_Work_Enabled() != RT_TRUE) return;
+
+    for(offset = 0U; offset < archive_count; ++offset) {
+        rt_tick_t elapsed = rt_tick_get() - start_tick;
+        if(elapsed >= timeout_ticks) break;
+        (void)Inv_Data_Refresh(first_archive + offset, point_mask, (int32_t)(timeout_ticks - elapsed));
+    }
+}
 
 /* 读取RAM协议库的当前有效数量；协议库数量使用原始整数而不是BCD编码。 */
 rt_err_t dlt645_read_protocol_count(const Dlt645PointTypeDef *point, uint32_t id,
@@ -511,6 +536,13 @@ static rt_err_t dlt645_read_variables(const Dlt645PointTypeDef *point, uint32_t 
     {
         return -RT_EINVAL;
     }
+    if(ctu_cfg.poll_interval_seconds == 0U) {
+        static const uint32_t masks[] = {
+            INV_DATA_MASK_VOLTAGE, INV_DATA_MASK_CURRENT, INV_DATA_MASK_ACTIVE_POWER,
+            INV_DATA_MASK_REACTIVE_POWER, INV_DATA_MASK_POWER_FACTOR, INV_DATA_MASK_ALL_VARIABLES
+        };
+        dlt645_refresh_selected(id, masks[type]); /* 关闭周期抄读后，变量类改为随645请求实时读取。 */
+    }
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
         uint8_t archive_index = first_archive + archive_offset; /* 当前需要读取的实际档案下标。 */
@@ -588,6 +620,8 @@ static rt_err_t dlt645_read_nominal_power(const Dlt645PointTypeDef *point, uint3
         return -RT_EINVAL;
     }
 
+    dlt645_refresh_selected(id, (type == DLT645_NOMINAL_POWER_PN) ? INV_DATA_MASK_PN : INV_DATA_MASK_QN);
+
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
         uint8_t archive_index = first_archive + archive_offset; /* 当前读取的实际档案槽位下标。 */
@@ -649,6 +683,8 @@ rt_err_t dlt645_read_daily_energy(const Dlt645PointTypeDef *point, uint32_t id, 
         return -RT_EINVAL;
     }
 
+    dlt645_refresh_selected(id, INV_DATA_MASK_DAILY_ENERGY);
+
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
         uint8_t archive_index = first_archive + archive_offset; /* 当前读取的实际档案槽位下标。 */
@@ -689,6 +725,8 @@ rt_err_t dlt645_read_output_type(const Dlt645PointTypeDef *point, uint32_t id, u
     {
         return -RT_EINVAL;
     }
+
+    dlt645_refresh_selected(id, INV_DATA_MASK_OUTPUT_TYPE);
 
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
@@ -854,7 +892,8 @@ rt_err_t dlt645_read_poll_interval(const Dlt645PointTypeDef *point, uint32_t id,
     {
         return -RT_EINVAL;
     }
-    if((interval_seconds < DLT645_POLL_INTERVAL_MIN) || (interval_seconds > DLT645_POLL_INTERVAL_MAX) ||
+    if(((interval_seconds != 0U) && (interval_seconds < DLT645_POLL_INTERVAL_MIN)) ||
+       (interval_seconds > DLT645_POLL_INTERVAL_MAX) ||
        (dlt645_encode_bcd(interval_seconds, data, DLT645_POLL_INTERVAL_LEN, RT_FALSE) != RT_EOK)) /* 越界或无法编码的配置值不能正常回复。 */
     {
         return -RT_EINVAL;
@@ -881,7 +920,8 @@ rt_err_t dlt645_write_poll_interval(const Dlt645PointTypeDef *point, uint32_t id
         return -RT_EINVAL;
     }
     if((dlt645_bcd_decode_u32(data, data_len, &interval_seconds) != RT_EOK) ||
-       (interval_seconds < DLT645_POLL_INTERVAL_MIN) || (interval_seconds > DLT645_POLL_INTERVAL_MAX)) /* 非法BCD或超出5～3600秒均返回645写错误。 */
+       (((interval_seconds != 0U) && (interval_seconds < DLT645_POLL_INTERVAL_MIN)) ||
+        (interval_seconds > DLT645_POLL_INTERVAL_MAX))) /* 非法BCD或不属于0、5～3600秒均返回645写错误。 */
     {
         return -RT_EINVAL;
     }
@@ -1145,6 +1185,14 @@ rt_err_t dlt645_read_control_value(const Dlt645PointTypeDef *point, uint32_t id,
         return -RT_EINVAL;
     }
 
+    switch((uint8_t)(id >> 8)) {
+    case 0x05U: dlt645_refresh_selected(id, INV_DATA_MASK_ACTIVE_CTRL); break;
+    case 0x06U: dlt645_refresh_selected(id, INV_DATA_MASK_REACTIVE_CTRL); break;
+    case 0x07U: dlt645_refresh_selected(id, INV_DATA_MASK_POWER_FACTOR_CTRL); break;
+    case 0x08U: dlt645_refresh_selected(id, INV_DATA_MASK_ACTIVE_PERCENT); break;
+    default:    dlt645_refresh_selected(id, INV_DATA_MASK_REACTIVE_PERCENT); break;
+    }
+
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
         Inv_Control_Type_t control_type;       /* 当前数据标识对应的下行控制类型。 */
@@ -1199,7 +1247,7 @@ static uint8_t dlt645_control_one_value(uint8_t archive_index, Inv_Control_Type_
     {
         return DLT645_CONTROL_STATUS_OTHER;
     }
-    control_result = Inv_Control_Get_Result_By_Id(request.request_id, &result, 1000); /* 暂按现有要求最多等待1000个系统tick。 */
+    control_result = Inv_Control_Get_Result_By_Id(request.request_id, &result, DLT645_CONTROL_WAIT_TICKS);
     if(control_result != RT_EOK) /* 等待不到对应请求结果属于实际调控失败。 */
     {
         return DLT645_CONTROL_STATUS_FAILED;
@@ -1618,6 +1666,12 @@ rt_err_t dlt645_read_run_state(const Dlt645PointTypeDef *point,
         return -RT_EINVAL;
     }
 
+    /* 关闭周期抄读时没有持续更新功率，读取运行状态才实时读取Pt并按5W阈值重算。 */
+    if(ctu_cfg.poll_interval_seconds == 0U) {
+        dlt645_refresh_selected(id, INV_DATA_MASK_TOTAL_ACTIVE_POWER);
+        Inv_Data_Update_Run_States();
+    }
+
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
         Inv_Data_t *inv_data = Inv_Data_Get(first_archive + archive_offset); /* 通过公共接口取得当前档案实时数据。 */
@@ -1656,7 +1710,7 @@ static rt_err_t dlt645_control_run_state(uint8_t archive_index, int32_t value)
     {
         return control_result;
     }
-    control_result = Inv_Control_Get_Result_By_Id(request.request_id, &result, 1000); /* 暂按现有要求最多等待1000个系统tick。 */
+    control_result = Inv_Control_Get_Result_By_Id(request.request_id, &result, DLT645_CONTROL_WAIT_TICKS);
     if((control_result != RT_EOK) || (result.result != INV_CONTROL_RESULT_OK)) /* 超时或设备最终控制失败均返回错误。 */
     {
         return -RT_ERROR;

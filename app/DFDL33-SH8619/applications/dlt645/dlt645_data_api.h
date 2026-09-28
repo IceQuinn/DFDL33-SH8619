@@ -103,7 +103,7 @@ rt_err_t dlt645_write_serial_parameter(const Dlt645PointTypeDef *point,
 /* 读取04000900全局逆变器周期抄读间隔，按两字节低字节在前BCD秒数返回。 */
 rt_err_t dlt645_read_poll_interval(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
 
-/* 写入04000900全局逆变器周期抄读间隔，有效范围5～3600秒并立即保存。 */
+/* 写入04000900全局逆变器周期抄读间隔，有效范围0或5～3600秒并立即保存。 */
 rt_err_t dlt645_write_poll_interval(const Dlt645PointTypeDef *point,
                                     uint32_t id,
                                     const uint8_t *data,

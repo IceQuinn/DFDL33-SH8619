@@ -87,6 +87,8 @@ void user_thread_init(void)
 /* 应用入口按照依赖顺序初始化基础模块、协议档案和业务线程。 */
 int main(void)
 {
+    DEBUGMCU->ctrl |= 0x1 << 8;
+    
     Sys_Run_Time_Init();        /* 记录上电时间。 */
 
     show_ctu_msg();             /* 打印装置信息。 */

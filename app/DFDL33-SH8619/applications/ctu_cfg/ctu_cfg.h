@@ -41,7 +41,7 @@ typedef struct GSE8615_CONFIG_V1
     uint32_t latitude;                              //纬度
     float g_vol_cal_coef;                           //单向采集电压校准系数
     uint32_t altitude;                              /* 高度，单位0.01m；追加在结构体尾部以兼容旧版Flash配置字段偏移。 */
-    uint16_t poll_interval_seconds;                 /* 全局逆变器周期抄读间隔，单位秒，有效范围5～3600，追加在尾部兼容旧配置。 */
+    uint16_t poll_interval_seconds;                 /* 全局逆变器周期抄读间隔，单位秒，0关闭周期抄读，其余有效范围5～3600。 */
 
 }GSE8625_CfgTypeDef_Vlast;
 

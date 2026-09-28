@@ -144,12 +144,12 @@ class DLT645Tests(unittest.TestCase):
         self.assertEqual(result.decoded_values, (("A相电压", "220.5", "V"),))
 
     def test_write_request_uses_hidden_security_defaults(self):
-        payload = self.registry.encode("F0010001", {"target_voltage": "220.5", "mode": "运行"})
-        frame = build_write_data("123456789012", "F0010001", payload)
+        payload = self.registry.encode("04E60801", {"active_power_percentage_adjustment": "50.0"})
+        frame = build_write_data("123456789012", "04E60801", payload)
         result = parse_frame(frame, self.registry)
         self.assertTrue(result.valid)
         self.assertEqual(result.operation, "写数据")
-        self.assertEqual(result.data_identifier, "F0010001")
+        self.assertEqual(result.data_identifier, "04E60801")
         self.assertEqual(result.payload, payload)
 
     def test_standard_location_read_and_write_codec(self):
@@ -183,7 +183,7 @@ class DLT645Tests(unittest.TestCase):
         for suffix in range(7):
             definition = self.registry.get(f"040008{suffix:02X}")
             self.assertIsNotNone(definition)
-            self.assertEqual(definition.category, "extended")
+            self.assertEqual(definition.category, "other")
             self.assertEqual(definition.access, "read_write")
         self.assertIsNone(self.registry.get("04000807"))
 
@@ -197,6 +197,7 @@ class DLT645Tests(unittest.TestCase):
             self.registry.encode("04000800", {"baud_rate": "9600", "check_format": "8,N,2"})
 
     def test_poll_interval_and_device_actions(self):
+        self.assertEqual(self.registry.encode("04000900", {"interval_seconds": "0"}), bytes.fromhex("00 00"))
         payload = self.registry.encode("04000900", {"interval_seconds": "3600"})
         self.assertEqual(payload, bytes.fromhex("00 36"))
         self.assertEqual(self.registry.decode("04000900", payload), [("全局周期抄读时间", "3600", "s")])
@@ -207,7 +208,7 @@ class DLT645Tests(unittest.TestCase):
 
         for data_identifier in ("04000A00", "04000B00", "04000C00", "04000D00"):
             definition = self.registry.get(data_identifier)
-            self.assertEqual(definition.category, "extended")
+            self.assertEqual(definition.category, "other")
             self.assertEqual(definition.access, "write")
             self.assertEqual(self.registry.encode(data_identifier, {"action_value": "1"}), bytes.fromhex("01"))
             with self.assertRaises(ValueError):
@@ -235,7 +236,7 @@ class DLT645Tests(unittest.TestCase):
                     self.registry.encode("04000D00", {"action_value": invalid_value})  # 不允许其他数值或FF触发校准。
 
     def test_other_identifiers_are_read_only_and_decode_expected_values(self):
-        self.assertEqual(self.registry.categories["other"], "其他")
+        self.assertEqual(self.registry.categories["other"], "其他类")
 
         actual_value_identifiers = ("02010100", "06100101")
         for data_identifier in actual_value_identifiers:
@@ -342,12 +343,41 @@ class DLT645Tests(unittest.TestCase):
         self.assertEqual(parsed_response.frame_sequence, 3)
         self.assertEqual(parsed_response.payload, b"\x05\x22")
 
-    def test_config_can_be_copied_and_reloaded(self):
+    def test_config_can_be_copied_and_reloaded_without_development_example(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / "identifiers.json"
             target.write_text(CONFIG_PATH.read_text(encoding="utf-8"), encoding="utf-8")
             registry = DataIdentifierRegistry.load(target)
-            self.assertIsNotNone(registry.get("F0010001"))
+            self.assertIsNone(registry.get("F0010001"))
+
+    def test_identifier_categories_and_groups_follow_specification_order(self):
+        self.assertEqual(
+            list(self.registry.categories.items()),
+            [("standard", "标准"), ("variable", "变量类"), ("parameter", "参数类"),
+             ("event", "事件类"), ("other", "其他类")],
+        )
+
+        def groups(category):
+            return list(dict.fromkeys(
+                item.group_id for item in self.registry.definitions.values() if item.category == category
+            ))
+
+        self.assertEqual(groups("variable"), [
+            "inverter_three_phase_voltage", "inverter_three_phase_current", "inverter_active_power",
+            "inverter_reactive_power", "inverter_power_factor", "inverter_all_variables",
+        ])
+        self.assertEqual(groups("parameter"), [
+            "inverter_rated_active_power", "inverter_rated_reactive_power", "inverter_output_type",
+            "inverter_status", "inverter_active_power_adjustment", "inverter_reactive_power_adjustment",
+            "inverter_power_factor_adjustment", "inverter_active_power_percentage_adjustment",
+            "inverter_reactive_power_percentage_adjustment", "inverter_daily_energy",
+            "active_power_schedule", "active_power_percent_schedule", "inverter_archive_count", "inverter_archive",
+        ])
+        self.assertEqual(groups("event"), [])
+        self.assertEqual(groups("other"), [
+            "converter_realtime", "converter_datetime", "converter_freeze", "converter_curve",
+            "device_maintenance", "serial_port_parameter", "protocol_library_count", "protocol_library_slots",
+        ])
 
     def test_interface_settings_round_trip_and_invalid_choice_fallback(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -429,7 +459,7 @@ class DLT645Tests(unittest.TestCase):
         self.assertEqual(first.description, "逆变器1运行状态")
         self.assertEqual(last.selector, "0C")
         self.assertEqual(all_devices.description, "全部逆变器运行状态")
-        self.assertEqual(first.category, "extended")
+        self.assertEqual(first.category, "parameter")
         self.assertEqual(first.access, "read_write")
         self.assertEqual(self.registry.encode("04E60401", {"status": "01"}), bytes.fromhex("01"))
         self.assertEqual(self.registry.decode("04E60401", b"\x00"), [("运行状态", "开机", "")])

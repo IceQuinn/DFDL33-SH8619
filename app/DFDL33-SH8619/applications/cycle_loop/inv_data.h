@@ -23,6 +23,24 @@ extern "C" {
 /* 设备编号在线上最多占用32字节，内存中额外保留一个字符串结束符。 */
 #define INV_DATA_DEVICE_NO_MAX_LEN                  32U
 
+/* 实时读取使用与内部29个数据点一一对应的位图。 */
+#define INV_DATA_MASK_VOLTAGE             0x00000007UL
+#define INV_DATA_MASK_CURRENT             0x00000038UL
+#define INV_DATA_MASK_ACTIVE_POWER        0x000003C0UL
+#define INV_DATA_MASK_TOTAL_ACTIVE_POWER  (1UL << 9U)
+#define INV_DATA_MASK_REACTIVE_POWER      0x00003C00UL
+#define INV_DATA_MASK_POWER_FACTOR        0x0003C000UL
+#define INV_DATA_MASK_ALL_VARIABLES       0x0003FFFFUL
+#define INV_DATA_MASK_PN                  (1UL << 19U)
+#define INV_DATA_MASK_QN                  (1UL << 20U)
+#define INV_DATA_MASK_OUTPUT_TYPE         (1UL << 22U)
+#define INV_DATA_MASK_ACTIVE_CTRL         (1UL << 23U)
+#define INV_DATA_MASK_REACTIVE_CTRL       (1UL << 24U)
+#define INV_DATA_MASK_POWER_FACTOR_CTRL   (1UL << 25U)
+#define INV_DATA_MASK_ACTIVE_PERCENT      (1UL << 26U)
+#define INV_DATA_MASK_REACTIVE_PERCENT    (1UL << 27U)
+#define INV_DATA_MASK_DAILY_ENERGY        (1UL << 28U)
+
 /* 逆变器控制类型与协议库Inv_ProtoCtrl_t中的控制寄存器一一对应。 */
 typedef enum Inv_Control_Type
 {
@@ -192,6 +210,15 @@ rt_err_t Inv_Control_Get_Result_By_Id(uint32_t request_id, Inv_Control_Result_In
 
 /* 查询当前是否处于07:00～17:00逆变器控制允许时段。 */
 rt_bool_t Inv_Control_Is_Work_Enabled(void);
+
+/* 在目标档案所属Modbus端口完成指定点位图的实时读取，失败点会置为无效。 */
+rt_err_t Inv_Data_Refresh(uint8_t archive_index, uint32_t point_mask, int32_t timeout);
+
+/* 清除指定点的有效标志，供整批实时读取在发送前排除旧缓存。 */
+void Inv_Data_Invalidate(uint8_t archive_index, uint32_t point_mask);
+
+/* 使用当前总有功功率和工作时段立即重新计算全部档案运行状态。 */
+void Inv_Data_Update_Run_States(void);
 
 /* 按0～11档案槽位获取实时数据，槽位无效或越界时返回RT_NULL。 */
 Inv_Data_t *Inv_Data_Get(uint8_t archive_index);

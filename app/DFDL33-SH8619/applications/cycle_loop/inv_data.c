@@ -21,6 +21,7 @@
 #include "user_rtc.h"
 
 #define INV_DATA_PORT_COUNT                3U
+#define INV_DATA_PERIODIC_POINT_COUNT     18U
 #define INV_DATA_POINT_COUNT              29U
 #define INV_DATA_RESPONSE_TIMEOUT_TICKS  1000U
 #define INV_DATA_POLL_TICKS               10U
@@ -42,6 +43,7 @@ typedef enum Inv_Data_Port_State {
     INV_DATA_PORT_READY = 0,              /* 当前端口可以查找并发送下一项寄存器请求。 */
     INV_DATA_PORT_DEVICE_IDLE,            /* 当前端口完成一台逆变器抄读，正在等待配置的全局轮询间隔。 */
     INV_DATA_PORT_WAIT_PERIODIC_READ,     /* 当前端口正在等待周期抄读响应。 */
+    INV_DATA_PORT_WAIT_ON_DEMAND_READ,    /* 当前端口正在等待645触发的实时读取响应。 */
     INV_DATA_PORT_WAIT_CONTROL_WRITE,     /* 当前端口正在等待实时控制写响应。 */
     INV_DATA_PORT_WAIT_CONTROL_REFRESH,   /* 当前端口正在等待控制寄存器优先回读响应。 */
     INV_DATA_PORT_WAIT_FORWARD_RESPONSE   /* 第一路已发送第二路报文，正在等待逆变器原始回复。 */
@@ -72,6 +74,7 @@ typedef struct Inv_Data_Point_Config {
     Inv_RealtimeValue_t *number_target;      /* 数值型数据解析成功后的实时数据存储地址。 */
     Inv_RealtimeString_t *string_target;     /* 设备编号等字符串数据解析成功后的存储地址。 */
     const char *name;                        /* 当前数据点用于日志打印的可读名称。 */
+    uint8_t point_index;                     /* 该点在29个统一数据点中的下标。 */
 } Inv_Data_Point_Config_t;
 
 /* 当前控制命令转换后的寄存器配置和写入数据全部保存在端口上下文中。 */
@@ -143,6 +146,12 @@ typedef struct Inv_Data_Port_Context {
     Inv_Forward_Frame_t forward_active;      /* 当前已经通过第一路发送并等待回复的原始报文。 */
     Inv_Data_Port_State_t forward_resume_state; /* 转发结束后恢复的周期READY或设备空闲状态。 */
     rt_bool_t forward_allowed;               /* 每完成一项周期读或识别请求，最多允许转发一帧。 */
+    volatile rt_bool_t demand_pending;        /* RT_TRUE表示645线程正在等待本端口实时读取。 */
+    volatile rt_bool_t demand_cancelled;      /* 上层等待超时后停止未发送的后续点。 */
+    uint8_t demand_archive_index;             /* 实时读取目标档案下标。 */
+    uint32_t demand_point_mask;               /* 尚未完成的实时读取点位图。 */
+    struct rt_semaphore demand_sem;           /* 实时读取整批完成后唤醒645线程。 */
+    rt_bool_t demand_sem_initialized;         /* 防止重复初始化静态信号量。 */
 } Inv_Data_Port_Context_t;
 
 /* 三个物理串口与档案接入端口保持固定映射，运行上下文只需保存本表下标。 */
@@ -195,6 +204,7 @@ static rt_bool_t inv_data_state_waiting_response(Inv_Data_Port_State_t state)
     /* 周期读、控制及透明转发等待状态都已经独占第一路串口。 */
     if((state == INV_DATA_PORT_WAIT_PERIODIC_READ) ||
        (state == INV_DATA_PORT_WAIT_CONTROL_WRITE) ||
+       (state == INV_DATA_PORT_WAIT_ON_DEMAND_READ) ||
        (state == INV_DATA_PORT_WAIT_CONTROL_REFRESH) ||
        (state == INV_DATA_PORT_WAIT_FORWARD_RESPONSE)) {
         return RT_TRUE;
@@ -266,6 +276,12 @@ static void inv_data_update_run_states(rt_tick_t now)
             data->run_state = INV_RUN_STATE_OFF; /* 总有功功率等于5W时归入关机状态，避免产生不连续的未知点。 */
         }
     }
+}
+
+/* 供645实时刷新总有功功率后立即重算状态，避免等待下一次1秒维护。 */
+void Inv_Data_Update_Run_States(void)
+{
+    inv_data_update_run_states(rt_tick_get());
 }
 
 /* 更新时间窗口总开关，只在首次检查或运行状态变化时打印一次日志。 */
@@ -642,6 +658,7 @@ static rt_bool_t inv_data_get_point(uint8_t archive_index,
 
     data = &g_inv_data[archive_index];     /* 实时数据槽位与档案下标一一对应。 */
     rt_memset(point, 0, sizeof(*point));   /* 清除未使用目标指针及名称等字段。 */
+    point->point_index = point_index;
 
     /* 下标0～2对应A、B、C三相电压。 */
     if(point_index < ENUM_PHASE_MAX) {
@@ -800,7 +817,7 @@ static void inv_data_advance_cursor(Inv_Data_Port_Context_t *context)
     ++context->point_index;
 
     /* 当前档案的29个数据点已经遍历完成时切换下一档案。 */
-    if(context->point_index >= INV_DATA_POINT_COUNT) {
+    if(context->point_index >= INV_DATA_PERIODIC_POINT_COUNT) {
         context->point_index = 0U;
         ++context->archive_index;
 
@@ -816,7 +833,7 @@ static rt_tick_t inv_data_device_idle_ticks(void)
 {
     uint16_t interval_seconds = ctu_cfg.poll_interval_seconds; /* 当前配置的全局逆变器周期抄读秒数。 */
 
-    if((interval_seconds < 5U) || (interval_seconds > 3600U)) /* Flash异常值不得造成无间隔抄读或超长不可控等待。 */
+    if((interval_seconds != 0U) && ((interval_seconds < 5U) || (interval_seconds > 3600U))) /* 0表示关闭周期抄读，其他异常值回退10秒。 */
     {
         interval_seconds = 10U; /* 保护回退只影响本次调度，不在后台反复擦写配置Flash。 */
     }
@@ -853,12 +870,12 @@ static rt_bool_t inv_data_find_next_point(Inv_Data_Port_Context_t *context, uint
     }
 
     /* 最多检查12个档案的全部29个点，避免没有可读点时形成死循环。 */
-    for(attempt = 0U; attempt < (INVERTER_ARCHIVE_MAX_COUNT * INV_DATA_POINT_COUNT); ++attempt) {
+    for(attempt = 0U; attempt < (INVERTER_ARCHIVE_MAX_COUNT * INV_DATA_PERIODIC_POINT_COUNT); ++attempt) {
         uint8_t archive_index = context->archive_index; /* 本次尝试对应的档案游标。 */
         uint8_t point_index = context->point_index;     /* 本次尝试对应的数据点游标。 */
         const Inv_Archive_t *archive = &g_inv_archive_lib.archives[archive_index]; /* 当前档案只读信息。 */
         Inv_Data_Point_Config_t point;                  /* 当前候选寄存器的统一配置。 */
-        rt_bool_t archive_last_point = (point_index == (INV_DATA_POINT_COUNT - 1U)) ? RT_TRUE : RT_FALSE; /* 是否为档案末点。 */
+        rt_bool_t archive_last_point = (point_index == (INV_DATA_PERIODIC_POINT_COUNT - 1U)) ? RT_TRUE : RT_FALSE; /* 是否为档案末点。 */
 
         inv_data_advance_cursor(context); /* 先移动下一游标，当前点完成后可以直接继续查找。 */
 
@@ -992,10 +1009,40 @@ static void inv_data_invalidate_active_point(Inv_Data_Port_Context_t *context)
     }
 }
 
+/* 完成一批645触发的实时读取，恢复请求前的周期状态并通知等待线程。 */
+static void inv_data_finish_demand(Inv_Data_Port_Context_t *context)
+{
+    context->demand_point_mask = 0U;
+    context->demand_pending = RT_FALSE;
+    context->state = context->resume_state;
+    rt_sem_release(&context->demand_sem);
+}
+
+/* 实时读取的当前Modbus请求结束后，清除已处理点并判断整批是否完成。 */
+static void inv_data_finish_demand_point(Inv_Data_Port_Context_t *context)
+{
+    uint8_t index;
+
+    for(index = 0U; index < context->active.read.point_count; ++index) {
+        context->demand_point_mask &= ~(1UL << context->active.read.points[index].point_index);
+    }
+    if((context->demand_cancelled == RT_TRUE) || (context->demand_point_mask == 0U)) {
+        inv_data_finish_demand(context);
+    }
+    else {
+        context->state = context->resume_state; /* 下一调度周期继续发送本批后续点。 */
+    }
+}
+
 /* 当前已发送数据点结束后，根据档案边界进入下一数据点或10秒空闲。 */
 static void inv_data_finish_active_point(Inv_Data_Port_Context_t *context)
 {
     context->forward_allowed = RT_TRUE; /* 一项周期请求结束后只发放一次第二路转发机会。 */
+
+    if(context->state == INV_DATA_PORT_WAIT_ON_DEMAND_READ) {
+        inv_data_finish_demand_point(context);
+        return;
+    }
 
     /* 当前点是该逆变器最后一项时，完成后进入该端口独立的10秒空闲。 */
     if(context->active.read.idle_after_active == RT_TRUE) {
@@ -1551,6 +1598,77 @@ static uint16_t inv_data_take_rx_frame(Inv_Data_Port_Context_t *context, uint8_t
     return frame_len;
 }
 
+/* 查找并发送645实时读取批次的下一个Modbus请求。 */
+static void inv_data_send_demand_request(Inv_Data_Port_Context_t *context)
+{
+    uint8_t frame[MODBUS_READ_REQUEST_LEN];
+    uint16_t frame_len = 0U;
+    rt_size_t written_size;
+    uint8_t point_index;
+    uint8_t group_last_index;
+
+    /* 即使位图中全是不支持点，也要能恢复进入实时读前的端口状态。 */
+    context->resume_state = context->state;
+
+    if(context->demand_cancelled == RT_TRUE) {
+        inv_data_finish_demand(context);
+        return;
+    }
+    for(point_index = 0U; point_index < INV_DATA_POINT_COUNT; ++point_index) {
+        Inv_Data_Point_Config_t point;
+        if((context->demand_point_mask & (1UL << point_index)) == 0U) {
+            continue;
+        }
+        rt_memset(&point, 0, sizeof(point));
+        if((inv_data_get_point(context->demand_archive_index, point_index, &point) != RT_TRUE) ||
+           (inv_data_point_is_readable(&point) != RT_TRUE)) {
+            inv_data_invalidate_point(&point);
+            context->demand_point_mask &= ~(1UL << point_index);
+            continue;
+        }
+        context->active_archive_index = context->demand_archive_index;
+        context->slave_addr = g_inv_archive_lib.archives[context->demand_archive_index].mb_addr;
+        rt_memset(&context->active.read, 0, sizeof(context->active.read));
+        context->active.read.points[0] = point;
+        context->active.read.point_count = 1U;
+        context->active.read.reg_count = point.reg_count;
+
+        /* 只保留现有三相电压和三相电流的连续寄存器合并。 */
+        group_last_index = (point_index < 3U) ? 2U : ((point_index < 6U) ? 5U : point_index);
+        while((context->active.read.point_count < INV_DATA_PHASE_COMBINE_MAX) &&
+              ((uint8_t)(point_index + context->active.read.point_count) <= group_last_index)) {
+            uint8_t next_index = point_index + context->active.read.point_count;
+            Inv_Data_Point_Config_t next_point;
+            Inv_Data_Point_Config_t *previous = &context->active.read.points[context->active.read.point_count - 1U];
+            if((context->demand_point_mask & (1UL << next_index)) == 0U) break;
+            if((inv_data_get_point(context->demand_archive_index, next_index, &next_point) != RT_TRUE) ||
+               (inv_data_point_is_readable(&next_point) != RT_TRUE) ||
+               (next_point.function_code != point.function_code) ||
+               (next_point.reg_addr != (uint16_t)(previous->reg_addr + previous->reg_count)) ||
+               ((context->active.read.reg_count + next_point.reg_count) > MODBUS_READ_REG_MAX)) break;
+            context->active.read.points[context->active.read.point_count++] = next_point;
+            context->active.read.reg_count += next_point.reg_count;
+        }
+
+        context->state = INV_DATA_PORT_WAIT_ON_DEMAND_READ;
+        if(modbus_m_read_request(context->slave_addr, point.function_code, point.reg_addr,
+                                 context->active.read.reg_count, frame, sizeof(frame), &frame_len) != RT_EOK) {
+            inv_data_invalidate_active_point(context);
+            inv_data_finish_demand_point(context);
+            return;
+        }
+        written_size = uart_mgmt_write(inv_data_uart_no(context), frame, frame_len);
+        if(written_size != frame_len) {
+            inv_data_invalidate_active_point(context);
+            inv_data_finish_demand_point(context);
+            return;
+        }
+        context->request_tick = rt_tick_get();
+        return;
+    }
+    inv_data_finish_demand(context); /* 位图中只有不支持点时也必须唤醒上层。 */
+}
+
 /* 判断当前第一路端口是否至少存在一个有效档案，无档案时透明转发无需等待周期机会。 */
 static rt_bool_t inv_forward_port_has_archive(const Inv_Data_Port_Context_t *context)
 {
@@ -1987,6 +2105,18 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
         return;
     }
 
+    /* 645实时读取只在工作时段执行，越界后未发送点保持无效并立即收尾。 */
+    if(context->demand_pending == RT_TRUE) {
+        if(g_inv_data_work_enabled != RT_TRUE) {
+            context->resume_state = context->state;
+            inv_data_finish_demand(context);
+        }
+        else {
+            inv_data_send_demand_request(context);
+        }
+        return;
+    }
+
     /* 控制写流程结束后，周期调度在普通数据点和10秒空闲前优先回读控制寄存器一次。 */
     if(inv_control_send_refresh_request(context) == RT_TRUE) {
         return;
@@ -2016,6 +2146,11 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
         return;
     }
 
+    /* 配置0表示关闭变量类周期抄读，端口仍可执行实时读写和透传。 */
+    if(ctu_cfg.poll_interval_seconds == 0U) {
+        return;
+    }
+
     /* 设备空闲时间尚未到达时保持原计时，期间已经在前面允许第二路使用空闲线路。 */
     if(context->state == INV_DATA_PORT_DEVICE_IDLE) {
         return;
@@ -2031,6 +2166,7 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
 void Inv_Data_Init(void)
 {
     rt_err_t semaphore_result; /* 静态控制结果信号量的初始化返回值。 */
+    static const char *demand_sem_names[INV_DATA_PORT_COUNT] = {"rd_rt0", "rd_rt1", "rd_rt2"};
 
     g_inv_data_initialized = RT_FALSE;
     g_inv_data_work_enabled = RT_FALSE;
@@ -2068,6 +2204,14 @@ void Inv_Data_Init(void)
     g_inv_data_ports[0].port_index = 0U;
     g_inv_data_ports[1].port_index = 1U;
     g_inv_data_ports[2].port_index = 2U;
+    for(uint8_t port_index = 0U; port_index < INV_DATA_PORT_COUNT; ++port_index) {
+        if(rt_sem_init(&g_inv_data_ports[port_index].demand_sem, demand_sem_names[port_index],
+                       0U, RT_IPC_FLAG_FIFO) != RT_EOK) {
+            rt_kprintf("%s realtime read semaphore[%d] init failed\n", get_char_time(), port_index);
+            return;
+        }
+        g_inv_data_ports[port_index].demand_sem_initialized = RT_TRUE;
+    }
     g_inv_data_initialized = RT_TRUE;
 }
 
@@ -2221,9 +2365,9 @@ rt_err_t Inv_Control_Submit(const Inv_Control_Request_t *request)
     }
 
     /* 非工作时段拒绝新的控制请求，调用方收到错误后不需要等待异步控制结果。 */
-    if((g_inv_data_work_enabled != RT_TRUE) && (request->type != INV_CONTROL_POWER_OFF)) {
+    if(g_inv_data_work_enabled != RT_TRUE) {
         rt_hw_interrupt_enable(level);
-        return -RT_EBUSY; /* 非工作时段仅允许关机，开机及功率调节仍拒绝提交。 */
+        return -RT_EBUSY; /* 非工作时段不再提交任何新的实时控制。 */
     }
 
     /* 每个端口最多暂存4项控制请求，队列满时由调用方稍后重试。 */
@@ -2470,6 +2614,65 @@ rt_err_t Inv_Control_Get_Result_By_Id(uint32_t request_id, Inv_Control_Result_In
         }
         rt_thread_mdelay(1U); /* 避免其他结果长期存在时当前线程持续空转占用CPU。 */
     }
+}
+
+void Inv_Data_Invalidate(uint8_t archive_index, uint32_t point_mask)
+{
+    uint8_t point_index;
+
+    if(archive_index >= INVERTER_ARCHIVE_MAX_COUNT) return;
+    for(point_index = 0U; point_index < INV_DATA_POINT_COUNT; ++point_index) {
+        Inv_Data_Point_Config_t point;
+        if((point_mask & (1UL << point_index)) != 0U) {
+            rt_memset(&point, 0, sizeof(point));
+            if(inv_data_get_point(archive_index, point_index, &point) == RT_TRUE) {
+                inv_data_invalidate_point(&point);
+            }
+        }
+    }
+}
+
+/* 同步等待一台逆变器的指定数据点完成实时Modbus读取。 */
+rt_err_t Inv_Data_Refresh(uint8_t archive_index, uint32_t point_mask, int32_t timeout)
+{
+    Inv_Data_Port_Context_t *context;
+    rt_base_t level;
+    rt_err_t result;
+
+    if((g_inv_data_initialized != RT_TRUE) || (archive_index >= INVERTER_ARCHIVE_MAX_COUNT) ||
+       (point_mask == 0U) || ((point_mask >> INV_DATA_POINT_COUNT) != 0U) ||
+       (timeout < RT_WAITING_FOREVER)) {
+        return -RT_EINVAL;
+    }
+    Inv_Data_Invalidate(archive_index, point_mask); /* 任何失败路径都不能退回上次缓存。 */
+    context = inv_control_find_port_context(archive_index);
+    if((context == RT_NULL) || (context->poll_enabled != RT_TRUE) ||
+       (context->demand_sem_initialized != RT_TRUE)) {
+        return -RT_EBUSY;
+    }
+    if(g_inv_data_work_enabled != RT_TRUE) {
+        return -RT_EBUSY;
+    }
+
+    while(rt_sem_trytake(&context->demand_sem) == RT_EOK) {
+        /* 清理上次超时后迟到的完成信号。 */
+    }
+    level = rt_hw_interrupt_disable();
+    if(context->demand_pending == RT_TRUE) {
+        rt_hw_interrupt_enable(level);
+        return -RT_EBUSY;
+    }
+    context->demand_archive_index = archive_index;
+    context->demand_point_mask = point_mask;
+    context->demand_cancelled = RT_FALSE;
+    context->demand_pending = RT_TRUE;
+    rt_hw_interrupt_enable(level);
+
+    result = rt_sem_take(&context->demand_sem, timeout);
+    if(result != RT_EOK) {
+        context->demand_cancelled = RT_TRUE; /* 已发出的请求仍收尾，但不再发送后续点。 */
+    }
+    return result;
 }
 
 /* 按档案槽位获取实时数据，无效档案或越界时返回RT_NULL。 */

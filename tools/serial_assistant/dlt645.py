@@ -534,6 +534,9 @@ def encode_field(value: Any, definition: Mapping[str, Any]) -> bytes:
         candidate = _decimal(value, label)
         if "minimum" in definition and candidate < _decimal(definition["minimum"], "minimum"):
             raise ValueError(f"{label}不能小于{definition['minimum']}")
+        if ("minimum_nonzero" in definition and candidate != 0 and
+                candidate < _decimal(definition["minimum_nonzero"], "minimum_nonzero")):
+            raise ValueError(f"{label}非零时不能小于{definition['minimum_nonzero']}")
         if "maximum" in definition and candidate > _decimal(definition["maximum"], "maximum"):
             raise ValueError(f"{label}不能大于{definition['maximum']}")
     if kind == "bcd":
@@ -622,8 +625,7 @@ class DataIdentifierRegistry:
             raise ValueError("配置文件protocol必须为DLT645-2007")
         category_map = {str(item["id"]): str(item.get("description", item["id"]))
                         for item in document.get("categories", []) if isinstance(item, dict) and "id" in item}
-        category_map.setdefault("standard", "标准DL/T 645")
-        category_map.setdefault("extended", "扩展DL/T 645")
+        category_map.setdefault("standard", "标准")
         schemas = document.get("schemas", {})
         if not isinstance(schemas, dict):
             raise ValueError("schemas必须是对象")
@@ -789,6 +791,23 @@ class DataIdentifierRegistry:
                     category_map.get(category, category), group_id,
                     str(raw.get("display", f"{prefix[:2]} {prefix[2:4]} {prefix[4:]} xx | {group_description}")), suffix,
                 ))
+        configured_group_order = document.get("category_group_order", {})
+        if configured_group_order and not isinstance(configured_group_order, dict):
+            raise ValueError("category_group_order必须是对象")
+        category_rank = {category: index for index, category in enumerate(category_map)}
+        group_rank = {
+            str(category): {str(group_id): index for index, group_id in enumerate(groups)}
+            for category, groups in configured_group_order.items()
+            if isinstance(groups, list)
+        }
+
+        def definition_order(item: DataIdentifierDefinition) -> tuple[int, int]:
+            """按规范书类别顺序和各类别标识组顺序稳定排列，未配置组统一追加到末尾。"""
+            category_groups = group_rank.get(item.category, {})
+            return (category_rank.get(item.category, len(category_rank)),
+                    category_groups.get(item.group_id, len(category_groups)))
+
+        definitions.sort(key=definition_order)  # Python稳定排序会保留同一标识组内原有的数据标识顺序。
         return cls(definitions, document.get("defaults", {}), category_map)
 
     def get(self, data_identifier: str) -> Optional[DataIdentifierDefinition]:

@@ -46,7 +46,7 @@ typedef enum Time_Ctrl_Action
 {
     TIME_CTRL_ACTION_NONE = 0, /* 当前没有待提交动作。 */
     TIME_CTRL_ACTION_START,    /* 提交时段规定的有功控制。 */
-    TIME_CTRL_ACTION_RESTORE   /* 按原控制方式提交额定有功功率恢复控制。 */
+    TIME_CTRL_ACTION_RESTORE   /* 提交100%有功功率百分比恢复控制。 */
 } Time_Ctrl_Action_t;
 
 /* Set/Stop写入的单档案命令邮箱。 */
@@ -67,7 +67,7 @@ typedef struct Time_Ctrl_Context
     uint8_t done_mask;           /* 已完成或已错过时段的位图。 */
     int8_t active_period;        /* 当前正在生效的时段下标，-1表示无。 */
     int8_t action_period;        /* 当前动作对应的时段下标，-1表示命令更新恢复。 */
-    uint8_t output_mode;         /* 最近一次已提交限功率命令的控制方式，用于选择恢复寄存器。 */
+    uint8_t output_mode;         /* 最近一次已提交限功率命令的控制方式，保留用于运行状态记录。 */
     Time_Ctrl_Action_t action;   /* 当前待提交的控制动作。 */
     rt_bool_t enabled;           /* RT_TRUE表示当前命令允许启动新时段。 */
     rt_bool_t output_limited;    /* RT_TRUE表示已提交过限功率命令，需要恢复。 */
@@ -95,7 +95,7 @@ static rt_bool_t time_ctrl_value_valid(const Inv_CtrlRegBlk_t *control, int32_t 
 /* 按协议的小数位计算百分比恢复额定输出所需的100%定点值。 */
 static rt_bool_t time_ctrl_restore_value(uint8_t archive_index, int32_t *value);
 
-/* 优先按额定有功功率生成数值恢复请求，条件不满足时退回100%百分比恢复。 */
+/* 生成100%有功功率百分比恢复请求。 */
 static rt_bool_t time_ctrl_prepare_restore_request(uint8_t archive_index,
                                                    Time_Ctrl_Mode_t mode,
                                                    Inv_Control_Request_t *request);
@@ -566,74 +566,7 @@ static rt_bool_t time_ctrl_restore_value(uint8_t archive_index, int32_t *value)
            RT_TRUE : RT_FALSE;
 }
 
-/* 将本地额定有功功率调整到数值控制寄存器的小数位后作为恢复值。 */
-static rt_bool_t time_ctrl_Pn_restore_value(uint8_t archive_index, int32_t *value)
-{
-    const Inv_Proto_t *protocol;           /* 目标档案当前关联的协议对象。 */
-    const Inv_RegBlk_t *Pn_config;         /* 协议库中的额定有功功率Pn读取配置。 */
-    const Inv_RealtimeValue_t *Pn_data;    /* 周期抄读保存的本地额定有功功率Pn。 */
-    Inv_CtrlRegBlk_t control;              /* 有功功率数值控制寄存器配置。 */
-    int32_t scaled_value;                  /* 已换算成控制寄存器小数位的额定功率。 */
-    uint8_t decimal_places;                /* 换算过程中当前数值的小数位数。 */
-
-    if((archive_index >= INVERTER_ARCHIVE_MAX_COUNT) || (value == RT_NULL)) {
-        return RT_FALSE;
-    }
-
-    protocol = Inv_Archive_Get_Protocol(archive_index); /* 取得档案绑定的协议库，后续读取额定功率配置。 */
-    /* 档案未绑定协议库时不能判断额定功率寄存器是否受支持。 */
-    if(protocol == RT_NULL) {
-        return RT_FALSE;
-    }
-
-    Pn_config = &protocol->param.Pn; /* 取得额定有功功率Pn的协议寄存器配置。 */
-    Pn_data = &g_inv_data[archive_index].param.Pn; /* 取得最近一次周期抄读的额定有功功率Pn。 */
-
-    /* 额定功率读取寄存器未配置、功能码不支持或本地尚无有效值时改用百分比恢复。 */
-    if((Pn_config->reg_addr == INVERTER_PROTOCOL_REGISTER_UNUSED) ||
-       (Pn_config->reg_cnt == 0U) ||
-       ((Pn_config->read_func_code != MODBUS_FUNC_READ_HOLDING) &&
-        (Pn_config->read_func_code != MODBUS_FUNC_READ_INPUT)) ||
-       (Pn_data->valid == 0U) || (Pn_data->value <= 0)) {
-        return RT_FALSE;
-    }
-
-    /* 数值控制寄存器不可用时不能通过额定有功功率数值恢复。 */
-    if(time_ctrl_get_control_config(archive_index,
-                                    TIME_CTRL_ACTIVE_POWER_VALUE,
-                                    &control) == RT_FALSE) {
-        return RT_FALSE;
-    }
-
-    scaled_value = Pn_data->value;                 /* 从Pn读取寄存器使用的小数位开始换算。 */
-    decimal_places = Pn_config->decimal_places;    /* 记录当前scaled_value对应的小数位。 */
-
-    /* 控制寄存器小数位更多时放大本地定点值，并在每一步检查int32_t溢出。 */
-    while(decimal_places < control.decimal_places) {
-        /* 放大前检查正数额定功率是否会超过int32_t可表示范围。 */
-        if(scaled_value > (INT32_MAX / 10)) {
-            return RT_FALSE;
-        }
-        scaled_value *= 10;
-        ++decimal_places;
-    }
-
-    /* 控制寄存器小数位更少时缩小本地定点值，无法表示的小数部分按整数除法舍去。 */
-    while(decimal_places > control.decimal_places) {
-        scaled_value /= 10;
-        --decimal_places;
-    }
-
-    /* 换算结果必须为正数并满足目标控制寄存器配置的上下限。 */
-    if((scaled_value <= 0) || (time_ctrl_value_valid(&control, scaled_value) == RT_FALSE)) {
-        return RT_FALSE;
-    }
-
-    *value = scaled_value; /* 将校验通过的额定功率定点值返回给恢复请求。 */
-    return RT_TRUE;
-}
-
-/* 数值控优先写入本地额定有功功率，其余情况统一使用100%百分比恢复。 */
+/* 无论时段原来采用哪种模式，结束时都统一恢复为100%有功功率百分比。 */
 static rt_bool_t time_ctrl_prepare_restore_request(uint8_t archive_index,
                                                    Time_Ctrl_Mode_t mode,
                                                    Inv_Control_Request_t *request)
@@ -643,14 +576,8 @@ static rt_bool_t time_ctrl_prepare_restore_request(uint8_t archive_index,
         return RT_FALSE;
     }
 
-    /* 只有原时段使用数值控且额定功率配置、本地值和数值寄存器均有效时才按数值恢复。 */
-    if((mode == TIME_CTRL_ACTIVE_POWER_VALUE) &&
-       (time_ctrl_Pn_restore_value(archive_index, &request->value) == RT_TRUE)) {
-        request->type = INV_CONTROL_ACTIVE_POWER;
-        return RT_TRUE;
-    }
-
-    request->type = INV_CONTROL_ACTIVE_POWER_PERCENT; /* 数值恢复不可用时退回100%功率百分比恢复。 */
+    RT_UNUSED(mode); /* 恢复策略不再随原时段控制方式变化。 */
+    request->type = INV_CONTROL_ACTIVE_POWER_PERCENT;
     return time_ctrl_restore_value(archive_index, &request->value);
 }
 
@@ -671,7 +598,7 @@ static rt_err_t time_ctrl_submit(uint8_t archive_index,
     request.request_id = Inv_Control_Allocate_Request_Id(); /* 从公共分配器取得跨控制来源唯一的请求编号。 */
     request.archive_index = archive_index;              /* 指定本次控制对应的档案。 */
 
-    /* 恢复动作根据原控制方式优先选择额定功率数值恢复或100%百分比恢复。 */
+    /* 恢复动作统一写入100%有功功率百分比。 */
     if(action == TIME_CTRL_ACTION_RESTORE) {
         /* 恢复请求无法取得安全控制方式和值时拒绝入队。 */
         if(time_ctrl_prepare_restore_request(archive_index,

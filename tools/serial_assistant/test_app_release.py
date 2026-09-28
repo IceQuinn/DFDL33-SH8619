@@ -32,6 +32,14 @@ class AppReleaseTests(unittest.TestCase):
         scrollbar.grid.assert_called_once_with()
         self.assertTrue(window.dlt_fields_scroll_visible)
 
+    def test_dlt_fields_scroll_resets_before_and_after_layout(self):
+        """长数据切换为短数据时应立即回顶，并在 Tk 完成排版后再次回顶。"""
+        canvas = Mock()
+        window = SimpleNamespace(dlt_fields_canvas=canvas)
+        SerialAssistant._reset_dlt_fields_scroll(window)
+        canvas.yview_moveto.assert_called_once_with(0)
+        canvas.after_idle.assert_called_once_with(canvas.yview_moveto, 0)
+
     def test_address_restore_and_legacy_settings(self):
         """合法地址保留前导零及广播格式，旧配置或非法记录兼容回退默认地址。"""
         for value, expected in (("000102030405", "000102030405"), ("00 01 02 03 04 05", "000102030405"),

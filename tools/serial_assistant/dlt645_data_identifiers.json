@@ -3,11 +3,31 @@
   "version": 2,
   "description": "DL/T 645-2007数据标识及扩展数据区结构配置",
   "categories": [
-    {"id": "standard", "description": "标准DL/T 645"},
-    {"id": "extended", "description": "扩展DL/T 645"},
-    {"id": "other", "description": "其他"},
-    {"id": "protocol_library", "description": "协议库"}
+    {"id": "standard", "description": "标准"},
+    {"id": "variable", "description": "变量类"},
+    {"id": "parameter", "description": "参数类"},
+    {"id": "event", "description": "事件类"},
+    {"id": "other", "description": "其他类"}
   ],
+  "category_group_order": {
+    "standard": ["standard", "meter_parameter", "manufacturer_information"],
+    "variable": [
+      "inverter_three_phase_voltage", "inverter_three_phase_current", "inverter_active_power",
+      "inverter_reactive_power", "inverter_power_factor", "inverter_all_variables"
+    ],
+    "parameter": [
+      "inverter_rated_active_power", "inverter_rated_reactive_power", "inverter_output_type",
+      "inverter_status", "inverter_active_power_adjustment", "inverter_reactive_power_adjustment",
+      "inverter_power_factor_adjustment", "inverter_active_power_percentage_adjustment",
+      "inverter_reactive_power_percentage_adjustment", "inverter_daily_energy",
+      "active_power_schedule", "active_power_percent_schedule", "inverter_archive_count", "inverter_archive"
+    ],
+    "event": [],
+    "other": [
+      "converter_realtime", "converter_datetime", "converter_freeze", "converter_curve",
+      "device_maintenance", "serial_port_parameter", "protocol_library_count", "protocol_library_slots"
+    ]
+  },
   "defaults": {
     "password_permission": "00",
     "password": "000000",
@@ -198,7 +218,7 @@
     },
     "poll_interval": {
       "fields": [
-        {"name": "interval_seconds", "description": "全局周期抄读时间", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 0, "minimum": 5, "maximum": 3600, "default": "10", "unit": "s"}
+        {"name": "interval_seconds", "description": "全局周期抄读时间", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 0, "minimum": 0, "minimum_nonzero": 5, "maximum": 3600, "default": "10", "unit": "s"}
       ]
     },
     "device_action": {
@@ -250,23 +270,23 @@
       }
     },
     {
-      "di": "04000900", "category": "extended", "group_id": "device_maintenance", "group_description": "通信与设备维护", "description": "周期抄读轮询时间", "access": "read_write",
+      "di": "04000900", "category": "other", "group_id": "device_maintenance", "group_description": "通信与设备维护", "description": "周期抄读轮询时间", "access": "read_write",
       "read_schema": "poll_interval", "write_schema": "poll_interval"
     },
     {
-      "di": "04000A00", "category": "extended", "group_id": "device_maintenance", "group_description": "通信与设备维护", "description": "设备重启（写1执行）", "access": "write",
+      "di": "04000A00", "category": "other", "group_id": "device_maintenance", "group_description": "通信与设备维护", "description": "设备重启（写1执行）", "access": "write",
       "write_schema": "device_action"
     },
     {
-      "di": "04000B00", "category": "extended", "group_id": "device_maintenance", "group_description": "通信与设备维护", "description": "清除全部事件（写1执行）", "access": "write",
+      "di": "04000B00", "category": "other", "group_id": "device_maintenance", "group_description": "通信与设备维护", "description": "清除全部事件（写1执行）", "access": "write",
       "write_schema": "device_action"
     },
     {
-      "di": "04000C00", "category": "extended", "group_id": "device_maintenance", "group_description": "通信与设备维护", "description": "恢复出厂设置（写1执行）", "access": "write",
+      "di": "04000C00", "category": "other", "group_id": "device_maintenance", "group_description": "通信与设备维护", "description": "恢复出厂设置（写1执行）", "access": "write",
       "write_schema": "device_action"
     },
     {
-      "di": "04000D00", "category": "extended", "group_id": "device_maintenance", "group_description": "通信与设备维护", "description": "电压校准（写1执行）", "access": "write",
+      "di": "04000D00", "category": "other", "group_id": "device_maintenance", "group_description": "通信与设备维护", "description": "电压校准（写1执行）", "access": "write",
       "write_schema": "device_action"
     },
     {
@@ -469,58 +489,8 @@
       ]}
     },
     {
-      "di": "F0010001",
-      "category": "extended",
-      "group_id": "extended_example",
-      "group_description": "扩展示例",
-      "description": "扩展示例：目标电压及工作模式",
-      "access": "read_write",
-      "read_response": {
-        "fields": [
-          {
-            "name": "target_voltage",
-            "description": "目标电压",
-            "type": "bcd",
-            "length": 2,
-            "byte_order": "little",
-            "decimals": 1,
-            "unit": "V"
-          },
-          {
-            "name": "mode",
-            "description": "工作模式",
-            "type": "enum",
-            "length": 1,
-            "byte_order": "little",
-            "values": {"0": "停止", "1": "运行", "2": "维护"}
-          }
-        ]
-      },
-      "write_request": {
-        "fields": [
-          {
-            "name": "target_voltage",
-            "description": "目标电压",
-            "type": "bcd",
-            "length": 2,
-            "byte_order": "little",
-            "decimals": 1,
-            "unit": "V"
-          },
-          {
-            "name": "mode",
-            "description": "工作模式",
-            "type": "enum",
-            "length": 1,
-            "byte_order": "little",
-            "values": {"0": "停止", "1": "运行", "2": "维护"}
-          }
-        ]
-      }
-    },
-    {
       "di": "04E701FE",
-      "category": "protocol_library",
+      "category": "other",
       "group_id": "protocol_library_count",
       "group_description": "04 E7 01 FE | 协议库总数",
       "selector": "FE",
@@ -532,7 +502,7 @@
   "data_identifier_groups": [
     {
       "id": "serial_port_parameter",
-      "category": "extended",
+      "category": "other",
       "prefix": "040008",
       "display": "04 00 08 xx | 串口参数",
       "description": "串口参数",
@@ -546,7 +516,7 @@
     },
     {
       "id": "protocol_library_slots",
-      "category": "protocol_library",
+      "category": "other",
       "prefix": "04E701",
       "display": "04 E7 01 xx | 协议库槽位",
       "description": "协议库槽位",
@@ -557,7 +527,7 @@
     },
     {
       "id": "active_power_schedule",
-      "category": "extended",
+      "category": "parameter",
       "prefix": "04E60B",
       "display": "04 E6 0B xx | 有功功率时段调节",
       "description": "有功功率时段调节",
@@ -569,7 +539,7 @@
     },
     {
       "id": "active_power_percent_schedule",
-      "category": "extended",
+      "category": "parameter",
       "prefix": "04E60C",
       "display": "04 E6 0C xx | 有功功率百分比时段调节",
       "description": "有功功率百分比时段调节",
@@ -581,7 +551,7 @@
     },
     {
       "id": "inverter_rated_active_power",
-      "category": "extended",
+      "category": "parameter",
       "prefix": "04E601",
       "display": "04 E6 01 xx | 逆变器额定有功功率",
       "description": "逆变器额定有功功率",
@@ -592,7 +562,7 @@
     },
     {
       "id": "inverter_rated_reactive_power",
-      "category": "extended",
+      "category": "parameter",
       "prefix": "04E602",
       "display": "04 E6 02 xx | 逆变器额定无功功率",
       "description": "逆变器额定无功功率",
@@ -603,7 +573,7 @@
     },
     {
       "id": "inverter_output_type",
-      "category": "extended",
+      "category": "parameter",
       "prefix": "04E603",
       "display": "04 E6 03 xx | 逆变器输出类型",
       "description": "逆变器输出类型",
@@ -614,7 +584,7 @@
     },
     {
       "id": "inverter_daily_energy",
-      "category": "extended",
+      "category": "parameter",
       "prefix": "04E60A",
       "display": "04 E6 0A xx | 逆变器日发电量",
       "description": "逆变器日发电量",
@@ -625,7 +595,7 @@
     },
     {
       "id": "inverter_three_phase_voltage",
-      "category": "extended",
+      "category": "variable",
       "prefix": "02E601",
       "display": "02 E6 01 xx | 逆变器三相电压块",
       "description": "逆变器三相电压块",
@@ -641,7 +611,7 @@
     },
     {
       "id": "inverter_three_phase_current",
-      "category": "extended",
+      "category": "variable",
       "prefix": "02E602",
       "display": "02 E6 02 xx | 逆变器三相电流块",
       "description": "逆变器三相电流块",
@@ -652,7 +622,7 @@
     },
     {
       "id": "inverter_active_power",
-      "category": "extended",
+      "category": "variable",
       "prefix": "02E603",
       "display": "02 E6 03 xx | 逆变器瞬时有功功率块",
       "description": "逆变器瞬时有功功率块",
@@ -663,7 +633,7 @@
     },
     {
       "id": "inverter_reactive_power",
-      "category": "extended",
+      "category": "variable",
       "prefix": "02E604",
       "display": "02 E6 04 xx | 逆变器瞬时无功功率块",
       "description": "逆变器瞬时无功功率块",
@@ -674,7 +644,7 @@
     },
     {
       "id": "inverter_power_factor",
-      "category": "extended",
+      "category": "variable",
       "prefix": "02E605",
       "display": "02 E6 05 xx | 逆变器功率因数块",
       "description": "逆变器功率因数块",
@@ -685,7 +655,7 @@
     },
     {
       "id": "inverter_all_variables",
-      "category": "extended",
+      "category": "variable",
       "prefix": "02E60F",
       "display": "02 E6 0F xx | 逆变器所有变量数据块",
       "description": "逆变器所有变量数据块",
@@ -695,7 +665,7 @@
     },
     {
       "id": "inverter_status",
-      "category": "extended",
+      "category": "parameter",
       "prefix": "04E604",
       "display": "04 E6 04 xx | 逆变器运行状态",
       "description": "逆变器运行状态",
@@ -713,7 +683,7 @@
     },
     {
       "id": "inverter_active_power_adjustment",
-      "category": "extended",
+      "category": "parameter",
       "prefix": "04E605",
       "display": "04 E6 05 xx | 逆变器有功功率调节",
       "description": "逆变器有功功率调节",
@@ -725,7 +695,7 @@
     },
     {
       "id": "inverter_reactive_power_adjustment",
-      "category": "extended",
+      "category": "parameter",
       "prefix": "04E606",
       "display": "04 E6 06 xx | 逆变器无功功率调节",
       "description": "逆变器无功功率调节",
@@ -737,7 +707,7 @@
     },
     {
       "id": "inverter_power_factor_adjustment",
-      "category": "extended",
+      "category": "parameter",
       "prefix": "04E607",
       "display": "04 E6 07 xx | 逆变器功率因数调节",
       "description": "逆变器功率因数调节",
@@ -749,7 +719,7 @@
     },
     {
       "id": "inverter_active_power_percentage_adjustment",
-      "category": "extended",
+      "category": "parameter",
       "prefix": "04E608",
       "display": "04 E6 08 xx | 逆变器有功功率百分比调节",
       "description": "逆变器有功功率百分比调节",
@@ -761,7 +731,7 @@
     },
     {
       "id": "inverter_reactive_power_percentage_adjustment",
-      "category": "extended",
+      "category": "parameter",
       "prefix": "04E609",
       "display": "04 E6 09 xx | 逆变器无功功率百分比调节",
       "description": "逆变器无功功率百分比调节",
@@ -773,7 +743,7 @@
     },
     {
       "id": "inverter_archive_count",
-      "category": "extended",
+      "category": "parameter",
       "prefix": "04E621",
       "display": "04 E6 21 00 | 光伏逆变器档案数",
       "description": "光伏逆变器档案数",
@@ -783,7 +753,7 @@
     },
     {
       "id": "inverter_archive",
-      "category": "extended",
+      "category": "parameter",
       "prefix": "04E621",
       "display": "04 E6 21 xx | 逆变器档案",
       "description": "逆变器档案",

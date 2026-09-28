@@ -396,6 +396,11 @@ class SerialAssistant(tk.Tk):
             self.dlt_fields_scroll.grid_remove()
             self.dlt_fields_scroll_visible = False
 
+    def _reset_dlt_fields_scroll(self) -> None:
+        """数据区结构改变时回到顶部，并在 Tk 完成重新排版后再次校正视口。"""
+        self.dlt_fields_canvas.yview_moveto(0)
+        self.dlt_fields_canvas.after_idle(self.dlt_fields_canvas.yview_moveto, 0)
+
     def refresh_ports(self) -> None:
         ports = [p.device for p in list_ports.comports()] if list_ports else []
         self.proxy_combo["values"] = ports
@@ -430,11 +435,8 @@ class SerialAssistant(tk.Tk):
         all_item_labels = [self._dlt_item_label(item) for item in available]
         self.dlt_group_combo.configure(width=combobox_width(all_group_labels, 12))
         self.dlt_di_combo.configure(width=combobox_width(all_item_labels, 24))
-        available_categories = {item.category for item in available}  # 当前读写动作下实际存在数据标识的类别集合。
-        for category, description in self.dlt_registry.categories.items():  # 严格按照配置文件声明顺序显示标准、扩展、其他、协议库。
-            if category in available_categories:  # 没有当前访问权限数据标识的类别不显示空页面。
-                label = f"{category} | {description}"
-                self.dlt_category_value_map[label] = category
+        for category, description in self.dlt_registry.categories.items():  # 五个类别始终按规范书顺序显示，暂未配置的事件类也保留入口。
+            self.dlt_category_value_map[description] = category
         category_values = list(self.dlt_category_value_map)
         self.dlt_category_combo["values"] = category_values
         selected_category = self._selected_category()
@@ -519,6 +521,7 @@ class SerialAssistant(tk.Tk):
         self.dlt_all_ff_var = None  # 切换数据标识后清除上一档案槽位的删除选择，避免误删新选择的槽位。
         self.dlt_all_ff_widgets.clear()  # 新数据标识会重新登记自己的可编辑字段控件。
         data_identifier = self._selected_di(silent=True)
+        self._reset_dlt_fields_scroll()
         definition = self.dlt_registry.get(data_identifier) if data_identifier else None
         if not definition:
             if self.dlt_action_var.get() == "写":
