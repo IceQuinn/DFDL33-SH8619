@@ -45,7 +45,6 @@ typedef enum Inv_Data_Port_State {
     INV_DATA_PORT_WAIT_PERIODIC_READ,     /* 当前端口正在等待周期抄读响应。 */
     INV_DATA_PORT_WAIT_ON_DEMAND_READ,    /* 当前端口正在等待645触发的实时读取响应。 */
     INV_DATA_PORT_WAIT_CONTROL_WRITE,     /* 当前端口正在等待实时控制写响应。 */
-    INV_DATA_PORT_WAIT_CONTROL_REFRESH,   /* 当前端口正在等待控制寄存器优先回读响应。 */
     INV_DATA_PORT_WAIT_FORWARD_RESPONSE   /* 第一路已发送第二路报文，正在等待逆变器原始回复。 */
 } Inv_Data_Port_State_t;
 
@@ -87,7 +86,7 @@ typedef struct Inv_Control_Active {
     uint8_t data_type;                              /* 控制值的数据类型，使用TYPE_*定义。 */
     uint8_t byte_order;                             /* 控制值多字节排列方式。 */
     uint8_t decimal_places;                         /* 浮点控制值转换时使用的小数位数。 */
-    Inv_RealtimeValue_t *target;                    /* 控制成功后需要更新的实时控制数据。 */
+    Inv_RealtimeValue_t *target;                    /* 控制后需要置为无效的旧实时控制数据。 */
     const char *name;                               /* 当前控制项用于日志打印的名称。 */
 } Inv_Control_Active_t;
 
@@ -110,7 +109,7 @@ typedef struct Inv_Data_Read_Active {
 /* 周期读与控制事务不会同时占用同一串口，使用联合体复用两类活动数据内存。 */
 typedef union Inv_Data_Active {
     Inv_Data_Read_Active_t read;       /* 周期抄读及连续三相数据合并使用的活动数据。 */
-    Inv_Control_Active_t control;      /* 控制写和控制寄存器优先回读使用的活动数据。 */
+    Inv_Control_Active_t control;      /* 控制写使用的活动数据。 */
 } Inv_Data_Active_t;
 
 /* 串口编号和档案端口映射固定不变，放入只读表后无需在每个运行上下文中重复保存。 */
@@ -132,8 +131,6 @@ typedef struct Inv_Data_Port_Context {
     Inv_Data_Port_State_t resume_state;      /* 实时控制完成后需要恢复的周期抄读状态。 */
     Inv_Data_Active_t active;                /* 当前线上事务使用的周期读或控制活动数据。 */
     Inv_Control_Queue_t control_queue;       /* 当前端口等待发送的高优先级控制请求。 */
-    uint8_t control_refresh_mask[INVERTER_ARCHIVE_MAX_COUNT]; /* 各档案待优先回读的控制类型位图。 */
-    rt_bool_t control_refresh_pending;       /* RT_TRUE表示当前端口至少存在一项控制寄存器回读标志。 */
     rt_tick_t request_tick;                  /* 当前请求完整写入串口时记录的系统tick。 */
     rt_tick_t idle_tick;                     /* 当前档案第一帧发送时间，设备空闲时据此计算剩余轮询时间。 */
     rt_tick_t archive_poll_start_tick;       /* 当前档案第一帧完整写入串口时记录的周期起点。 */
@@ -205,7 +202,6 @@ static rt_bool_t inv_data_state_waiting_response(Inv_Data_Port_State_t state)
     if((state == INV_DATA_PORT_WAIT_PERIODIC_READ) ||
        (state == INV_DATA_PORT_WAIT_CONTROL_WRITE) ||
        (state == INV_DATA_PORT_WAIT_ON_DEMAND_READ) ||
-       (state == INV_DATA_PORT_WAIT_CONTROL_REFRESH) ||
        (state == INV_DATA_PORT_WAIT_FORWARD_RESPONSE)) {
         return RT_TRUE;
     }
@@ -550,88 +546,6 @@ static Inv_Control_Result_t inv_control_get_active(const Inv_Control_Request_t *
     }
 
     return INV_CONTROL_RESULT_OK;
-}
-
-/* 标记当前控制寄存器需要在普通周期抄读前优先读取一次。 */
-static void inv_control_mark_refresh(Inv_Data_Port_Context_t *context)
-{
-    uint8_t archive_index = context->active.control.request.archive_index; /* 控制请求所属档案。 */
-    uint8_t control_type = (uint8_t)context->active.control.request.type;   /* 需要优先回读的控制类型。 */
-    uint8_t refresh_bit;                                                    /* 当前控制类型在位图中的标志位。 */
-
-    /* 开机和关机寄存器是纯写命令，不允许进入任何回读流程。 */
-    if((control_type == INV_CONTROL_POWER_ON) ||
-       (control_type == INV_CONTROL_POWER_OFF)) {
-        return;
-    }
-
-    /* 当前活动控制信息经过组帧检查，档案下标和控制类型应当都位于有效范围。 */
-    if((archive_index >= INVERTER_ARCHIVE_MAX_COUNT) || (control_type >= INV_CONTROL_TYPE_MAX)) {
-        return;
-    }
-
-    refresh_bit = (uint8_t)(1U << control_type); /* 将控制类型转换为单个回读标志位。 */
-    context->control_refresh_mask[archive_index] |= refresh_bit;
-    context->control_refresh_pending = RT_TRUE;
-    context->active.control.target->valid = 0U; /* 控制值可能已经改变，回读成功前旧实时值不再可信。 */
-    rt_kprintf("%s uart[%d] archive[%d] control[%s] queued for priority read\n", get_char_time(), inv_data_uart_no(context), archive_index + 1, context->active.control.name);
-}
-
-/* 从当前端口位图中取出一项待回读控制寄存器，并准备活动控制配置。 */
-static rt_bool_t inv_control_prepare_refresh(Inv_Data_Port_Context_t *context)
-{
-    Inv_Control_Request_t request; /* 用于复用控制配置查询接口的临时请求。 */
-    Inv_Control_Result_t result;   /* 当前控制类型的协议配置查询结果。 */
-    uint8_t archive_index;         /* 回读位图的档案遍历下标。 */
-    uint8_t control_type;          /* 单档案内的控制类型遍历下标。 */
-    uint8_t refresh_bit;           /* 当前控制类型对应的位图掩码。 */
-
-    /* 没有任何回读标志时直接返回，避免每次周期调度扫描全部档案和控制类型。 */
-    if(context->control_refresh_pending != RT_TRUE) {
-        return RT_FALSE;
-    }
-
-    /* 每个档案的每种控制类型最多保留一个回读标志，相同控制连续写入会自动合并。 */
-    for(archive_index = 0U; archive_index < INVERTER_ARCHIVE_MAX_COUNT; ++archive_index) {
-        /* 只检查五种数值控制类型，开机和关机永远不允许重读。 */
-        for(control_type = INV_CONTROL_ACTIVE_POWER;
-            control_type < INV_CONTROL_TYPE_MAX;
-            ++control_type) {
-            refresh_bit = (uint8_t)(1U << control_type);
-
-            /* 当前类型没有置位时跳过，不生成无意义回读请求。 */
-            if((context->control_refresh_mask[archive_index] & refresh_bit) == 0U) {
-                continue;
-            }
-
-            /* 选中后立即清除标志，组帧、发送、响应或超时无论结果如何都只尝试读取一次。 */
-            context->control_refresh_mask[archive_index] &= (uint8_t)(~refresh_bit);
-
-            /* 档案失效或接入端口改变后不再读取原控制寄存器。 */
-            if((g_inv_archive_lib.valid[archive_index] != INVERTER_ARCHIVE_VALID) ||
-               (g_inv_archive_lib.archives[archive_index].port != inv_data_archive_port(context))) {
-                continue;
-            }
-
-            rt_memset(&request, 0, sizeof(request)); /* 清除临时请求中与配置查询无关的字段。 */
-            request.archive_index = archive_index;
-            request.type = (Inv_Control_Type_t)control_type;
-            result = inv_control_get_active(&request, &context->active.control);
-
-            /* 协议或控制配置已经变化时跳过本次回读，并继续寻找下一项待处理标志。 */
-            if(result != INV_CONTROL_RESULT_OK) {
-                rt_kprintf("%s uart[%d] archive[%d] control type[%d] priority read skipped, result[%d]\n", get_char_time(), inv_data_uart_no(context), archive_index + 1, control_type, result);
-                continue;
-            }
-
-            context->active_archive_index = archive_index;
-            context->slave_addr = g_inv_archive_lib.archives[archive_index].mb_addr;
-            return RT_TRUE;
-        }
-    }
-
-    context->control_refresh_pending = RT_FALSE; /* 全部位图均已清空，后续调度无需继续扫描。 */
-    return RT_FALSE;
 }
 
 /* 按0～28数据点下标取得协议寄存器配置和对应实时数据存储位置。 */
@@ -1827,6 +1741,15 @@ static void inv_control_finish(Inv_Data_Port_Context_t *context)
     context->state = context->resume_state;
 }
 
+/* 数值控制可能改变设备设定值，写入结果确定或无法确认时旧缓存不再可信。 */
+static void inv_control_invalidate_cached_value(Inv_Data_Port_Context_t *context)
+{
+    /* 开机、关机没有对应的数值缓存；五类数值控制只清有效标志，不保存下发值。 */
+    if(context->active.control.target != RT_NULL) {
+        context->active.control.target->valid = 0U;
+    }
+}
+
 /* 从当前端口队列取出一项控制请求，转换控制值并发送Modbus写报文。 */
 static void inv_control_send_next_request(Inv_Data_Port_Context_t *context)
 {
@@ -1892,50 +1815,6 @@ static void inv_control_send_next_request(Inv_Data_Port_Context_t *context)
     context->state = INV_DATA_PORT_WAIT_CONTROL_WRITE;
 }
 
-/* 在普通周期抄读前发送一项待更新控制寄存器的03功能码读请求。 */
-static rt_bool_t inv_control_send_refresh_request(Inv_Data_Port_Context_t *context)
-{
-    uint8_t frame[MODBUS_READ_REQUEST_LEN]; /* 控制寄存器03功能码回读请求。 */
-    uint16_t frame_len = 0U;                /* 生成的优先回读报文长度。 */
-    rt_size_t written_size;                 /* 串口实际接受的优先回读字节数。 */
-    char frame_name[112];                   /* show_arr打印回读请求时使用的名称。 */
-
-    /* 没有待回读标志时返回RT_FALSE，调度器可以继续执行普通周期抄读。 */
-    if(inv_control_prepare_refresh(context) == RT_FALSE) {
-        return RT_FALSE;
-    }
-
-    /* 控制寄存器优先回读固定使用03功能码，并沿用写控制的地址和寄存器数量。 */
-    if(modbus_m_read_request(context->slave_addr,
-                             MODBUS_FUNC_READ_HOLDING,
-                             context->active.control.reg_addr,
-                             context->active.control.reg_count,
-                             frame,
-                             sizeof(frame),
-                             &frame_len) != RT_EOK) {
-        context->active.control.target->valid = 0U;
-        rt_kprintf("%s uart[%d] archive[%d] could not build control[%s] priority read request\n", get_char_time(), inv_data_uart_no(context), context->active_archive_index + 1, context->active.control.name);
-        return RT_TRUE;
-    }
-
-    rt_snprintf(frame_name, sizeof(frame_name), "uart[%d] archive[%d] addr[%d] control[%s] priority read request", inv_data_uart_no(context), context->active_archive_index + 1, context->slave_addr, context->active.control.name);
-    show_arr(frame_name, frame, frame_len); /* 打印控制寄存器优先回读请求。 */
-    written_size = uart_mgmt_write(inv_data_uart_no(context), frame, frame_len);
-
-    /* 回读请求没有完整写入串口时本次尝试结束，下一次调度继续处理其他任务。 */
-    if(written_size != frame_len) {
-        context->active.control.target->valid = 0U;
-        rt_kprintf("%s uart[%d] archive[%d] could not send full control[%s] priority read, expected[%d], sent[%d]\n", get_char_time(), inv_data_uart_no(context), context->active_archive_index + 1, context->active.control.name, frame_len, written_size);
-        return RT_TRUE;
-    }
-
-    /* 保存进入回读前的READY或设备空闲状态，回读结束后继续原来的周期流程。 */
-    context->resume_state = context->state;
-    context->request_tick = rt_tick_get();
-    context->state = INV_DATA_PORT_WAIT_CONTROL_REFRESH;
-    return RT_TRUE;
-}
-
 /* 解析当前控制写响应，生成异步结果并恢复该端口原来的周期状态。 */
 static void inv_control_handle_response(Inv_Data_Port_Context_t *context)
 {
@@ -1958,10 +1837,10 @@ static void inv_control_handle_response(Inv_Data_Port_Context_t *context)
     rt_snprintf(frame_name, sizeof(frame_name), "uart[%d] archive[%d] control[%s] reply[%s]", inv_data_uart_no(context), context->active_archive_index + 1, context->active.control.name, modbus_m_parse_result_text(parse_result));
     show_arr(frame_name, frame, frame_len); /* 收到报文后统一打印原始内容和解析结果。 */
 
-    /* 完整写响应校验通过时只确认控制成功，实时值留给后续优先回读更新。 */
+    /* 完整写响应校验通过时确认控制成功，但不把下发值当作设备实际值保存。 */
     if(parse_result == MODBUS_M_PARSE_OK) {
         control_result = INV_CONTROL_RESULT_OK;
-        inv_control_mark_refresh(context);
+        inv_control_invalidate_cached_value(context);
         rt_kprintf("%s uart[%d] archive[%d] control[%s] write finished, value[%d]\n", get_char_time(), inv_data_uart_no(context), context->active_archive_index + 1, context->active.control.name, context->active.control.request.value);
     }
     /* 从站异常响应需要保留异常码，便于上层转换成自己的应答状态。 */
@@ -1972,7 +1851,7 @@ static void inv_control_handle_response(Inv_Data_Port_Context_t *context)
     /* 已收到但不能匹配本次写请求的报文直接结束，不再继续计算超时。 */
     else {
         control_result = INV_CONTROL_RESULT_RESPONSE_INVALID;
-        inv_control_mark_refresh(context); /* 写请求可能已经执行，仅响应损坏时仍安排一次实际值回读。 */
+        inv_control_invalidate_cached_value(context); /* 写请求可能已经执行，旧控制值不能继续视为有效。 */
         rt_kprintf("%s uart[%d] archive[%d] control[%s] reply rejected: %s\n", get_char_time(), inv_data_uart_no(context), context->active_archive_index + 1, context->active.control.name, modbus_m_parse_result_text(parse_result));
     }
 
@@ -1984,67 +1863,8 @@ static void inv_control_handle_response(Inv_Data_Port_Context_t *context)
 static void inv_control_handle_timeout(Inv_Data_Port_Context_t *context)
 {
     rt_kprintf("%s uart[%d] archive[%d] addr[%d] control[%s] no reply within 1s\n", get_char_time(), inv_data_uart_no(context), context->active_archive_index + 1, context->slave_addr, context->active.control.name);
-    inv_control_mark_refresh(context); /* 响应丢失不能证明写入失败，周期流程仍优先读取一次实际值。 */
+    inv_control_invalidate_cached_value(context); /* 响应丢失不能证明写入失败，旧控制值不再可信。 */
     inv_control_push_result(&context->active.control.request, INV_CONTROL_RESULT_TIMEOUT, 0U);
-    inv_control_finish(context);
-}
-
-/* 解析控制寄存器优先回读响应，成功时使用实际寄存器值更新实时控制数据。 */
-static void inv_control_handle_refresh_response(Inv_Data_Port_Context_t *context)
-{
-    Inv_Data_Point_Config_t point;                 /* 由活动控制配置临时构造的数值解析配置。 */
-    uint8_t frame[INV_DATA_RX_FRAME_SIZE];         /* 从邮箱取出的控制寄存器读响应。 */
-    uint16_t registers[INV_CONTROL_REGISTER_MAX];  /* 回读解析得到的控制寄存器数据。 */
-    uint16_t frame_len;                            /* 优先回读响应的有效长度。 */
-    uint16_t register_count = 0U;                  /* 实际解析出的控制寄存器数量。 */
-    uint8_t exception_code = 0U;                   /* 回读异常响应中的Modbus异常码。 */
-    int32_t value;                                 /* 按协议类型转换后的控制实际值。 */
-    modbus_m_parse_result parse_result;             /* 优先回读响应的完整解析结果。 */
-    char frame_name[112];                          /* show_arr打印回读响应时使用的名称。 */
-
-    frame_len = inv_data_take_rx_frame(context, frame);
-    parse_result = modbus_m_read_response(context->slave_addr,
-                                          MODBUS_FUNC_READ_HOLDING,
-                                          context->active.control.reg_count,
-                                          frame,
-                                          frame_len,
-                                          registers,
-                                          INV_CONTROL_REGISTER_MAX,
-                                          &register_count,
-                                          &exception_code);
-    rt_snprintf(frame_name, sizeof(frame_name), "uart[%d] archive[%d] control[%s] priority read reply[%s]", inv_data_uart_no(context), context->active_archive_index + 1, context->active.control.name, modbus_m_parse_result_text(parse_result));
-    show_arr(frame_name, frame, frame_len);
-
-    rt_memset(&point, 0, sizeof(point)); /* 只填写数值解析所需字段，其他字段保持为空。 */
-    point.reg_count = context->active.control.reg_count;
-    point.data_type = context->active.control.data_type;
-    point.byte_order = context->active.control.byte_order;
-    point.decimal_places = context->active.control.decimal_places;
-
-    /* 报文、寄存器数量和数值转换全部有效时才用实际回读值更新实时数据。 */
-    if((g_inv_archive_lib.valid[context->active_archive_index] == INVERTER_ARCHIVE_VALID) && /* 档案删除后不得用迟到的控制回读恢复旧控制值。 */
-       (parse_result == MODBUS_M_PARSE_OK) &&
-       (register_count == context->active.control.reg_count) &&
-       (inv_data_decode_number(&point, registers, &value) == RT_TRUE)) {
-        context->active.control.target->value = value;
-        context->active.control.target->update_tick = rt_tick_get();
-        context->active.control.target->valid = 1U;
-        rt_kprintf("%s uart[%d] archive[%d] control[%s] priority read saved value[%d]\n", get_char_time(), inv_data_uart_no(context), context->active_archive_index + 1, context->active.control.name, value);
-    }
-    /* 收到报文但解析失败时保持数据无效，本次优先回读不再重试。 */
-    else {
-        context->active.control.target->valid = 0U;
-        rt_kprintf("%s uart[%d] archive[%d] control[%s] priority read rejected: %s, exception[%d]\n", get_char_time(), inv_data_uart_no(context), context->active_archive_index + 1, context->active.control.name, modbus_m_parse_result_text(parse_result), exception_code);
-    }
-
-    inv_control_finish(context);
-}
-
-/* 控制寄存器优先回读1秒内没有收到报文时结束本次尝试。 */
-static void inv_control_handle_refresh_timeout(Inv_Data_Port_Context_t *context)
-{
-    context->active.control.target->valid = 0U;
-    rt_kprintf("%s uart[%d] archive[%d] addr[%d] control[%s] priority read no reply within 1s\n", get_char_time(), inv_data_uart_no(context), context->active_archive_index + 1, context->slave_addr, context->active.control.name);
     inv_control_finish(context);
 }
 
@@ -2063,10 +1883,6 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
             else if(context->state == INV_DATA_PORT_WAIT_CONTROL_WRITE) {
                 inv_control_handle_response(context);
             }
-            /* 等待优先回读响应时解析实际控制值并更新实时数据。 */
-            else if(context->state == INV_DATA_PORT_WAIT_CONTROL_REFRESH) {
-                inv_control_handle_refresh_response(context);
-            }
             /* 其余等待状态只可能是普通周期抄读。 */
             else {
                 inv_data_handle_response(context);
@@ -2081,13 +1897,9 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
                 rt_kprintf("%s uart[%d] forward request from uart[%d] no reply within 1s\n", get_char_time(), inv_data_uart_no(context), g_inv_data_port_configs[context->port_index].secondary_uart_no);
                 inv_forward_finish(context);
             }
-            /* 控制写无报文时生成超时结果并安排一次控制值回读。 */
+            /* 控制写无报文时生成超时结果并使旧控制缓存失效。 */
             else if(context->state == INV_DATA_PORT_WAIT_CONTROL_WRITE) {
                 inv_control_handle_timeout(context);
-            }
-            /* 控制回读超时时保持实时值无效并恢复此前周期状态。 */
-            else if(context->state == INV_DATA_PORT_WAIT_CONTROL_REFRESH) {
-                inv_control_handle_refresh_timeout(context);
             }
             /* 普通周期读超时时使当前数据失效并继续后续数据点。 */
             else {
@@ -2114,11 +1926,6 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
         else {
             inv_data_send_demand_request(context);
         }
-        return;
-    }
-
-    /* 控制写流程结束后，周期调度在普通数据点和10秒空闲前优先回读控制寄存器一次。 */
-    if(inv_control_send_refresh_request(context) == RT_TRUE) {
         return;
     }
 

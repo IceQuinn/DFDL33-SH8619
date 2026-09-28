@@ -1309,7 +1309,7 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
         {
             continue;
         }
-        RT_UNUSED(source); /* 写入只使用控制配置，实时缓存由控制状态机在回读成功后更新。 */
+        RT_UNUSED(source); /* 写入只使用控制配置，实时缓存由后续645主动读取实际寄存器时更新。 */
         if((dlt645_bcd_decode_s32(field, point->data_len, &decoded_value) != RT_EOK) ||
            (decoded_value < point->write_min) || (decoded_value > point->write_max) ||
            (dlt645_rescale_value(decoded_value, source_decimals, control_reg->decimal_places,
@@ -1470,7 +1470,7 @@ static rt_err_t dlt645_decode_time_control_block(uint32_t id,
         if((control_reg == RT_NULL) ||
            (dlt645_bcd_decode_s32(&block[value_offset], value_len, &decoded_value) != RT_EOK) ||
            ((mode == TIME_CTRL_ACTIVE_POWER_PERCENT) &&
-            ((decoded_value < -1000) || (decoded_value > 1000))) ||
+            ((decoded_value < 0) || (decoded_value > 1000))) ||
            (dlt645_rescale_value(decoded_value, source_decimals, control_reg->decimal_places,
                                  &command->periods[period_index].value) != RT_EOK)) /* 配置、BCD、百分比范围和定点换算必须全部有效。 */
         {

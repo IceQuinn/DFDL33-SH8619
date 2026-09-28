@@ -123,7 +123,7 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
     // 功率因数调节
     {0x04E60700U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_SBCD, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 2U, 1000, -1000, 1000, dlt645_read_control_value, dlt645_write_control_value, "power factor adjustment"}, /* 格式X.XXX，合法范围为-1.000～1.000。 */
     // 有功功率百分比调节
-    {0x04E60800U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_SBCD, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 2U, 10, -1000, 1000, dlt645_read_control_value, dlt645_write_control_value, "active power percent adjustment"}, /* 格式XXX.X%，合法范围为-100.0%～100.0%。 */
+    {0x04E60800U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_SBCD, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 2U, 10, 0, 1000, dlt645_read_control_value, dlt645_write_control_value, "active power percent adjustment"}, /* 格式XXX.X%，合法范围为0.0%～100.0%。 */
     // 无功功率百分比调节
     {0x04E60900U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_SBCD, DLT645_SELECTOR_DEVICE | DLT645_SELECTOR_ALL, 2U, 10, -1000, 1000, dlt645_read_control_value, dlt645_write_control_value, "reactive power percent adjustment"}, /* 格式XXX.X%，合法范围为-100.0%～100.0%。 */
     // 日发电量

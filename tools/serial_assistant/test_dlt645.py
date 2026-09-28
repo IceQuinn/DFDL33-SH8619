@@ -530,7 +530,7 @@ class DLT645Tests(unittest.TestCase):
             "04E605": ("active_power_adjustment", "-12.3456", bytes.fromhex("56 34 12 80"), 4),
             "04E606": ("reactive_power_adjustment", "-7.8901", bytes.fromhex("01 89 07 80"), 4),
             "04E607": ("power_factor_adjustment", "-0.975", bytes.fromhex("75 89"), 2),
-            "04E608": ("active_power_percentage_adjustment", "-100.0", bytes.fromhex("00 90"), 2),
+            "04E608": ("active_power_percentage_adjustment", "100.0", bytes.fromhex("00 10"), 2),
             "04E609": ("reactive_power_percentage_adjustment", "-25.0", bytes.fromhex("50 82"), 2),
         }
         for prefix, (field_name, value, encoded, length) in groups.items():
@@ -557,7 +557,9 @@ class DLT645Tests(unittest.TestCase):
                 self.assertNotEqual(decoded[-1][1], "--")
 
         active_percent_field = self.registry.get("04E60801").write_request["fields"][0]
-        self.assertEqual(active_percent_field["write_hint"], "范围：-100.0～100.0%，支持1位小数")
+        self.assertEqual(active_percent_field["write_hint"], "范围：0.0～100.0%，支持1位小数")
+        with self.assertRaises(ValueError):
+            self.registry.encode("04E60801", {"active_power_percentage_adjustment": "-0.1"})
 
     def test_active_power_time_controls_use_independent_hhmm_blocks(self):
         power_values = {
@@ -586,15 +588,19 @@ class DLT645Tests(unittest.TestCase):
         percent_values = {
             "period1_start": "09:00", "period1_end": "10:00",
             "period2_start": "14:30", "period2_end": "15:45",
-            "period1_percent": "-123.4", "period2_percent": "25.0",
+            "period1_percent": "100.0", "period2_percent": "25.0",
         }
         percent_payload = self.registry.encode("04E60C01", percent_values)
-        self.assertEqual(percent_payload, bytes.fromhex("00 09 00 10 30 14 45 15 34 92 50 02"))
+        self.assertEqual(percent_payload, bytes.fromhex("00 09 00 10 30 14 45 15 00 10 50 02"))
         percent_decoded = self.registry.decode("04E60C01", percent_payload)
         self.assertEqual(percent_decoded[0], ("第1次调节开始时间", "09:00", ""))
-        self.assertEqual(percent_decoded[4], ("第1次调节值", "-123.4", "%"))
+        self.assertEqual(percent_decoded[4], ("第1次调节值", "100", "%"))
         self.assertEqual(len(self.registry.get("04E60CFF").write_request["fields"]), 72)
         self.assertEqual(sum(int(field["length"]) for field in self.registry.get("04E60CFF").write_request["fields"]), 144)
+        invalid_percent_values = dict(percent_values)
+        invalid_percent_values["period1_percent"] = "-0.1"
+        with self.assertRaises(ValueError):
+            self.registry.encode("04E60C01", invalid_percent_values)
 
     def test_protocol_library_count_and_one_hundred_slots(self):
         count = self.registry.get("04E701FE")  # 协议库总数使用独立只读数据标识，不能被槽位组覆盖。

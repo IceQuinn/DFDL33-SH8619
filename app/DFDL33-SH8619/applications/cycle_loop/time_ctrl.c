@@ -339,7 +339,7 @@ static rt_bool_t time_ctrl_value_valid(const Inv_CtrlRegBlk_t *control, int32_t 
     }
 }
 
-/* 检查有功百分比定点值是否位于-100%～100%闭区间。 */
+/* 检查有功百分比定点值是否位于0%～100%闭区间。 */
 static rt_bool_t time_ctrl_percent_value_valid(const Inv_CtrlRegBlk_t *control,
                                                int32_t value)
 {
@@ -357,7 +357,7 @@ static rt_bool_t time_ctrl_percent_value_valid(const Inv_CtrlRegBlk_t *control,
         }
         maximum *= 10;
     }
-    return ((value >= -maximum) && (value <= maximum)) ? RT_TRUE : RT_FALSE;
+    return ((value >= 0) && (value <= maximum)) ? RT_TRUE : RT_FALSE;
 }
 
 /* 将时段控制结果码转换成固定英文说明。 */
@@ -414,7 +414,7 @@ Time_Ctrl_Result_t Time_Ctrl_Check(const Time_Ctrl_Command_t *command)
                                         &control) == RT_FALSE) {
             return TIME_CTRL_RESULT_UNSUPPORTED;
         }
-        /* 控制值必须符合数据类型范围，百分比值还必须位于-100%～100%。 */
+        /* 控制值必须符合数据类型范围，百分比值还必须位于0%～100%。 */
         if((time_ctrl_value_valid(&control,
                                   command->periods[period_index].value) == RT_FALSE) ||
            ((command->periods[period_index].mode == TIME_CTRL_ACTIVE_POWER_PERCENT) &&

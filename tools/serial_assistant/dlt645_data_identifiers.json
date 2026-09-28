@@ -85,7 +85,7 @@
     },
     "inverter_active_power_percentage_adjustment": {
       "fields": [
-        {"name": "active_power_percentage_adjustment", "description": "有功功率百分比调节值", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "sign_bit": {"byte": 0, "mask": "80"}, "minimum": -100.0, "maximum": 100.0, "unit": "%", "write_hint": "范围：-100.0～100.0%，支持1位小数", "allow_ff": true, "default": "FF"}
+        {"name": "active_power_percentage_adjustment", "description": "有功功率百分比调节值", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "sign_bit": {"byte": 0, "mask": "80"}, "minimum": 0.0, "maximum": 100.0, "unit": "%", "write_hint": "范围：0.0～100.0%，支持1位小数", "allow_ff": true, "default": "FF"}
       ]
     },
     "inverter_reactive_power_percentage_adjustment": {
@@ -191,8 +191,8 @@
         {"name": "period1_end", "description": "第1次调节结束时间", "type": "bcd_datetime", "length": 2, "format": "hhmm", "byte_order": "little", "allow_ff": true, "default": "FF"},
         {"name": "period2_start", "description": "第2次调节开始时间", "type": "bcd_datetime", "length": 2, "format": "hhmm", "byte_order": "little", "allow_ff": true, "default": "FF"},
         {"name": "period2_end", "description": "第2次调节结束时间", "type": "bcd_datetime", "length": 2, "format": "hhmm", "byte_order": "little", "allow_ff": true, "default": "FF"},
-        {"name": "period1_percent", "description": "第1次调节值", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "%", "allow_ff": true, "default": "FF"},
-        {"name": "period2_percent", "description": "第2次调节值", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "%", "allow_ff": true, "default": "FF"}
+        {"name": "period1_percent", "description": "第1次调节值", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "sign_bit": {"byte": 0, "mask": "80"}, "minimum": 0.0, "maximum": 100.0, "unit": "%", "write_hint": "范围：0.0～100.0%，支持1位小数", "allow_ff": true, "default": "FF"},
+        {"name": "period2_percent", "description": "第2次调节值", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "sign_bit": {"byte": 0, "mask": "80"}, "minimum": 0.0, "maximum": 100.0, "unit": "%", "write_hint": "范围：0.0～100.0%，支持1位小数", "allow_ff": true, "default": "FF"}
       ]
     },
     "protocol_library": {
