@@ -27,6 +27,7 @@
 #include "dlt645_deal.h"
 #include "HJ02C.h"
 #include "upgrade.h"
+#include "event_data_deal.h"
 
 
 /* 应用线程创建参数表。 */
@@ -56,6 +57,7 @@ const user_thread_table_typedef user_thread_table[] = {
     {"voltage_acq", voltage_acq_thread_entry,   RT_NULL, 1024,   15, 10},   /* 电压采集线程线程 */
     {"hj02c_rx",    hj02c_rx_thread_entry,      RT_NULL, 2048,   14, 10},   /* 蓝牙接收线程 */
     {"upgrade",     upgrade_thread_entry,       RT_NULL, 6144,   18, 10},   /* 升级线程 */
+    {"event_data",  Event_Data_Deal_Loop,       RT_NULL, 4096,   29, 10},   /* 事件数据记录线程 */
 };
 
 /* 按线程参数表依次创建并启动全部应用线程。 */
@@ -87,6 +89,8 @@ void user_thread_init(void)
 /* 应用入口按照依赖顺序初始化基础模块、协议档案和业务线程。 */
 int main(void)
 {
+    DEBUGMCU->ctrl |= 0x1 << 8;
+
     Sys_Run_Time_Init();        /* 记录上电时间。 */
 
     show_ctu_msg();             /* 打印装置信息。 */
@@ -102,6 +106,8 @@ int main(void)
     Inv_Archive_Init();         /* 装载档案并建立运行时协议指针。 */
 
     Event_Init();               /* 事件初始化 */
+
+    Event_Data_Init();          /* 事件数据初始化 */
 
     uart_init();                /* 初始化串口后才能启动通信线程。 */
 

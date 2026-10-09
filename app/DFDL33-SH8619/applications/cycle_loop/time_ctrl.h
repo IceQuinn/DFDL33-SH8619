@@ -42,6 +42,7 @@ typedef struct Time_Ctrl_Period
     Time_Ctrl_Mode_t mode;      /* 有功数值或有功百分比控制。 */
     int32_t value;              /* 与目标协议decimal_places一致的定点整数。 */
     rt_bool_t enabled;          /* RT_TRUE表示该时段有效，开始或结束时间为全FF时为RT_FALSE。 */
+    rt_bool_t value_is_ff;      /* RT_TRUE表示645读回保持FF，实际下行统一执行100%有功百分比。 */
 } Time_Ctrl_Period_t;
 
 /* 单个逆变器档案的完整时段控制命令。 */
@@ -62,8 +63,7 @@ typedef enum Time_Ctrl_Result
     TIME_CTRL_RESULT_OVERLAP,          /* 两个控制时段存在重叠。 */
     TIME_CTRL_RESULT_ARCHIVE_INVALID,  /* 档案下标越界或档案无效。 */
     TIME_CTRL_RESULT_UNSUPPORTED,      /* 目标协议不支持调控或额定恢复。 */
-    TIME_CTRL_RESULT_INVALID_VALUE,    /* 控制值超出协议数据类型或百分比范围。 */
-    TIME_CTRL_RESULT_THREAD_ERROR      /* 时段控制线程尚未完成初始化。 */
+    TIME_CTRL_RESULT_INVALID_VALUE     /* 控制值超出协议数据类型或百分比范围。 */
 } Time_Ctrl_Result_t;
 
 /*
@@ -89,6 +89,9 @@ const char *Time_Ctrl_Result_Text(Time_Ctrl_Result_t result);
 
 /* 打印全部有效档案中已经启用的时段控制，没有时段控制的档案不输出。 */
 void Time_Ctrl_Print_All(void);
+
+/* 主程序在线程创建前调用且只调用一次：装载Flash配置并初始化全部邮箱和运行上下文。 */
+void Time_Ctrl_Runtime_Init(void);
 
 /* 线程表使用的时段控制入口，应用层只能创建一个该线程实例。 */
 void time_ctrl_thread_entry(void *parameter);

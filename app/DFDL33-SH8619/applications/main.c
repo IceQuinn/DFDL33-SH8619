@@ -103,6 +103,8 @@ int main(void)
 
     Inv_Archive_Init();         /* 装载档案并建立运行时协议指针。 */
 
+    Time_Ctrl_Runtime_Init();   /* 必须在线程启动前调用且只调用一次。 */
+
     Event_Init();               /* 事件初始化 */
 
     uart_init();                /* 初始化串口后才能启动通信线程。 */

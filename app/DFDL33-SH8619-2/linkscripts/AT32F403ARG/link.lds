@@ -6,7 +6,7 @@
 MEMORY
 {
 ROM (rx) : ORIGIN =0x08008000,LENGTH =1024k
-RAM (rw) : ORIGIN =0x20000000,LENGTH =96k
+RAM (rw) : ORIGIN =0x20000000,LENGTH =224k
 }
 ENTRY(Reset_Handler)
 _system_stack_size = 0x400;

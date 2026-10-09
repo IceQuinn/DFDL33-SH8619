@@ -9,6 +9,7 @@
 #include "event_deal.h"
 #include "sys.h"
 #include "time_ctrl.h"
+#include "time_ctrl_init.h"
 #include "user_iwdg.h"
 #include "user_rtc.h"
 #include "voltage_acq.h"
@@ -35,6 +36,7 @@
 #define DLT645_FIRMWARE_VERSION_LEN         32U /* 04800001厂家软件版本号固定占32字节ASCII。 */
 #define DLT645_REALTIME_READ_TIMEOUT_MS   55000U /* 为主站60秒超时保留5秒组帧和发送余量。 */
 #define DLT645_CONTROL_WAIT_TICKS          3000  /* 单台控制最多等待3秒，FF逐台执行仍可控制在60秒内。 */
+#define DLT645_TIME_CTRL_FULL_PERCENT      1000  /* 时段值为FF时按XXX.X格式的100.0%执行。 */
 
 /* 对单台或DI0=FF的全部档案顺序执行实时读，失败及未完成点保持无效。 */
 static void dlt645_refresh_selected(uint32_t id, uint32_t point_mask)
@@ -1445,10 +1447,6 @@ static rt_err_t dlt645_decode_time_control_block(uint32_t id,
             command->periods[period_index].enabled = RT_FALSE;
             continue; /* 禁用时段不再解析或校验其控制值，允许主站保留原数值。 */
         }
-        if(value_ff == RT_TRUE) /* 开始和结束均有效但控制值为FF时无法执行明确调控。 */
-        {
-            return -RT_EINVAL;
-        }
         if((current_time.tm_year < 70) ||
            (dlt645_decode_hhmm(&block[time_offset], &command->periods[period_index].start.hour,
                                &command->periods[period_index].start.minute) != RT_EOK) ||
@@ -1466,11 +1464,18 @@ static rt_err_t dlt645_decode_time_control_block(uint32_t id,
         command->periods[period_index].mode = mode; /* 同一个645数据标识内两个时段使用相同调节方式。 */
         command->periods[period_index].enabled = RT_TRUE;
 
+        /* 时间有效但调控值为FF时保留原645类型，执行阶段再转换成100%有功百分比。 */
+        if(value_ff == RT_TRUE)
+        {
+            command->periods[period_index].value_is_ff = RT_TRUE;
+            continue;
+        }
+
         control_reg = dlt645_time_control_reg(archive_index, mode); /* 取得厂家目标小数位用于写值换算。 */
         if((control_reg == RT_NULL) ||
            (dlt645_bcd_decode_s32(&block[value_offset], value_len, &decoded_value) != RT_EOK) ||
            ((mode == TIME_CTRL_ACTIVE_POWER_PERCENT) &&
-            ((decoded_value < 0) || (decoded_value > 1000))) ||
+            ((decoded_value < 0) || (decoded_value > DLT645_TIME_CTRL_FULL_PERCENT))) ||
            (dlt645_rescale_value(decoded_value, source_decimals, control_reg->decimal_places,
                                  &command->periods[period_index].value) != RT_EOK)) /* 配置、BCD、百分比范围和定点换算必须全部有效。 */
         {
@@ -1522,10 +1527,20 @@ static rt_err_t dlt645_encode_time_control_block(uint32_t id,
         if((dlt645_encode_hhmm(command->periods[period_index].start.hour,
                                command->periods[period_index].start.minute, encoded_start) != RT_EOK) ||
            (dlt645_encode_hhmm(command->periods[period_index].end.hour,
-                               command->periods[period_index].end.minute, encoded_end) != RT_EOK) ||
-           (dlt645_rescale_value(command->periods[period_index].value, control_reg->decimal_places,
+                               command->periods[period_index].end.minute, encoded_end) != RT_EOK))
+        {
+            continue;
+        }
+        /* 原始调控值为FF时只回填有效时间，值字段继续保持初始化后的全FF。 */
+        if(command->periods[period_index].value_is_ff == RT_TRUE)
+        {
+            rt_memcpy(&block[time_offset], encoded_start, sizeof(encoded_start));
+            rt_memcpy(&block[time_offset + 2U], encoded_end, sizeof(encoded_end));
+            continue;
+        }
+        if((dlt645_rescale_value(command->periods[period_index].value, control_reg->decimal_places,
                                  target_decimals, &scaled_value) != RT_EOK) ||
-           (dlt645_encode_bcd(scaled_value, encoded_value, value_len, RT_TRUE) != RT_EOK)) /* 时间、精度和有符号BCD必须整体编码成功。 */
+           (dlt645_encode_bcd(scaled_value, encoded_value, value_len, RT_TRUE) != RT_EOK))
         {
             continue;
         }
@@ -1632,13 +1647,22 @@ rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point, uint32_t id,
         apply[archive_offset] = RT_TRUE; /* 全部预检查完成后才会实际修改这个档案的邮箱。 */
     }
 
+    if((archive_count > 1U) && (Time_Ctrl_Init_Batch_Begin() != RT_EOK)) {
+        return -RT_ERROR;
+    }
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
         if((apply[archive_offset] == RT_TRUE) &&
            (Time_Ctrl_Set(commands[archive_offset]) != TIME_CTRL_RESULT_OK)) /* 两个时段全FF由Set统一转换为停止计划。 */
         {
+            if(archive_count > 1U) {
+                (void)Time_Ctrl_Init_Batch_End();
+            }
             return -RT_ERROR; /* 极短窗口内档案或线程状态变化时返回写异常。 */
         }
+    }
+    if((archive_count > 1U) && (Time_Ctrl_Init_Batch_End() != RT_EOK)) {
+        return -RT_ERROR;
     }
     return RT_EOK; /* 所有需要处理的档案邮箱均已成功更新或停止。 */
 }

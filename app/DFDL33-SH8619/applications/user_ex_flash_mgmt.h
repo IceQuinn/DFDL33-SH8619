@@ -18,6 +18,11 @@
 
 #define CTU_CFG_ADDR_A                    (0      * EXTFLASH_PAGE_SIZE)
 #define CTU_CFG_ADDR_B                    (1      * EXTFLASH_PAGE_SIZE)
+
+//--------------------------------------------------------------------------------  时段控制配置 --------------------------------
+/* 每区只占一个4KB扇区；2、3扇区当前未被其他配置使用。 */
+#define TIME_CTRL_CFG_ADDR_A              (2      * EXTFLASH_PAGE_SIZE)
+#define TIME_CTRL_CFG_ADDR_B              (3      * EXTFLASH_PAGE_SIZE)
 //--------------------------------------------------------------------------------  协议库 --------------------------------
 #define PROTO_LIB_ADDR_A                  (13     * EXTFLASH_PAGE_SIZE)
 #define PROTO_LIB_ADDR_B                  (19     * EXTFLASH_PAGE_SIZE)
