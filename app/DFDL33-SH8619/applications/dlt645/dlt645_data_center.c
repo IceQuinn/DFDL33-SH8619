@@ -45,6 +45,7 @@ static uint8_t g_dlt645_point_data[DLT645_POINT_DATA_MAX_LEN]; /* 保存读取�
 /* 统一点表集中描述变量类和已经迁移的运行状态点，业务取数函数统一位于dlt645_data_api.c。 */
 static const Dlt645PointTypeDef g_dlt645_points[] =
 {
+    {0x0001FF00U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 4U, 100, 0, 0, dlt645_read_zero_data, RT_NULL, "forward active energy block"}, /* 按项目约定仅回复4字节全零，不展开各费率电能。 */
     {0x0201FF00U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 6U, 10, 0, 0, dlt645_read_converter_voltage_block, RT_NULL, "converter three phase voltage"}, /* A相为本机电压，B、C相各回复两字节FF。 */
     {0x04001501U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 12U, 1, 0, 0, dlt645_read_zero_data, RT_NULL, "fixed zero data 04001501"}, /* 固定只读数据标识，业务数据回复12字节全零。 */
     //DI3～DI1    DI0           读写权限            编码方式            DI0选择器                                    数据长度 定点数倍率 写入值下限 写入值上限 读取回调函数 写入回调函数 点表名称

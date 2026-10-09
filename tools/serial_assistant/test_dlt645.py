@@ -238,6 +238,16 @@ class DLT645Tests(unittest.TestCase):
     def test_other_identifiers_are_read_only_and_decode_expected_values(self):
         self.assertEqual(self.registry.categories["other"], "其他类")
 
+        energy_block = self.registry.get("0001FF00")
+        self.assertEqual(energy_block.category, "standard")
+        self.assertEqual(energy_block.access, "read")
+        self.assertEqual(self.registry.decode("0001FF00", bytes(4)),
+                         [("正向有功总电能", "0", "kWh")])
+        energy_frame = build_frame("000000000012", 0x91,
+                                   encode_di("0001FF00") + bytes(4))
+        self.assertEqual(energy_frame[9], 8)
+        self.assertTrue(parse_frame(energy_frame, self.registry).valid)
+
         voltage_block = self.registry.get("0201FF00")
         self.assertEqual(voltage_block.access, "read")
         self.assertEqual(voltage_block.category, "standard")
