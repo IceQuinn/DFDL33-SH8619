@@ -247,6 +247,28 @@ rt_err_t dlt645_read_converter_phase_a_voltage(const Dlt645PointTypeDef *point, 
     return RT_EOK;
 }
 
+/* 三相电压块复用单相取数和编码接口，不触发逆变器通信。 */
+rt_err_t dlt645_read_converter_voltage_block(const Dlt645PointTypeDef *point, uint32_t id,
+                                             uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    Dlt645PointTypeDef phase_a_point;
+    uint16_t phase_a_len;
+
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
+       (point->data_len != 6U) || (capacity < 6U)) {
+        return -RT_EINVAL;
+    }
+    rt_memset(data, 0xFF, 6U); /* 未配置的B、C相保持无效，不以0V代替。 */
+    phase_a_point = *point;
+    phase_a_point.data_len = 2U;
+    if(dlt645_read_converter_phase_a_voltage(&phase_a_point, id, data, capacity,
+                                             &phase_a_len) != RT_EOK) {
+        return -RT_ERROR;
+    }
+    *data_len = 6U;
+    return RT_EOK;
+}
+
 /* 根据点表长度生成全零业务数据，供当前规范中没有实际数据来源的其他类数据标识复用。 */
 rt_err_t dlt645_read_zero_data(const Dlt645PointTypeDef *point, uint32_t id,
                                uint8_t *data, uint16_t capacity, uint16_t *data_len)

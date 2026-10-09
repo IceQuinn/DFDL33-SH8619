@@ -278,6 +278,12 @@ void dlt645_deal(uint8_t uart_no, uint8_t *dlt645_addr, uint8_t *bufPtr, uint16_
     uint8_t *newPackPtr = NULL;
     uint16_t newPackLen = 0;
 
+    // 如果串口不是蓝牙口，则将报文转发到蓝牙口
+    if(HJ02C != uart_no){
+        dlt645_data_ack(HJ02C, bufPtr, PackLen);
+    }
+
+
     // 判断帧是否合理
     if(-1 == DLT645_Pack_Deal(bufPtr, PackLen, &newPackPtr, &newPackLen))
     {
@@ -365,6 +371,19 @@ struct rng_buf dlt645_rng;
 
 uint8_t dlt645_rx_buf[1024];
 
+#define STA_RST_PIN   GET_PIN(C, 0)      //STA复位引脚
+
+void reset_sta(void)
+{
+    rt_pin_mode(STA_RST_PIN, PIN_MODE_OUTPUT);
+    rt_pin_write(STA_RST_PIN, PIN_LOW);
+
+    rt_thread_mdelay(250);/*载波模块复位至少持续0.2S*/
+
+    rt_pin_write(STA_RST_PIN, PIN_HIGH);
+}
+MSH_CMD_EXPORT(reset_sta, reset_sta);
+
 void Dlt645_Init(void)
 {
     if(rt_sem_init(&sem_dlt645, "dlt645", 0, RT_IPC_FLAG_FIFO) != RT_EOK)
@@ -373,6 +392,8 @@ void Dlt645_Init(void)
     }
 
     RngBufInit(&dlt645_rng,   dlt645_rx_buf,   sizeof(dlt645_rx_buf), RNG_BUF_MODE_SINGLE);
+
+    reset_sta();
 }
 
 void dlt645_rx_callback(void *ptr, uint16_t len, uint16_t buf_source)

@@ -290,6 +290,21 @@
       "write_schema": "device_action"
     },
     {
+      "di": "0201FF00",
+      "category": "standard",
+      "group_id": "standard",
+      "group_description": "标准数据标识",
+      "description": "三相电压数据块",
+      "access": "read",
+      "read_response": {
+        "fields": [
+          {"name": "voltage_a", "description": "A相电压", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "unit": "V"},
+          {"name": "voltage_b", "description": "B相电压", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "unit": "V"},
+          {"name": "voltage_c", "description": "C相电压", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "unit": "V"}
+        ]
+      }
+    },
+    {
       "di": "02010100",
       "category": "other",
       "group_id": "converter_realtime",
