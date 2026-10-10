@@ -252,17 +252,52 @@ class DLT645Tests(unittest.TestCase):
         self.assertEqual(parsed.payload, bytes(4))
         self.assertIsNotNone(self.registry.get("0001FF00"))
 
+    def test_active_energy_items_and_blocks(self):
+        for direction, label in ((1, "正向"), (2, "反向")):
+            names = [f"{label}有功总电能"] + [f"{label}有功费率{tariff}电能" for tariff in range(1, 5)]
+            for tariff, name in enumerate(names):
+                di = f"000{direction}0{tariff}00"
+                with self.subTest(di=di):
+                    definition = self.registry.get(di)
+                    self.assertEqual(definition.category, "standard")
+                    self.assertEqual(definition.access, "read")
+                    self.assertEqual(self.registry.decode(di, bytes(4)), [(name, "0", "kWh")])
+                    request = parse_frame(build_read_data("000000000012", di), self.registry)
+                    self.assertTrue(request.valid)
+                    self.assertEqual(request.data_identifier, di)
+                    response = build_frame("000000000012", 0x91, encode_di(di) + bytes(4))
+                    self.assertEqual(response[9], 8)
+                    self.assertTrue(parse_frame(response, self.registry).valid)
+            di = f"000{direction}FF00"
+            with self.subTest(di=di):
+                definition = self.registry.get(di)
+                self.assertEqual(definition.category, "standard")
+                self.assertEqual(definition.access, "read")
+                self.assertEqual(sum(field["length"] for field in definition.read_response["fields"]), 20)
+                self.assertEqual(self.registry.decode(di, bytes(20)), [(name, "0", "kWh") for name in names])
+                # 不同数值验证总电能与4个费率的解析顺序，避免全零掩盖字段错位。
+                values = b"".join(bytes([value, 0, 0, 0]) for value in (0x01, 0x02, 0x03, 0x04, 0x05))
+                self.assertEqual(self.registry.decode(di, values),
+                                 [(name, f"0.0{index}", "kWh") for index, name in enumerate(names, 1)])
+                response = build_frame("000000000012", 0x91, encode_di(di) + bytes(20))
+                self.assertEqual(response[9], 24)
+                self.assertEqual(response[14:34], bytes([0x33]) * 20)
+                parsed = parse_frame(response, self.registry)
+                self.assertTrue(parsed.valid)
+                self.assertEqual(parsed.payload, bytes(20))
+
     def test_other_identifiers_are_read_only_and_decode_expected_values(self):
         self.assertEqual(self.registry.categories["other"], "其他类")
 
         energy_block = self.registry.get("0001FF00")
         self.assertEqual(energy_block.category, "standard")
         self.assertEqual(energy_block.access, "read")
-        self.assertEqual(self.registry.decode("0001FF00", bytes(4)),
-                         [("正向有功总电能", "0", "kWh")])
+        self.assertEqual(self.registry.decode("0001FF00", bytes(20)),
+                         [("正向有功总电能", "0", "kWh")] +
+                         [(f"正向有功费率{tariff}电能", "0", "kWh") for tariff in range(1, 5)])
         energy_frame = build_frame("000000000012", 0x91,
-                                   encode_di("0001FF00") + bytes(4))
-        self.assertEqual(energy_frame[9], 8)
+                                   encode_di("0001FF00") + bytes(20))
+        self.assertEqual(energy_frame[9], 24)
         self.assertTrue(parse_frame(energy_frame, self.registry).valid)
 
         voltage_block = self.registry.get("0201FF00")

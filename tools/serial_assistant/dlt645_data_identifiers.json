@@ -298,7 +298,99 @@
       "access": "read",
       "read_response": {
         "fields": [
-          {"name": "forward_active_energy", "description": "正向有功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kWh"}
+          {
+            "name": "forward_active_energy",
+            "description": "正向有功总电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          }
+        ]
+      }
+    },
+    {
+      "di": "00010100",
+      "category": "standard",
+      "group_id": "standard",
+      "group_description": "标准数据标识",
+      "description": "正向有功费率1电能",
+      "access": "read",
+      "read_response": {
+        "fields": [
+          {
+            "name": "forward_active_energy_tariff_1",
+            "description": "正向有功费率1电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          }
+        ]
+      }
+    },
+    {
+      "di": "00010200",
+      "category": "standard",
+      "group_id": "standard",
+      "group_description": "标准数据标识",
+      "description": "正向有功费率2电能",
+      "access": "read",
+      "read_response": {
+        "fields": [
+          {
+            "name": "forward_active_energy_tariff_2",
+            "description": "正向有功费率2电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          }
+        ]
+      }
+    },
+    {
+      "di": "00010300",
+      "category": "standard",
+      "group_id": "standard",
+      "group_description": "标准数据标识",
+      "description": "正向有功费率3电能",
+      "access": "read",
+      "read_response": {
+        "fields": [
+          {
+            "name": "forward_active_energy_tariff_3",
+            "description": "正向有功费率3电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          }
+        ]
+      }
+    },
+    {
+      "di": "00010400",
+      "category": "standard",
+      "group_id": "standard",
+      "group_description": "标准数据标识",
+      "description": "正向有功费率4电能",
+      "access": "read",
+      "read_response": {
+        "fields": [
+          {
+            "name": "forward_active_energy_tariff_4",
+            "description": "正向有功费率4电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          }
         ]
       }
     },
@@ -307,11 +399,217 @@
       "category": "standard",
       "group_id": "standard",
       "group_description": "标准数据标识",
-      "description": "正向有功总电能数据块（4字节）",
+      "description": "正向有功电能数据块（总及费率1～4）",
       "access": "read",
       "read_response": {
         "fields": [
-          {"name": "forward_active_energy", "description": "正向有功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kWh"}
+          {
+            "name": "forward_active_energy",
+            "description": "正向有功总电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          },
+          {
+            "name": "forward_active_energy_tariff_1",
+            "description": "正向有功费率1电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          },
+          {
+            "name": "forward_active_energy_tariff_2",
+            "description": "正向有功费率2电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          },
+          {
+            "name": "forward_active_energy_tariff_3",
+            "description": "正向有功费率3电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          },
+          {
+            "name": "forward_active_energy_tariff_4",
+            "description": "正向有功费率4电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          }
+        ]
+      }
+    },
+    {
+      "di": "00020000",
+      "category": "standard",
+      "group_id": "standard",
+      "group_description": "标准数据标识",
+      "description": "反向有功总电能",
+      "access": "read",
+      "read_response": {
+        "fields": [
+          {
+            "name": "reverse_active_energy",
+            "description": "反向有功总电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          }
+        ]
+      }
+    },
+    {
+      "di": "00020100",
+      "category": "standard",
+      "group_id": "standard",
+      "group_description": "标准数据标识",
+      "description": "反向有功费率1电能",
+      "access": "read",
+      "read_response": {
+        "fields": [
+          {
+            "name": "reverse_active_energy_tariff_1",
+            "description": "反向有功费率1电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          }
+        ]
+      }
+    },
+    {
+      "di": "00020200",
+      "category": "standard",
+      "group_id": "standard",
+      "group_description": "标准数据标识",
+      "description": "反向有功费率2电能",
+      "access": "read",
+      "read_response": {
+        "fields": [
+          {
+            "name": "reverse_active_energy_tariff_2",
+            "description": "反向有功费率2电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          }
+        ]
+      }
+    },
+    {
+      "di": "00020300",
+      "category": "standard",
+      "group_id": "standard",
+      "group_description": "标准数据标识",
+      "description": "反向有功费率3电能",
+      "access": "read",
+      "read_response": {
+        "fields": [
+          {
+            "name": "reverse_active_energy_tariff_3",
+            "description": "反向有功费率3电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          }
+        ]
+      }
+    },
+    {
+      "di": "00020400",
+      "category": "standard",
+      "group_id": "standard",
+      "group_description": "标准数据标识",
+      "description": "反向有功费率4电能",
+      "access": "read",
+      "read_response": {
+        "fields": [
+          {
+            "name": "reverse_active_energy_tariff_4",
+            "description": "反向有功费率4电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          }
+        ]
+      }
+    },
+    {
+      "di": "0002FF00",
+      "category": "standard",
+      "group_id": "standard",
+      "group_description": "标准数据标识",
+      "description": "反向有功电能数据块（总及费率1～4）",
+      "access": "read",
+      "read_response": {
+        "fields": [
+          {
+            "name": "reverse_active_energy",
+            "description": "反向有功总电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          },
+          {
+            "name": "reverse_active_energy_tariff_1",
+            "description": "反向有功费率1电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          },
+          {
+            "name": "reverse_active_energy_tariff_2",
+            "description": "反向有功费率2电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          },
+          {
+            "name": "reverse_active_energy_tariff_3",
+            "description": "反向有功费率3电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          },
+          {
+            "name": "reverse_active_energy_tariff_4",
+            "description": "反向有功费率4电能",
+            "type": "bcd",
+            "length": 4,
+            "byte_order": "little",
+            "decimals": 2,
+            "unit": "kWh"
+          }
         ]
       }
     },
