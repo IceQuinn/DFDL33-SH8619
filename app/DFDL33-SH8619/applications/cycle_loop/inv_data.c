@@ -1957,6 +1957,7 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
 
     /* 任一档案到期时先恢复周期检查，避免连续透传使到期设备长期得不到抄读。 */
     if((g_inv_data_work_enabled == RT_TRUE) &&
+       (ctu_cfg.poll_interval_seconds != 0U) &&
        (context->state == INV_DATA_PORT_DEVICE_IDLE) &&
        (inv_data_port_has_due_archive(context, now) == RT_TRUE)) {
         context->state = INV_DATA_PORT_READY;
@@ -1966,6 +1967,7 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
 
     /* 周期项目完成后最多转发一帧；无周期任务、非工作时段或设备空闲时可直接使用空闲线路。 */
     if((context->forward_allowed == RT_TRUE) ||
+       (ctu_cfg.poll_interval_seconds == 0U) ||
        (context->state == INV_DATA_PORT_DEVICE_IDLE) ||
        (g_inv_data_work_enabled != RT_TRUE) ||
        (inv_forward_port_has_archive(context) != RT_TRUE)) {
