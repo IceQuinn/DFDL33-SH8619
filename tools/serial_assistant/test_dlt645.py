@@ -235,6 +235,23 @@ class DLT645Tests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.registry.encode("04000D00", {"action_value": invalid_value})  # 不允许其他数值或FF触发校准。
 
+    def test_forward_active_total_energy(self):
+        definition = self.registry.get("00010000")
+        self.assertEqual(definition.category, "standard")
+        self.assertEqual(definition.access, "read")
+        self.assertEqual(self.registry.decode("00010000", bytes(4)),
+                         [("正向有功总电能", "0", "kWh")])
+        request = parse_frame(build_read_data("000000000012", "00010000"), self.registry)
+        self.assertTrue(request.valid)
+        self.assertEqual(request.data_identifier, "00010000")
+        response = build_frame("000000000012", 0x91, encode_di("00010000") + bytes(4))
+        self.assertEqual(response[9], 8)
+        self.assertEqual(response[14:18], bytes([0x33]) * 4)
+        parsed = parse_frame(response, self.registry)
+        self.assertTrue(parsed.valid)
+        self.assertEqual(parsed.payload, bytes(4))
+        self.assertIsNotNone(self.registry.get("0001FF00"))
+
     def test_other_identifiers_are_read_only_and_decode_expected_values(self):
         self.assertEqual(self.registry.categories["other"], "其他类")
 

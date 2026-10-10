@@ -290,6 +290,19 @@
       "write_schema": "device_action"
     },
     {
+      "di": "00010000",
+      "category": "standard",
+      "group_id": "standard",
+      "group_description": "标准数据标识",
+      "description": "正向有功总电能",
+      "access": "read",
+      "read_response": {
+        "fields": [
+          {"name": "forward_active_energy", "description": "正向有功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kWh"}
+        ]
+      }
+    },
+    {
       "di": "0001FF00",
       "category": "standard",
       "group_id": "standard",

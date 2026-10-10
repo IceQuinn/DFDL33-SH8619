@@ -277,12 +277,12 @@ void dlt645_deal(uint8_t uart_no, uint8_t *dlt645_addr, uint8_t *bufPtr, uint16_
 {
     uint8_t *newPackPtr = NULL;
     uint16_t newPackLen = 0;
-
+#if 1
     // 如果串口不是蓝牙口，则将报文转发到蓝牙口
     if(HJ02C != uart_no){
         dlt645_data_ack(HJ02C, bufPtr, PackLen);
     }
-
+#endif
 
     // 判断帧是否合理
     if(-1 == DLT645_Pack_Deal(bufPtr, PackLen, &newPackPtr, &newPackLen))
