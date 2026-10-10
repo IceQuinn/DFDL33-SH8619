@@ -79,7 +79,7 @@ void set_default_para(enum CTU_RESET_CMD Reset_Cmd)
     ctu_cfg.longitude                   = 1143999;      //经度
     ctu_cfg.latitude                    = 304456;       //纬度
     if(CTU_RESET_ALL == Reset_Cmd){
-        ctu_cfg.g_vol_cal_coef              = 3562.04534;
+        ctu_cfg.g_vol_cal_coef          = 6422.92879;
     }
 
     ctu_cfg.altitude                    = 0U;           /* 默认高度为0.00m，645写入位置信息后随配置统一保存。 */

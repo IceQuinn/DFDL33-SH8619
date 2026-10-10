@@ -987,6 +987,7 @@ rt_err_t dlt645_write_device_action(const Dlt645PointTypeDef *point, uint32_t id
         case 0x04000C00U:
             Inv_Archive_Default_Init(); // 清空逆变器档案
             set_default_data(); /* 恢复默认配置并保存，但不自动重启，等待人工重启后整体生效。 */
+            reboot();
             break;
         case 0x04000D00U:
             voltage_calibration(); /* 只调用现有校准接口设置请求标志，实际计算及保存仍由电压采集线程完成。 */
