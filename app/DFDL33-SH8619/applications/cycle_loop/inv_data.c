@@ -41,7 +41,7 @@
 /* 每个端口的抄读状态独立变化，等待某一路响应时其他端口仍可继续发送或解析。 */
 typedef enum Inv_Data_Port_State {
     INV_DATA_PORT_READY = 0,              /* 当前端口可以查找并发送下一项寄存器请求。 */
-    INV_DATA_PORT_DEVICE_IDLE,            /* 当前端口完成一台逆变器抄读，正在等待配置的全局轮询间隔。 */
+    INV_DATA_PORT_DEVICE_IDLE,            /* 本端口没有到期档案，等待任一档案独立周期到期。 */
     INV_DATA_PORT_WAIT_PERIODIC_READ,     /* 当前端口正在等待周期抄读响应。 */
     INV_DATA_PORT_WAIT_ON_DEMAND_READ,    /* 当前端口正在等待645触发的实时读取响应。 */
     INV_DATA_PORT_WAIT_CONTROL_WRITE,     /* 当前端口正在等待实时控制写响应。 */
@@ -124,7 +124,7 @@ typedef struct Inv_Data_Port_Context {
     uint8_t port_index;                      /* 只读端口配置表下标，范围0～2。 */
     volatile rt_bool_t poll_enabled;         /* 识别结束后才允许本端口抄读和控制，防止两类事务占用同一串口。 */
     uint8_t archive_index;                   /* 下一次查找数据点使用的档案槽位游标。 */
-    uint8_t point_index;                     /* 下一次查找使用的数据点下标，范围0～28。 */
+    uint8_t point_index;                     /* 周期抄读下一点下标，范围0～17。 */
     uint8_t active_archive_index;            /* 当前已发送请求所属的档案槽位下标。 */
     uint8_t slave_addr;                      /* 当前已发送请求使用的Modbus从站地址。 */
     Inv_Data_Port_State_t state;             /* 当前端口处于可发送、等待响应或空闲状态。 */
@@ -132,8 +132,8 @@ typedef struct Inv_Data_Port_Context {
     Inv_Data_Active_t active;                /* 当前线上事务使用的周期读或控制活动数据。 */
     Inv_Control_Queue_t control_queue;       /* 当前端口等待发送的高优先级控制请求。 */
     rt_tick_t request_tick;                  /* 当前请求完整写入串口时记录的系统tick。 */
-    rt_tick_t idle_tick;                     /* 当前档案第一帧发送时间，设备空闲时据此计算剩余轮询时间。 */
-    rt_tick_t archive_poll_start_tick;       /* 当前档案第一帧完整写入串口时记录的周期起点。 */
+    rt_tick_t archive_poll_start_tick[INVERTER_ARCHIVE_MAX_COUNT]; /* 各档案最近一轮首帧成功发送时间。 */
+    rt_bool_t archive_poll_valid[INVERTER_ARCHIVE_MAX_COUNT]; /* 独立计时是否已建立，首次抄读不等待。 */
     uint8_t archive_poll_index;              /* 当前周期起点所属的档案槽位下标。 */
     rt_bool_t archive_poll_started;          /* RT_TRUE表示当前档案至少成功发送过一帧周期请求。 */
     uint8_t rx_frame[INV_DATA_RX_FRAME_SIZE]; /* 当前端口接收到的完整Modbus响应报文。 */
@@ -725,12 +725,12 @@ static void inv_data_invalidate_point(Inv_Data_Point_Config_t *point)
     }
 }
 
-/* 当前数据点完成后推进游标，29个点结束后切换到下一个档案槽位。 */
+/* 周期游标遍历18个变量点，结束后切换到下一个档案槽位。 */
 static void inv_data_advance_cursor(Inv_Data_Port_Context_t *context)
 {
     ++context->point_index;
 
-    /* 当前档案的29个数据点已经遍历完成时切换下一档案。 */
+    /* 当前档案的18个周期变量点遍历完成时切换下一档案。 */
     if(context->point_index >= INV_DATA_PERIODIC_POINT_COUNT) {
         context->point_index = 0U;
         ++context->archive_index;
@@ -754,23 +754,39 @@ static rt_tick_t inv_data_device_idle_ticks(void)
     return rt_tick_from_millisecond((rt_int32_t)interval_seconds * 1000); /* 最大3600000ms不会超过32位有符号范围。 */
 }
 
-/* 当前端口完成一台逆变器后进入配置的全局轮询间隔空闲状态。 */
+/* 判断指定档案是否到期，首次抄读立即允许；tick差值支持计数回绕。 */
+static rt_bool_t inv_data_archive_due(const Inv_Data_Port_Context_t *context,
+                                      uint8_t archive_index, rt_tick_t now)
+{
+    return ((context->archive_poll_valid[archive_index] != RT_TRUE) ||
+            ((rt_tick_t)(now - context->archive_poll_start_tick[archive_index]) >=
+             inv_data_device_idle_ticks())) ? RT_TRUE : RT_FALSE;
+}
+
+/* 空闲期间检查本端口是否有首次或到期档案，不改变轮询游标。 */
+static rt_bool_t inv_data_port_has_due_archive(const Inv_Data_Port_Context_t *context,
+                                               rt_tick_t now)
+{
+    uint8_t archive_index;
+
+    for(archive_index = 0U; archive_index < INVERTER_ARCHIVE_MAX_COUNT; ++archive_index) {
+        if((g_inv_archive_lib.valid[archive_index] == INVERTER_ARCHIVE_VALID) &&
+           (g_inv_archive_lib.archives[archive_index].port == inv_data_archive_port(context)) &&
+           (Inv_Archive_Get_Protocol(archive_index) != RT_NULL) &&
+           (inv_data_archive_due(context, archive_index, now) == RT_TRUE)) {
+            return RT_TRUE;
+        }
+    }
+    return RT_FALSE;
+}
+
+/* 一台读完立即释放端口，下一次调度继续检查后续档案，不等待本台剩余周期。 */
 static void inv_data_start_device_idle(Inv_Data_Port_Context_t *context, uint8_t archive_index)
 {
+    RT_UNUSED(archive_index);
     context->active.read.idle_after_active = RT_FALSE;
-
-    /* 当前档案发出过周期请求时，从第一帧时间计算剩余间隔，而不是完成后重新完整等待。 */
-    if((context->archive_poll_started == RT_TRUE) &&
-       (context->archive_poll_index == archive_index)) {
-        context->idle_tick = context->archive_poll_start_tick;
-        context->archive_poll_started = RT_FALSE; /* 本档案结束后释放起点，下一档案首帧重新记录。 */
-        context->state = INV_DATA_PORT_DEVICE_IDLE;
-    }
-    /* 整个档案没有任何可读帧时直接跳过，避免不存在的“第一帧”产生额外等待。 */
-    else {
-        context->archive_poll_started = RT_FALSE;
-        context->state = INV_DATA_PORT_READY;
-    }
+    context->archive_poll_started = RT_FALSE;
+    context->state = INV_DATA_PORT_READY;
 }
 
 /* 从当前游标开始查找本端口下一项有效寄存器，并返回首个数据点下标供三相合并使用。 */
@@ -783,7 +799,7 @@ static rt_bool_t inv_data_find_next_point(Inv_Data_Port_Context_t *context, uint
         return RT_FALSE;
     }
 
-    /* 最多检查12个档案的全部29个点，避免没有可读点时形成死循环。 */
+    /* 查找次数上限为12个档案的18个周期点，避免没有可读点时死循环。 */
     for(attempt = 0U; attempt < (INVERTER_ARCHIVE_MAX_COUNT * INV_DATA_PERIODIC_POINT_COUNT); ++attempt) {
         uint8_t archive_index = context->archive_index; /* 本次尝试对应的档案游标。 */
         uint8_t point_index = context->point_index;     /* 本次尝试对应的数据点游标。 */
@@ -793,6 +809,14 @@ static rt_bool_t inv_data_find_next_point(Inv_Data_Port_Context_t *context, uint
 
         inv_data_advance_cursor(context); /* 先移动下一游标，当前点完成后可以直接继续查找。 */
 
+        /* 只在一轮首点检查周期；本轮后续点不能被刚更新的计时起点跳过。 */
+        if((point_index == 0U) &&
+           (inv_data_archive_due(context, archive_index, rt_tick_get()) != RT_TRUE)) {
+            context->point_index = 0U;
+            context->archive_index = (archive_index + 1U) % INVERTER_ARCHIVE_MAX_COUNT;
+            continue;
+        }
+
         /* 无效档案或接入其他端口的档案不属于当前端口状态机。 */
         if((g_inv_archive_lib.valid[archive_index] != INVERTER_ARCHIVE_VALID) ||
            (archive->port != inv_data_archive_port(context))) {
@@ -801,7 +825,7 @@ static rt_bool_t inv_data_find_next_point(Inv_Data_Port_Context_t *context, uint
 
         /* 档案没有实时协议指针时无法取得数据点目标，直接检查下一点。 */
         if(inv_data_get_point(archive_index, point_index, &point) == RT_FALSE) {
-            /* 当前点是该逆变器最后一项时，即使未配置寄存器也需要进入10秒空闲。 */
+            /* 本台最后一项没有配置时同样结束本轮，继续检查下一档案。 */
             if(archive_last_point == RT_TRUE) {
                 inv_data_start_device_idle(context, archive_index);
                 return RT_FALSE;
@@ -814,7 +838,7 @@ static rt_bool_t inv_data_find_next_point(Inv_Data_Port_Context_t *context, uint
         if(inv_data_point_is_readable(&point) == RT_FALSE) {
             inv_data_invalidate_point(&point); /* 每轮都按当前协议库状态刷新该点的无效状态。 */
 
-            /* 当前点是该逆变器最后一项时，清除有效标志后仍需进入10秒设备空闲。 */
+            /* 本台最后一项不可读时结束本轮，不占用端口等待本台周期。 */
             if(archive_last_point == RT_TRUE) {
                 inv_data_start_device_idle(context, archive_index);
                 return RT_FALSE;
@@ -834,6 +858,7 @@ static rt_bool_t inv_data_find_next_point(Inv_Data_Port_Context_t *context, uint
         return RT_TRUE;
     }
 
+    context->state = INV_DATA_PORT_DEVICE_IDLE; /* 所有档案均未到期或无可读点，空闲期间允许透传。 */
     return RT_FALSE;
 }
 
@@ -1489,7 +1514,8 @@ static void inv_data_send_next_request(Inv_Data_Port_Context_t *context)
     /* 当前档案第一帧完整提交成功时开始计算轮询周期，后续数据、控制和转发均不重置。 */
     if((context->archive_poll_started != RT_TRUE) ||
        (context->archive_poll_index != context->active_archive_index)) {
-        context->archive_poll_start_tick = rt_tick_get();
+        context->archive_poll_start_tick[context->active_archive_index] = rt_tick_get();
+        context->archive_poll_valid[context->active_archive_index] = RT_TRUE;
         context->archive_poll_index = context->active_archive_index;
         context->archive_poll_started = RT_TRUE;
     }
@@ -1929,10 +1955,10 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
         return;
     }
 
-    /* 设备空闲时间到达时先恢复周期抄读，防止连续第二路报文超过轮询时间后仍长期占线。 */
+    /* 任一档案到期时先恢复周期检查，避免连续透传使到期设备长期得不到抄读。 */
     if((g_inv_data_work_enabled == RT_TRUE) &&
        (context->state == INV_DATA_PORT_DEVICE_IDLE) &&
-       ((rt_tick_t)(now - context->idle_tick) >= inv_data_device_idle_ticks())) {
+       (inv_data_port_has_due_archive(context, now) == RT_TRUE)) {
         context->state = INV_DATA_PORT_READY;
         context->forward_allowed = RT_FALSE; /* 空闲期未使用的旧机会不能抢在新一轮周期首项之前。 */
         return;
@@ -1958,7 +1984,7 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
         return;
     }
 
-    /* 设备空闲时间尚未到达时保持原计时，期间已经在前面允许第二路使用空闲线路。 */
+    /* 尚无到期档案时保持空闲，各档案计时独立，期间允许第二路透传。 */
     if(context->state == INV_DATA_PORT_DEVICE_IDLE) {
         return;
     }
@@ -2037,6 +2063,8 @@ void Inv_Data_Clear_Archive(uint8_t archive_index)
     rt_memset(&g_inv_data[archive_index], 0, sizeof(g_inv_data[archive_index])); /* 数据、参数、控制及日发电量统一恢复无效。 */
     g_inv_data[archive_index].run_state = INV_RUN_STATE_UNKNOWN; /* 全零对应关机，因此必须显式恢复未知状态。 */
     for(port_index = 0U; port_index < INV_DATA_PORT_COUNT; ++port_index) {
+        g_inv_data_ports[port_index].archive_poll_valid[archive_index] = RT_FALSE;
+        g_inv_data_ports[port_index].archive_poll_start_tick[archive_index] = 0U;
         if((g_inv_data_ports[port_index].archive_poll_started == RT_TRUE) &&
            (g_inv_data_ports[port_index].archive_poll_index == archive_index)) { /* 删除正在抄读的档案时不能保留它的旧周期起点。 */
             g_inv_data_ports[port_index].archive_poll_started = RT_FALSE;
