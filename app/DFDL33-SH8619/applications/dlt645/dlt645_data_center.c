@@ -93,6 +93,7 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
     {0x02800001U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 3U, 1000, 0, 0, dlt645_read_zero_data, RT_NULL, "converter neutral current"}, /* 格式XXX.XXX A，当前固定回复三字节全零。 */
     {0x05060101U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 4U, 100, 0, 0, dlt645_read_zero_data, RT_NULL, "previous daily forward active energy"}, /* 上一次日冻结正向有功总电能固定回复四字节全零。 */
     {0x05060201U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 4U, 100, 0, 0, dlt645_read_zero_data, RT_NULL, "previous daily reverse active energy"}, /* 上一次日冻结反向有功总电能固定回复四字节全零。 */
+    {0x06000001U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 0U, 1, 0, 0, dlt645_read_empty_data, RT_NULL, "given-time load record block"}, /* 当前无历史负荷记录，按规约正常空应答：91H、L=04H，数据域仅回显DI。 */
     {0x06100101U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 2U, 10, 0, 0, dlt645_read_converter_phase_a_voltage, RT_NULL, "curve phase A voltage"}, /* 与02010100共用A相电压实际值接口，格式XXX.X V。 */
     {0x061001FFU, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 6U, 10, 0, 0, dlt645_read_converter_voltage_block, RT_NULL, "curve three phase voltage block"}, /* A相为本机电压，B、C相各回复两字节FF。 */
     {0x06100201U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 3U, 1000, 0, 0, dlt645_read_zero_data, RT_NULL, "curve phase A current"}, /* 格式XXX.XXX A，当前固定回复三字节全零。 */

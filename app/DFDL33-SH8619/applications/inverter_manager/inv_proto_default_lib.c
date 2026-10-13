@@ -205,7 +205,7 @@ Inv_Feature_Id_t g_inv_feature[] = {    // 厂家特征数据
     {INV_MFR_SAJ_1,       {273,          1,            0x03,   TYPE_I16, Type_Byte_ABCD,     1,      0,            10,                  900}},      // 温度,范围取1~90度
     {INV_MFR_SAJ_2,       {24636,        1,            0x03,   TYPE_I16, Type_Byte_ABCD,     1,      0,            10,                  900}},      // 温度,范围取1~90度
     {INV_MFR_SAJ_3,       {16384,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     0,      0,            1970,               2038}},      // 日期年,范围取1970~2038
-    {INV_MFR_JINLONG_1,   {3074,         1,            0x04,   TYPE_U16, Type_Byte_ABCD,     0,      0,            1,                    12}},      // 日期月,范围取1~12
+    {INV_MFR_JINLONG_1,   {3073,         1,            0x04,   TYPE_U16, Type_Byte_ABCD,     0,      0,            1,                    12}},      // 日期月,范围取1~12
     {INV_MFR_SOFAR_1,     {1156,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     2,      0,            4950,               5050}},      // 电网频率,范围取49.5~50.5
     {INV_MFR_SINENG_1,    {40201,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     0,      0,            1970,               2038}},      // 日期年,范围取1970~2038
     {INV_MFR_TEBA_1,      {4269,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     2,      0,            4950,               5050}},      // 电网频率,范围取49.5~50.5

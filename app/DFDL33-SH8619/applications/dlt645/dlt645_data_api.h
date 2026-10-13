@@ -79,6 +79,9 @@ rt_err_t dlt645_read_converter_phase_a_voltage(const Dlt645PointTypeDef *point, 
 /* 为规范要求暂时固定回零的数据标识生成点表指定长度的全零业务数据。 */
 rt_err_t dlt645_read_zero_data(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
 
+/* 为当前无匹配记录的负荷记录查询生成仅含数据标识的正常空应答。 */
+rt_err_t dlt645_read_empty_data(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
 /* 读取04800001厂家软件版本号，使用app_firmware_ver_ascll生成固定32字节零填充ASCII数据。 */
 rt_err_t dlt645_read_firmware_version(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
 

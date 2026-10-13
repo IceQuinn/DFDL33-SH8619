@@ -532,7 +532,9 @@ class SerialAssistant(tk.Tk):
             else:
                 ttk.Label(self.dlt_fields_frame, text="未配置的数据标识仍可生成读取报文，回复数据将以HEX显示").grid(row=0, column=0, sticky="w")
             return
-        section = definition.write_request if self.dlt_action_var.get() == "写" else definition.read_response
+        is_read_request = self.dlt_action_var.get() == "读" and bool(definition.read_request.get("fields", []))
+        section = (definition.write_request if self.dlt_action_var.get() == "写"
+                   else definition.read_request if is_read_request else definition.read_response)
         fields = section.get("fields", [])
         cached_values = self.dlt_read_values.get(data_identifier, {}) if self.dlt_action_var.get() == "写" else {}  # 写窗口优先采用同DI最近一次读取值。
         field_row_offset = 0  # 普通数据标识从首行开始显示，档案全FF选项会占用额外一行。
@@ -560,7 +562,7 @@ class SerialAssistant(tk.Tk):
                 display_label += "（FF=不控制）"
             display_row = row + field_row_offset  # 同一字段的标题、输入、单位和解析值必须保持在同一显示行。
             ttk.Label(self.dlt_fields_frame, text=display_label).grid(row=display_row, column=0, padx=4, pady=2, sticky="w")
-            if self.dlt_action_var.get() == "写":
+            if self.dlt_action_var.get() == "写" or is_read_request:
                 if kind == "type_descriptor":
                     cached_descriptor = cached_values.get(name, {})  # 类型描述符由数据类型、字节序和小数位三个控件共同编辑。
                     cached_descriptor = cached_descriptor if isinstance(cached_descriptor, dict) else {}
@@ -575,7 +577,10 @@ class SerialAssistant(tk.Tk):
                     ttk.Combobox(widget, textvariable=order_var, values=("ABCD", "CDAB", "BADC", "DCBA"), state="readonly", width=7).pack(side="left", padx=4)
                     ttk.Combobox(widget, textvariable=decimals_var, values=("0", "1", "2", "3", "4", "5"), state="readonly", width=5).pack(side="left")
                 else:
-                    variable = tk.StringVar(value=str(cached_values.get(name, field_def.get("default", ""))))  # 普通字段直接回填读取时保存的可编码文本。
+                    default_value = field_def.get("default", "")
+                    if is_read_request and default_value == "$NOW":
+                        default_value = datetime.now().strftime("%y-%m-%d %H:%M")
+                    variable = tk.StringVar(value=str(cached_values.get(name, default_value)))  # 普通字段直接回填读取时保存的可编码文本。
                     self.dlt_field_vars[name] = variable
                     if kind == "enum" and field_def.get("values"):
                         widget = ttk.Combobox(self.dlt_fields_frame, textvariable=variable,
@@ -592,7 +597,7 @@ class SerialAssistant(tk.Tk):
                 ttk.Label(self.dlt_fields_frame, text=f"{kind} / {field_def.get('length')}字节{format_hint}").grid(row=display_row, column=1, padx=4, pady=2, sticky="w")
             trailing_text = f"{unit}（{write_hint}）" if write_hint else unit
             ttk.Label(self.dlt_fields_frame, text=trailing_text).grid(row=display_row, column=2, padx=4, pady=2, sticky="w")
-            if self.dlt_action_var.get() == "读":
+            if self.dlt_action_var.get() == "读" and not is_read_request:
                 decoded_var = tk.StringVar(value="解析值：--")
                 self.dlt_decoded_vars[label] = decoded_var
                 ttk.Label(self.dlt_fields_frame, textvariable=decoded_var, foreground="#1565c0").grid(
@@ -754,7 +759,12 @@ class SerialAssistant(tk.Tk):
             data_identifier = self._selected_di()
             preamble = int(self.dlt_preamble_var.get())
             if self.dlt_action_var.get() == "读":
-                frame = build_read_data(address, data_identifier, preamble)
+                definition = self.dlt_registry.get(data_identifier)
+                request_payload = b""
+                if definition and definition.read_request.get("fields", []):
+                    request_values = {name: variable.get() for name, variable in self.dlt_field_vars.items()}
+                    request_payload = self.dlt_registry.encode(data_identifier, request_values, "read_request")
+                frame = build_read_data(address, data_identifier, preamble, request_payload=request_payload)
             else:
                 if self.dlt_all_ff_var is not None and self.dlt_all_ff_var.get():
                     payload = self.dlt_registry.encode(data_identifier, {"__all_ff__": True})  # 档案删除必须由配置允许并生成完整36字节FF。

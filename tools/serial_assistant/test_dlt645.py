@@ -143,6 +143,32 @@ class DLT645Tests(unittest.TestCase):
         self.assertEqual(result.data_identifier, "02010100")
         self.assertEqual(result.decoded_values, (("A相电压", "220.5", "V"),))
 
+    def test_given_time_load_record_request_and_empty_response(self):
+        definition = self.registry.get("06000001")
+        self.assertIsNotNone(definition)
+        self.assertEqual(definition.category, "standard")
+        self.assertEqual(definition.group_id, "converter_curve")
+
+        request_payload = self.registry.encode(
+            "06000001", {"record_count": "2", "start_time": "26-10-13 14:30"}, "read_request"
+        )
+        self.assertEqual(request_payload, bytes.fromhex("02 30 14 13 10 26"))
+        request = parse_frame(build_read_data(
+            "123456789012", "06000001", request_payload=request_payload
+        ), self.registry)
+        self.assertTrue(request.valid)
+        self.assertEqual(request.payload, request_payload)
+        self.assertEqual(request.decoded_values, (
+            ("负荷记录块数", "2", ""), ("起始时间", "26-10-13 14:30", ""),
+        ))
+
+        response = parse_frame(build_frame(
+            "123456789012", 0x91, encode_di("06000001")
+        ), self.registry)
+        self.assertTrue(response.valid)
+        self.assertEqual(response.payload, b"")
+        self.assertIn("正常空应答", response.detail)
+
     def test_write_request_uses_hidden_security_defaults(self):
         payload = self.registry.encode("04E60801", {"active_power_percentage_adjustment": "50.0"})
         frame = build_write_data("123456789012", "04E60801", payload)

@@ -135,12 +135,17 @@ def build_read_data(
     preamble: int = 0,
     follow_up: bool = False,
     sequence: int = 0,
+    request_payload: bytes = b"",
 ) -> bytes:
     clear_data = encode_di(data_identifier)
     if follow_up:
+        if request_payload:
+            raise ValueError("读后续数据请求不能携带普通读取参数")
         if not 0 <= sequence <= 0xFF:
             raise ValueError("后续帧序号必须为0~255")
         clear_data += bytes((sequence,))
+    else:
+        clear_data += request_payload
     return build_frame(address, 0x12 if follow_up else 0x11, clear_data, preamble)
 
 
@@ -292,11 +297,19 @@ def parse_frame(frame: bytes, registry: Optional["DataIdentifierRegistry"] = Non
                     structure_ok = False
         if registry and data_identifier and payload and not follow_up and function != 0x12:
             try:
-                section = "write_request" if function == 0x14 and direction == "主机→从机" else "read_response"
+                if function == 0x14 and direction == "主机→从机":
+                    section = "write_request"
+                elif function == 0x11 and direction == "主机→从机":
+                    section = "read_request"
+                else:
+                    section = "read_response"
                 decoded = tuple(registry.decode(data_identifier, payload, section))
             except ValueError as exc:
                 details.append(str(exc))
                 structure_ok = False
+        if (data_identifier == "06000001" and direction == "从机→主机"
+                and function == 0x11 and not payload and not follow_up):
+            details.append("给定时间负荷记录正常空应答（无匹配记录）")
     elif function in (0x11, 0x12) and clear_data:
         details.append("数据域不足4字节，无法取得数据标识")
         structure_ok = False
@@ -605,6 +618,7 @@ class DataIdentifierDefinition:
     group_id: str = "standard"
     group_description: str = "标准数据标识"
     selector: str = ""
+    read_request: Mapping[str, Any] = field(default_factory=dict)
 
 
 class DataIdentifierRegistry:
@@ -726,9 +740,10 @@ class DataIdentifierRegistry:
             if di in seen:
                 raise ValueError(f"数据标识{di}重复")
             seen.add(di)
+            read_request = section(raw, "read_request", "read_request_schema")
             read_response = section(raw, "read_response", "read_schema")
             write_request = section(raw, "write_request", "write_schema")
-            for section_name, configured_section in (("read_response", read_response), ("write_request", write_request)):
+            for section_name, configured_section in (("read_request", read_request), ("read_response", read_response), ("write_request", write_request)):
                 names: set[str] = set()
                 for field_index, field_def in enumerate(configured_section.get("fields", []), 1):
                     name = str(field_def.get("name", ""))
@@ -741,7 +756,7 @@ class DataIdentifierRegistry:
             definitions.append(DataIdentifierDefinition(
                 di, description, access, read_response, write_request, category,
                 category_map.get(category, category), str(raw.get("group_id", "standard")),
-                str(raw.get("group_description", "标准数据标识")), str(raw.get("selector", di[-2:])),
+                str(raw.get("group_description", "标准数据标识")), str(raw.get("selector", di[-2:])), read_request,
             ))
 
         for group_index, raw in enumerate(document.get("data_identifier_groups", []), 1):
@@ -769,6 +784,7 @@ class DataIdentifierRegistry:
                 suffixes.extend(f"{int(str(value), 16):02X}" for value in suffix_config.get("values", []))
                 read_response = section(raw, "read_response", "read_schema")
                 write_request = section(raw, "write_request", "write_schema")
+                read_request = section(raw, "read_request", "read_request_schema")
             except (KeyError, ValueError, TypeError) as exc:
                 raise ValueError(f"第{group_index}个数据标识组配置无效：{exc}") from exc
             labels = {str(key).upper(): str(value) for key, value in suffix_config.get("labels", {}).items()}
@@ -790,6 +806,7 @@ class DataIdentifierRegistry:
                     di, description, access, item_read_response, item_write_request, category,
                     category_map.get(category, category), group_id,
                     str(raw.get("display", f"{prefix[:2]} {prefix[2:4]} {prefix[4:]} xx | {group_description}")), suffix,
+                    repeated_section(read_request, repeat_read_suffixes.get(suffix, 1)),
                 ))
         configured_group_order = document.get("category_group_order", {})
         if configured_group_order and not isinstance(configured_group_order, dict):

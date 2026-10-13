@@ -29,6 +29,9 @@
     "other": ["device_maintenance", "serial_port_parameter", "protocol_library_count", "protocol_library_slots"]
   },
   "group_data_identifier_order": {
+    "converter_curve": [
+      "06000001"
+    ],
     "converter_realtime": [
       "02010100", "0201FF00",
       "02020100", "0202FF00",
@@ -834,6 +837,14 @@
     {
       "di": "05060201", "category": "standard", "group_id": "converter_freeze", "group_description": "日冻结数据", "description": "上一次日冻结反向有功总电能", "access": "read",
       "read_response": {"fields": [{"name": "reverse_energy", "description": "反向有功总电能", "type": "bcd", "length": 4, "byte_order": "little", "decimals": 2, "unit": "kWh"}]}
+    },
+    {
+      "di": "06000001", "category": "standard", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "给定时间记录块", "access": "read",
+      "read_request": {"fields": [
+        {"name": "record_count", "description": "负荷记录块数", "type": "uint", "length": 1, "byte_order": "little", "minimum": 1, "maximum": 255, "default": 1},
+        {"name": "start_time", "description": "起始时间", "type": "bcd_datetime", "length": 5, "format": "YYMMDDhhmm", "byte_order": "little", "default": "$NOW"}
+      ]},
+      "read_response": {"fields": []}
     },
     {
       "di": "06100101", "category": "standard", "group_id": "converter_curve", "group_description": "负荷记录数据", "description": "A相电压曲线数据", "access": "read",

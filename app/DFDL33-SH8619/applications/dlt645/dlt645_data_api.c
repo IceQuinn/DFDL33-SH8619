@@ -336,6 +336,23 @@ rt_err_t dlt645_read_zero_data(const Dlt645PointTypeDef *point, uint32_t id,
     return RT_EOK;
 }
 
+/* 返回零字节业务数据，顶层组帧后形成L=04H、数据域仅含DI的正常空应答。 */
+rt_err_t dlt645_read_empty_data(const Dlt645PointTypeDef *point, uint32_t id,
+                                uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    RT_UNUSED(id);       /* 固定数据标识已由点表完成精确匹配。 */
+    RT_UNUSED(data);     /* 空应答不产生业务数据字节。 */
+    RT_UNUSED(capacity); /* 空应答不占用业务数据缓冲区。 */
+
+    if((point == RT_NULL) || (data_len == RT_NULL) || (point->data_len != 0U))
+    {
+        return -RT_EINVAL;
+    }
+
+    *data_len = 0U;
+    return RT_EOK;
+}
+
 /* 读取04800001厂家软件版本号，将启动时生成的版本字符串组织为固定32字节零填充ASCII。 */
 rt_err_t dlt645_read_firmware_version(const Dlt645PointTypeDef *point, uint32_t id,
                                       uint8_t *data, uint16_t capacity, uint16_t *data_len)
