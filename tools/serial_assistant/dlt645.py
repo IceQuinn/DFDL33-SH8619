@@ -801,13 +801,29 @@ class DataIdentifierRegistry:
             if isinstance(groups, list)
         }
 
-        def definition_order(item: DataIdentifierDefinition) -> tuple[int, int]:
-            """按规范书类别顺序和各类别标识组顺序稳定排列，未配置组统一追加到末尾。"""
-            category_groups = group_rank.get(item.category, {})
-            return (category_rank.get(item.category, len(category_rank)),
-                    category_groups.get(item.group_id, len(category_groups)))
+        configured_item_order = document.get("group_data_identifier_order", {})
+        if configured_item_order and not isinstance(configured_item_order, dict):
+            raise ValueError("group_data_identifier_order必须是对象")
+        item_rank: dict[str, dict[str, int]] = {}
+        for group_id, identifiers in configured_item_order.items():
+            if not isinstance(identifiers, list):
+                raise ValueError(f"标识组{group_id}的数据标识顺序必须是数组")
+            normalized_identifiers = [normalize_di(str(identifier)) for identifier in identifiers]
+            if len(normalized_identifiers) != len(set(normalized_identifiers)):
+                raise ValueError(f"标识组{group_id}的数据标识顺序存在重复项")
+            item_rank[str(group_id)] = {
+                data_identifier: index for index, data_identifier in enumerate(normalized_identifiers)
+            }
 
-        definitions.sort(key=definition_order)  # Python稳定排序会保留同一标识组内原有的数据标识顺序。
+        def definition_order(item: DataIdentifierDefinition) -> tuple[int, int, int]:
+            """按类别、标识组及组内显式顺序排列，未配置项稳定追加到对应层级末尾。"""
+            category_groups = group_rank.get(item.category, {})
+            group_items = item_rank.get(item.group_id, {})
+            return (category_rank.get(item.category, len(category_rank)),
+                    category_groups.get(item.group_id, len(category_groups)),
+                    group_items.get(item.di, len(group_items)))
+
+        definitions.sort(key=definition_order)  # 未配置显式顺序的同组条目仍由Python稳定排序保留原始顺序。
         return cls(definitions, document.get("defaults", {}), category_map)
 
     def get(self, data_identifier: str) -> Optional[DataIdentifierDefinition]:

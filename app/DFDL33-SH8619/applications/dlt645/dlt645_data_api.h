@@ -70,6 +70,9 @@ uint16_t dlt645_get_converter_phase_a_voltage(void);
 /* 读取本机三相电压块，A相为XXX.X BCD，B、C相为全FF无效值。 */
 rt_err_t dlt645_read_converter_voltage_block(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
 
+/* 读取协议转换单元单相测量数据块，已有总/A相字段回零，未配置的B、C相字段返回全FF。 */
+rt_err_t dlt645_read_converter_single_phase_zero_block(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
 /* 读取协议转换单元A相电压并编码为规范要求的两字节XXX.X BCD。 */
 rt_err_t dlt645_read_converter_phase_a_voltage(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
 

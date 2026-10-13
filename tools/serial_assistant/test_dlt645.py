@@ -303,7 +303,7 @@ class DLT645Tests(unittest.TestCase):
         voltage_block = self.registry.get("0201FF00")
         self.assertEqual(voltage_block.access, "read")
         self.assertEqual(voltage_block.category, "standard")
-        self.assertEqual(voltage_block.group_id, "standard")
+        self.assertEqual(voltage_block.group_id, "converter_realtime")
         self.assertEqual(self.registry.decode("0201FF00", bytes.fromhex("00 22 FF FF FF FF")),
                          [("A相电压", "220", "V"), ("B相电压", "--", "V"), ("C相电压", "--", "V")])
         voltage_frame = build_frame("000000000012", 0x91,
@@ -311,10 +311,48 @@ class DLT645Tests(unittest.TestCase):
         self.assertEqual(voltage_frame[9], 10)
         self.assertTrue(parse_frame(voltage_frame, self.registry).valid)
 
+        standard_measurement_blocks = {
+            "0202FF00": (
+                bytes(3) + b"\xFF" * 6,
+                [("A相电流", "0", "A"), ("B相电流", "--", "A"), ("C相电流", "--", "A")],
+            ),
+            "0203FF00": (
+                bytes(6) + b"\xFF" * 6,
+                [("瞬时总有功功率", "0", "kW"), ("瞬时A相有功功率", "0", "kW"),
+                 ("瞬时B相有功功率", "--", "kW"), ("瞬时C相有功功率", "--", "kW")],
+            ),
+            "0204FF00": (
+                bytes(6) + b"\xFF" * 6,
+                [("瞬时总无功功率", "0", "kvar"), ("瞬时A相无功功率", "0", "kvar"),
+                 ("瞬时B相无功功率", "--", "kvar"), ("瞬时C相无功功率", "--", "kvar")],
+            ),
+            "0205FF00": (
+                bytes(6) + b"\xFF" * 6,
+                [("瞬时总视在功率", "0", "kVA"), ("瞬时A相视在功率", "0", "kVA"),
+                 ("瞬时B相视在功率", "--", "kVA"), ("瞬时C相视在功率", "--", "kVA")],
+            ),
+            "0206FF00": (
+                bytes(4) + b"\xFF" * 4,
+                [("总功率因数", "0", ""), ("A相功率因数", "0", ""),
+                 ("B相功率因数", "--", ""), ("C相功率因数", "--", "")],
+            ),
+        }
+        for data_identifier, (payload, expected_fields) in standard_measurement_blocks.items():
+            with self.subTest(data_identifier=data_identifier):
+                definition = self.registry.get(data_identifier)
+                self.assertEqual(definition.category, "standard")
+                self.assertEqual(definition.group_id, "converter_realtime")
+                self.assertEqual(definition.access, "read")
+                self.assertEqual(sum(field["length"] for field in definition.read_response["fields"]), len(payload))
+                self.assertEqual(self.registry.decode(data_identifier, payload), expected_fields)
+                frame = build_frame("000000000012", 0x91, encode_di(data_identifier) + payload)
+                self.assertEqual(frame[9], 4 + len(payload))
+                self.assertTrue(parse_frame(frame, self.registry).valid)
+
         actual_value_identifiers = ("02010100", "06100101")
         for data_identifier in actual_value_identifiers:
             definition = self.registry.get(data_identifier)
-            self.assertEqual(definition.category, "other")
+            self.assertEqual(definition.category, "standard")
             self.assertEqual(definition.access, "read")
             self.assertEqual(self.registry.decode(data_identifier, bytes.fromhex("00 22")),
                              [("A相电压", "220", "V")])
@@ -330,13 +368,14 @@ class DLT645Tests(unittest.TestCase):
         for data_identifier in zero_value_identifiers:
             definition = self.registry.get(data_identifier)
             payload_length = sum(int(field["length"]) for field in definition.read_response["fields"])
-            self.assertEqual(definition.category, "other")
+            self.assertEqual(definition.category, "standard")
             self.assertEqual(definition.access, "read")
             self.assertTrue(all(value == "0" for _name, value, _unit in
                                 self.registry.decode(data_identifier, bytes(payload_length))))
 
         for data_identifier in ("061006FF", "061007FF"):
             definition = self.registry.get(data_identifier)
+            self.assertEqual(definition.category, "standard")
             self.assertEqual(len(definition.read_response["fields"]), 4)
             self.assertEqual(sum(int(field["length"]) for field in definition.read_response["fields"]), 16)
             self.assertTrue(all(value == "0" for _name, value, _unit in
@@ -344,9 +383,29 @@ class DLT645Tests(unittest.TestCase):
 
         for data_identifier in ("04000101", "04000102"):
             definition = self.registry.get(data_identifier)
-            self.assertEqual(definition.category, "other")
+            self.assertEqual(definition.category, "standard")
             self.assertEqual(definition.access, "read")
             self.assertEqual(definition.write_request, {})
+
+        curve_blocks = {
+            "061001FF": bytes.fromhex("00 22 FF FF FF FF"),
+            "061002FF": bytes(3) + b"\xFF" * 6,
+            "061003FF": bytes(6) + b"\xFF" * 6,
+            "061004FF": bytes(6) + b"\xFF" * 6,
+            "061005FF": bytes(4) + b"\xFF" * 4,
+        }
+        for data_identifier, payload in curve_blocks.items():
+            with self.subTest(data_identifier=data_identifier):
+                definition = self.registry.get(data_identifier)
+                self.assertEqual(definition.category, "standard")
+                self.assertEqual(definition.group_id, "converter_curve")
+                self.assertEqual(sum(int(field["length"]) for field in definition.read_response["fields"]),
+                                 len(payload))
+                decoded = self.registry.decode(data_identifier, payload)
+                self.assertTrue(all(value != "--" for _name, value, _unit in decoded[:1 if data_identifier[4:6] in ("01", "02") else 2]))
+                self.assertTrue(all(value == "--" for _name, value, _unit in decoded[1 if data_identifier[4:6] in ("01", "02") else 2:]))
+                frame = build_frame("000000000012", 0x91, encode_di(data_identifier) + payload)
+                self.assertTrue(parse_frame(frame, self.registry).valid)
 
     def test_vendor_write_format_can_omit_security_fields(self):
         registry = DataIdentifierRegistry(
@@ -447,9 +506,26 @@ class DLT645Tests(unittest.TestCase):
             "active_power_schedule", "active_power_percent_schedule", "inverter_archive_count", "inverter_archive",
         ])
         self.assertEqual(groups("event"), [])
+        self.assertEqual(groups("standard"), [
+            "standard", "converter_realtime", "converter_datetime", "converter_freeze", "converter_curve",
+            "meter_parameter", "manufacturer_information",
+        ])
         self.assertEqual(groups("other"), [
-            "converter_realtime", "converter_datetime", "converter_freeze", "converter_curve",
             "device_maintenance", "serial_port_parameter", "protocol_library_count", "protocol_library_slots",
+        ])
+
+        realtime_identifiers = [
+            item.di for item in self.registry.definitions.values()
+            if item.category == "standard" and item.group_id == "converter_realtime"
+        ]
+        self.assertEqual(realtime_identifiers, [
+            "02010100", "0201FF00",
+            "02020100", "0202FF00",
+            "02030000", "02030100", "0203FF00",
+            "02040000", "02040100", "0204FF00",
+            "02050000", "02050100", "0205FF00",
+            "02060000", "02060100", "0206FF00",
+            "02800001",
         ])
 
     def test_interface_settings_round_trip_and_invalid_choice_fallback(self):

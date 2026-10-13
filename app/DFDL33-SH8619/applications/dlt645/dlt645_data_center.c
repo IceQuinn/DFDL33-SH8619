@@ -57,7 +57,6 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
     {0x00020300U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 4U, 100, 0, 0, dlt645_read_zero_data, RT_NULL, "reverse active tariff 3 energy"}, /* 反向有功费率3电能固定回复4字节全零。 */
     {0x00020400U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 4U, 100, 0, 0, dlt645_read_zero_data, RT_NULL, "reverse active tariff 4 energy"}, /* 反向有功费率4电能固定回复4字节全零。 */
     {0x0002FF00U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 20U, 100, 0, 0, dlt645_read_zero_data, RT_NULL, "reverse active energy block"}, /* 按总电能、费率1～4顺序回复5项，共20字节全零。 */
-    {0x0201FF00U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 6U, 10, 0, 0, dlt645_read_converter_voltage_block, RT_NULL, "converter three phase voltage"}, /* A相为本机电压，B、C相各回复两字节FF。 */
     {0x04001501U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 12U, 1, 0, 0, dlt645_read_zero_data, RT_NULL, "fixed zero data 04001501"}, /* 固定只读数据标识，业务数据回复12字节全零。 */
     //DI3～DI1    DI0           读写权限            编码方式            DI0选择器                                    数据长度 定点数倍率 写入值下限 写入值上限 读取回调函数 写入回调函数 点表名称
     {0x0400040FU, 0xFFFFFFFFU, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 11U, 1, 0, 0, dlt645_read_location, dlt645_write_location, "converter location"}, /* 标准位置信息依次包含经度XXXX.XXXX、纬度XXXX.XXXX和高度XXXX.XX。 */
@@ -74,29 +73,39 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
     {0x04000C00U, 0xFFFFFFFFU, DLT645_ACCESS_WRITE, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 1U, 1, 1, 1, RT_NULL, dlt645_write_device_action, "restore factory defaults"}, /* 写1恢复并保存默认配置，不自动重启。 */
     {0x04000D00U, 0xFFFFFFFFU, DLT645_ACCESS_WRITE, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 1U, 1, 1, 1, RT_NULL, dlt645_write_device_action, "voltage calibration"}, /* 仅允许写一字节1触发voltage_calibration，接口返回后应答请求已受理，不等待实际校准完成。 */
     {0x04800001U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_ASCII, DLT645_SELECTOR_NONE, 32U, 1, 0, 0, dlt645_read_firmware_version, RT_NULL, "manufacturer software version"}, /* 厂家软件版本号使用app_firmware_ver_ascll并固定返回32字节零填充ASCII。 */
-    // 协议转换单元其他类数据：A相电压据实回复，当前由临时默认取值接口提供。
+    // 标准645变量类实时数据按单项、对应数据块的业务顺序排列。
     {0x02010100U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 2U, 10, 0, 0, dlt645_read_converter_phase_a_voltage, RT_NULL, "converter phase A voltage"}, /* 格式XXX.X V，内存值单位为0.1V。 */
-    // 协议转换单元其他类数据：以下测量量按现阶段规范要求固定回复全零。
+    {0x0201FF00U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 6U, 10, 0, 0, dlt645_read_converter_voltage_block, RT_NULL, "converter three phase voltage"}, /* A相为本机电压，B、C相各回复两字节FF。 */
     {0x02020100U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 3U, 1000, 0, 0, dlt645_read_zero_data, RT_NULL, "converter phase A current"}, /* 格式XXX.XXX A，当前固定回复三字节全零。 */
+    {0x0202FF00U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 9U, 1000, 0, 0, dlt645_read_converter_single_phase_zero_block, RT_NULL, "converter three phase current"}, /* A相3字节全零，B、C相各3字节FF。 */
     {0x02030000U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 3U, 10000, 0, 0, dlt645_read_zero_data, RT_NULL, "converter total active power"}, /* 格式XX.XXXX kW，当前固定回复三字节全零。 */
     {0x02030100U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 3U, 10000, 0, 0, dlt645_read_zero_data, RT_NULL, "converter phase A active power"}, /* 格式XX.XXXX kW，当前固定回复三字节全零。 */
+    {0x0203FF00U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 12U, 10000, 0, 0, dlt645_read_converter_single_phase_zero_block, RT_NULL, "converter active power block"}, /* 总/A相各3字节全零，B、C相各3字节FF。 */
     {0x02040000U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 3U, 10000, 0, 0, dlt645_read_zero_data, RT_NULL, "converter total reactive power"}, /* 格式XX.XXXX，当前固定回复三字节全零。 */
     {0x02040100U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 3U, 10000, 0, 0, dlt645_read_zero_data, RT_NULL, "converter phase A reactive power"}, /* 格式XX.XXXX，当前固定回复三字节全零。 */
+    {0x0204FF00U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 12U, 10000, 0, 0, dlt645_read_converter_single_phase_zero_block, RT_NULL, "converter reactive power block"}, /* 总/A相各3字节全零，B、C相各3字节FF。 */
     {0x02050000U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 3U, 10000, 0, 0, dlt645_read_zero_data, RT_NULL, "converter total apparent power"}, /* 格式XX.XXXX，当前固定回复三字节全零。 */
     {0x02050100U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 3U, 10000, 0, 0, dlt645_read_zero_data, RT_NULL, "converter phase A apparent power"}, /* 格式XX.XXXX，当前固定回复三字节全零。 */
+    {0x0205FF00U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 12U, 10000, 0, 0, dlt645_read_converter_single_phase_zero_block, RT_NULL, "converter apparent power block"}, /* 总/A相各3字节全零，B、C相各3字节FF。 */
     {0x02060000U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 2U, 1000, 0, 0, dlt645_read_zero_data, RT_NULL, "converter total power factor"}, /* 格式X.XXX，当前固定回复两字节全零。 */
     {0x02060100U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 2U, 1000, 0, 0, dlt645_read_zero_data, RT_NULL, "converter phase A power factor"}, /* 格式X.XXX，当前固定回复两字节全零。 */
+    {0x0206FF00U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 8U, 1000, 0, 0, dlt645_read_converter_single_phase_zero_block, RT_NULL, "converter power factor block"}, /* 总/A相各2字节全零，B、C相各2字节FF。 */
     {0x02800001U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 3U, 1000, 0, 0, dlt645_read_zero_data, RT_NULL, "converter neutral current"}, /* 格式XXX.XXX A，当前固定回复三字节全零。 */
     {0x05060101U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 4U, 100, 0, 0, dlt645_read_zero_data, RT_NULL, "previous daily forward active energy"}, /* 上一次日冻结正向有功总电能固定回复四字节全零。 */
     {0x05060201U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 4U, 100, 0, 0, dlt645_read_zero_data, RT_NULL, "previous daily reverse active energy"}, /* 上一次日冻结反向有功总电能固定回复四字节全零。 */
     {0x06100101U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 2U, 10, 0, 0, dlt645_read_converter_phase_a_voltage, RT_NULL, "curve phase A voltage"}, /* 与02010100共用A相电压实际值接口，格式XXX.X V。 */
+    {0x061001FFU, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 6U, 10, 0, 0, dlt645_read_converter_voltage_block, RT_NULL, "curve three phase voltage block"}, /* A相为本机电压，B、C相各回复两字节FF。 */
     {0x06100201U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 3U, 1000, 0, 0, dlt645_read_zero_data, RT_NULL, "curve phase A current"}, /* 格式XXX.XXX A，当前固定回复三字节全零。 */
+    {0x061002FFU, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 9U, 1000, 0, 0, dlt645_read_converter_single_phase_zero_block, RT_NULL, "curve three phase current block"}, /* A相3字节全零，B、C相各3字节FF。 */
     {0x06100300U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 3U, 10000, 0, 0, dlt645_read_zero_data, RT_NULL, "curve total active power"}, /* 格式XX.XXXX kW，当前固定回复三字节全零。 */
     {0x06100301U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 3U, 10000, 0, 0, dlt645_read_zero_data, RT_NULL, "curve phase A active power"}, /* 格式XX.XXXX kW，当前固定回复三字节全零。 */
+    {0x061003FFU, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 12U, 10000, 0, 0, dlt645_read_converter_single_phase_zero_block, RT_NULL, "curve active power block"}, /* 总/A相各3字节全零，B、C相各3字节FF。 */
     {0x06100400U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 3U, 10000, 0, 0, dlt645_read_zero_data, RT_NULL, "curve total reactive power"}, /* 格式XX.XXXX，当前固定回复三字节全零。 */
     {0x06100401U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 3U, 10000, 0, 0, dlt645_read_zero_data, RT_NULL, "curve phase A reactive power"}, /* 格式XX.XXXX，当前固定回复三字节全零。 */
+    {0x061004FFU, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 12U, 10000, 0, 0, dlt645_read_converter_single_phase_zero_block, RT_NULL, "curve reactive power block"}, /* 总/A相各3字节全零，B、C相各3字节FF。 */
     {0x06100500U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 2U, 1000, 0, 0, dlt645_read_zero_data, RT_NULL, "curve total power factor"}, /* 格式X.XXX，当前固定回复两字节全零。 */
     {0x06100501U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 2U, 1000, 0, 0, dlt645_read_zero_data, RT_NULL, "curve phase A power factor"}, /* 格式X.XXX，当前固定回复两字节全零。 */
+    {0x061005FFU, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 8U, 1000, 0, 0, dlt645_read_converter_single_phase_zero_block, RT_NULL, "curve power factor block"}, /* 总/A相各2字节全零，B、C相各2字节FF。 */
     {0x06100601U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 4U, 100, 0, 0, dlt645_read_zero_data, RT_NULL, "curve forward active energy"}, /* 格式XXXXXX.XX kWh，当前固定回复四字节全零。 */
     {0x06100602U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 4U, 100, 0, 0, dlt645_read_zero_data, RT_NULL, "curve reverse active energy"}, /* 格式XXXXXX.XX kWh，当前固定回复四字节全零。 */
     {0x06100603U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_BCD, DLT645_SELECTOR_NONE, 4U, 100, 0, 0, dlt645_read_zero_data, RT_NULL, "curve combined reactive energy 1"}, /* 格式XXXXXX.XX，当前固定回复四字节全零。 */

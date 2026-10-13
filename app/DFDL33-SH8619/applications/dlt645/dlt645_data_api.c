@@ -269,6 +269,57 @@ rt_err_t dlt645_read_converter_voltage_block(const Dlt645PointTypeDef *point, ui
     return RT_EOK;
 }
 
+/* 读取标准645变量类数据块：本机仅有总/A相槽位，B、C相按规范以整字段FF表示无效。 */
+rt_err_t dlt645_read_converter_single_phase_zero_block(const Dlt645PointTypeDef *point, uint32_t id,
+                                                       uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint16_t valid_len; /* 数据块中能够据实回复的总/A相字段总长度。 */
+
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
+       (point->data_len == 0U) || (capacity < point->data_len))
+    {
+        return -RT_EINVAL;
+    }
+
+    switch(id)
+    {
+        case 0x0202FF00U: /* A、B、C相电流各3字节，本机仅A相有效。 */
+        case 0x061002FFU: /* 负荷曲线A、B、C相电流数据块，本机仅A相有效。 */
+            valid_len = 3U;
+            if(point->data_len != 9U)
+            {
+                return -RT_EINVAL;
+            }
+            break;
+        case 0x0203FF00U: /* 总及A、B、C相有功功率各3字节，本机总/A相有效。 */
+        case 0x0204FF00U: /* 总及A、B、C相无功功率各3字节，本机总/A相有效。 */
+        case 0x0205FF00U: /* 总及A、B、C相视在功率各3字节，本机总/A相有效。 */
+        case 0x061003FFU: /* 负荷曲线总及A、B、C相有功功率数据块。 */
+        case 0x061004FFU: /* 负荷曲线总及A、B、C相无功功率数据块。 */
+            valid_len = 6U;
+            if(point->data_len != 12U)
+            {
+                return -RT_EINVAL;
+            }
+            break;
+        case 0x0206FF00U: /* 总及A、B、C相功率因数各2字节，本机总/A相有效。 */
+        case 0x061005FFU: /* 负荷曲线总及A、B、C相功率因数数据块。 */
+            valid_len = 4U;
+            if(point->data_len != 8U)
+            {
+                return -RT_EINVAL;
+            }
+            break;
+        default:
+            return -RT_EINVAL;
+    }
+
+    rt_memset(data, 0xFF, point->data_len); /* 先将B、C相等未配置字段标记为无效。 */
+    rt_memset(data, 0, valid_len); /* 当前没有实际数据源的总/A相字段按现有单项语义回零。 */
+    *data_len = point->data_len;
+    return RT_EOK;
+}
+
 /* 根据点表长度生成全零业务数据，供当前规范中没有实际数据来源的其他类数据标识复用。 */
 rt_err_t dlt645_read_zero_data(const Dlt645PointTypeDef *point, uint32_t id,
                                uint8_t *data, uint16_t capacity, uint16_t *data_len)
