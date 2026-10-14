@@ -184,7 +184,7 @@ void Inv_Data_Poll_Loop(void);
 /* 串口管理层调用本接口提交周期抄读阶段收到的一帧完整响应。 */
 rt_err_t Inv_Data_Rx_Frame(uint16_t uart_no, const uint8_t *frame, uint16_t frame_len);
 
-/* 第二路串口提交完整原始报文到对应第一路转发队列，队列满时返回RT_EFULL并丢弃新报文。 */
+/* 在线程中提交完整请求，新帧覆盖旧待发送帧，并取消旧在途请求的回复转发资格。 */
 rt_err_t Inv_Forward_Submit(uint16_t secondary_uart_no, const uint8_t *frame, uint16_t frame_len);
 
 /* 自动识别的一项请求结束后允许对应第一路最多转发一帧。 */

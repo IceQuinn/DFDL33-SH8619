@@ -320,7 +320,7 @@ Inv_ProtoData_Ic_Id_t g_inv_Ic[] = {    // C相电流寄存器
     {INV_MFR_SAJ_2,       {24623,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     2,      0}},
     {INV_MFR_SAJ_3,       {16448,        1,            0x03,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
     {INV_MFR_JINLONG_1,   {3038,         1,            0x04,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_SOFAR_1,     {11188,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_SOFAR_1,     {1188,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     2,      0}},
     {INV_MFR_SINENG_1,    {31013,        1,            0x04,   TYPE_U16, Type_Byte_ABCD,     2,      0}},
     {INV_MFR_TEBA_1,      {4267,         1,            0x03,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
     {INV_MFR_AISIWEI_1,   {1363,         1,            0x04,   TYPE_U16, Type_Byte_ABCD,     1,      0}},

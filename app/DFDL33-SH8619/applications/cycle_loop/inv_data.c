@@ -36,7 +36,6 @@
 #define INV_CONTROL_QUEUE_SIZE             4U
 #define INV_CONTROL_RESULT_QUEUE_SIZE     16U
 #define INV_CONTROL_REGISTER_MAX          (INV_DATA_NUMERIC_BYTE_MAX / 2U)
-#define INV_FORWARD_QUEUE_SIZE             4U
 
 /* 每个端口的抄读状态独立变化，等待某一路响应时其他端口仍可继续发送或解析。 */
 typedef enum Inv_Data_Port_State {
@@ -54,12 +53,10 @@ typedef struct Inv_Forward_Frame {
     uint8_t frame[INV_DATA_RX_FRAME_SIZE]; /* 当前待转发的完整原始报文。 */
 } Inv_Forward_Frame_t;
 
-/* 每个RJ45端口使用独立环形队列，队列满时丢弃新报文，不覆盖旧报文。 */
+/* 每个RJ45只缓存最新待发送帧，在途帧另存，不能被新请求覆盖。 */
 typedef struct Inv_Forward_Queue {
-    Inv_Forward_Frame_t frames[INV_FORWARD_QUEUE_SIZE]; /* 按接收先后保存的待转发报文。 */
-    uint8_t read_index;                                  /* 下一帧待取报文下标。 */
-    uint8_t write_index;                                 /* 下一帧待写报文下标。 */
-    uint8_t count;                                       /* 当前有效报文数量。 */
+    Inv_Forward_Frame_t pending; /* 最新的一帧待发送请求。 */
+    rt_bool_t valid;             /* RT_TRUE表示pending中有待发送请求。 */
 } Inv_Forward_Queue_t;
 
 /* 当前待抄读点的统一描述，数据类、参数类和控制类最终都转换为该格式。 */
@@ -141,6 +138,8 @@ typedef struct Inv_Data_Port_Context {
     volatile rt_bool_t rx_ready;             /* RT_TRUE表示接收邮箱中存在待解析响应。 */
     Inv_Forward_Queue_t forward_queue;       /* 第二路提交并等待从当前第一路发出的原始报文队列。 */
     Inv_Forward_Frame_t forward_active;      /* 当前已经通过第一路发送并等待回复的原始报文。 */
+    rt_bool_t forward_superseded;            /* 新请求已登记，当前在途请求的回复必须丢弃。 */
+    struct rt_mutex forward_reply_mutex;     /* 串行化新请求登记与旧回复检查、发送，不在中断中使用。 */
     Inv_Data_Port_State_t forward_resume_state; /* 转发结束后恢复的周期READY或设备空闲状态。 */
     rt_bool_t forward_allowed;               /* 每完成一项周期读或识别请求，最多允许转发一帧。 */
     volatile rt_bool_t demand_pending;        /* RT_TRUE表示645线程正在等待本端口实时读取。 */
@@ -1623,19 +1622,19 @@ static rt_bool_t inv_forward_port_has_archive(const Inv_Data_Port_Context_t *con
     return RT_FALSE;
 }
 
-/* 从第二路环形队列取出最早报文，队列内容和下标在同一临界区内更新。 */
+/* 原子取出最新缓存到在途缓冲，后续新帧只能覆盖待发送缓存。 */
 static rt_bool_t inv_forward_queue_take(Inv_Data_Port_Context_t *context)
 {
     Inv_Forward_Queue_t *queue = &context->forward_queue; /* 当前RJ45对应的第二路报文队列。 */
     rt_base_t level = rt_hw_interrupt_disable();          /* 防止串口线程同时写入队列。 */
 
-    if(queue->count == 0U) {
+    if(queue->valid != RT_TRUE) {
         rt_hw_interrupt_enable(level);
         return RT_FALSE;
     }
-    context->forward_active = queue->frames[queue->read_index]; /* 完整复制后才能释放队列槽位。 */
-    queue->read_index = (queue->read_index + 1U) % INV_FORWARD_QUEUE_SIZE;
-    --queue->count;
+    context->forward_active = queue->pending;
+    context->forward_superseded = RT_FALSE;
+    queue->valid = RT_FALSE;
     rt_hw_interrupt_enable(level);
     return RT_TRUE;
 }
@@ -1683,7 +1682,15 @@ static void inv_forward_handle_response(Inv_Data_Port_Context_t *context)
         rt_kprintf("%s uart[%d] ignored unmatched frame while forwarding for uart[%d]\n", get_char_time(), inv_data_uart_no(context), secondary_uart_no);
         return;
     }
-    written_size = uart_mgmt_write(secondary_uart_no, frame, frame_len); /* 匹配后保持异常帧或正常帧原始内容。 */
+    /* 最终检查与提交发送互斥；新请求已登记时，即使旧回复刚收到也不转回。 */
+    rt_mutex_take(&context->forward_reply_mutex, RT_WAITING_FOREVER);
+    if(context->forward_superseded == RT_TRUE) {
+        rt_mutex_release(&context->forward_reply_mutex);
+        inv_forward_finish(context); /* 丢弃旧回复，但保留最新待发送缓存。 */
+        return;
+    }
+    written_size = uart_mgmt_write(secondary_uart_no, frame, frame_len); /* 已开始发送的回复无法撤回。 */
+    rt_mutex_release(&context->forward_reply_mutex);
 
     if(written_size != frame_len) {
         rt_kprintf("%s uart[%d] forward reply to uart[%d] failed, expected[%d], sent[%d]\n", get_char_time(), inv_data_uart_no(context), secondary_uart_no, frame_len, written_size);
@@ -2002,6 +2009,7 @@ void Inv_Data_Init(void)
 {
     rt_err_t semaphore_result; /* 静态控制结果信号量的初始化返回值。 */
     static const char *demand_sem_names[INV_DATA_PORT_COUNT] = {"rd_rt0", "rd_rt1", "rd_rt2"};
+    static const char *forward_mutex_names[INV_DATA_PORT_COUNT] = {"fw_rp0", "fw_rp1", "fw_rp2"};
 
     g_inv_data_initialized = RT_FALSE;
     g_inv_data_work_enabled = RT_FALSE;
@@ -2040,6 +2048,11 @@ void Inv_Data_Init(void)
     g_inv_data_ports[1].port_index = 1U;
     g_inv_data_ports[2].port_index = 2U;
     for(uint8_t port_index = 0U; port_index < INV_DATA_PORT_COUNT; ++port_index) {
+        if(rt_mutex_init(&g_inv_data_ports[port_index].forward_reply_mutex,
+                          forward_mutex_names[port_index], RT_IPC_FLAG_PRIO) != RT_EOK) {
+            rt_kprintf("%s forward reply mutex[%d] init failed\n", get_char_time(), port_index);
+            return;
+        }
         if(rt_sem_init(&g_inv_data_ports[port_index].demand_sem, demand_sem_names[port_index],
                        0U, RT_IPC_FLAG_FIFO) != RT_EOK) {
             rt_kprintf("%s realtime read semaphore[%d] init failed\n", get_char_time(), port_index);
@@ -2263,7 +2276,7 @@ rt_err_t Inv_Control_Get_Result(Inv_Control_Result_Info_t *result, int32_t timeo
     return RT_EOK;
 }
 
-/* 第二路串口提交一帧待转发报文，队列满时按约定丢弃新报文并保留旧队列顺序。 */
+/* 第二路登记完整新请求：覆盖旧待发送帧，并取消旧在途请求的回复转发资格。 */
 rt_err_t Inv_Forward_Submit(uint16_t secondary_uart_no, const uint8_t *frame, uint16_t frame_len)
 {
     Inv_Data_Port_Context_t *context = RT_NULL; /* 与第二路串口配对的第一路端口上下文。 */
@@ -2285,17 +2298,16 @@ rt_err_t Inv_Forward_Submit(uint16_t secondary_uart_no, const uint8_t *frame, ui
         return -RT_EINVAL;
     }
     queue = &context->forward_queue;
-    level = rt_hw_interrupt_disable(); /* 报文内容、写下标和数量必须作为一个整体发布。 */
-    if(queue->count >= INV_FORWARD_QUEUE_SIZE) {
-        rt_hw_interrupt_enable(level);
-        rt_kprintf("%s uart[%d] forward queue full, new frame[%d] dropped\n", get_char_time(), secondary_uart_no, frame_len);
-        return -RT_EFULL;
+    rt_mutex_take(&context->forward_reply_mutex, RT_WAITING_FOREVER);
+    level = rt_hw_interrupt_disable(); /* 与调度线程取缓存互斥，不修改正在等待回复的原请求内容。 */
+    queue->pending.frame_len = frame_len;
+    rt_memcpy(queue->pending.frame, frame, frame_len);
+    queue->valid = RT_TRUE;
+    if(context->forward_active.frame_len != 0U) {
+        context->forward_superseded = RT_TRUE;
     }
-    queue->frames[queue->write_index].frame_len = frame_len;
-    rt_memcpy(queue->frames[queue->write_index].frame, frame, frame_len);
-    queue->write_index = (queue->write_index + 1U) % INV_FORWARD_QUEUE_SIZE;
-    ++queue->count;
     rt_hw_interrupt_enable(level);
+    rt_mutex_release(&context->forward_reply_mutex);
     return RT_EOK;
 }
 
