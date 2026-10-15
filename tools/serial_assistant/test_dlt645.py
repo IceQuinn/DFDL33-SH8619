@@ -235,7 +235,7 @@ class DLT645Tests(unittest.TestCase):
         for data_identifier in ("04000A00", "04000B00", "04000C00", "04000D00"):
             definition = self.registry.get(data_identifier)
             self.assertEqual(definition.category, "other")
-            self.assertEqual(definition.access, "write")
+            self.assertEqual(definition.access, "read_write" if data_identifier == "04000D00" else "write")
             self.assertEqual(self.registry.encode(data_identifier, {"action_value": "1"}), bytes.fromhex("01"))
             with self.assertRaises(ValueError):
                 self.registry.encode(data_identifier, {"action_value": "0"})
@@ -243,10 +243,10 @@ class DLT645Tests(unittest.TestCase):
     def test_voltage_calibration_write_request(self):
         """电压校准位于扩展设备维护类别，只允许写1，报文沿用标准密码及操作者代码字段。"""
         definition = self.registry.get("04000D00")  # 核对上位机与固件一致使用04000D00，而不是相邻维护命令。
-        self.assertEqual(definition.description, "电压校准（写1执行）")
+        self.assertEqual(definition.description, "电压校准（读系数，写1执行）")
         self.assertEqual(definition.group_id, "device_maintenance")
-        self.assertEqual(definition.access, "write")
-        self.assertEqual(definition.read_response, {})
+        self.assertEqual(definition.access, "read_write")
+        self.assertEqual(definition.read_response["fields"][0]["type"], "float32")
         self.assertEqual(definition.write_request["fields"][0]["default"], "1")
         payload = self.registry.encode("04000D00", {"action_value": "1"})  # 校准业务数据必须恰好一字节01。
         frame = build_write_data("000102030405", "04000D00", payload, preamble=4)
@@ -260,6 +260,23 @@ class DLT645Tests(unittest.TestCase):
             with self.subTest(value=invalid_value):
                 with self.assertRaises(ValueError):
                     self.registry.encode("04000D00", {"action_value": invalid_value})  # 不允许其他数值或FF触发校准。
+
+    def test_voltage_calibration_read_coefficient(self):
+        # 1.0和6422.9287109375的IEEE754小端编码，验证字节序及4字节读长度。
+        for payload, expected in ((bytes.fromhex("00 00 80 3F"), 1.0),
+                                  (bytes.fromhex("6E B7 C8 45"), 6422.9287109375)):
+            with self.subTest(payload=payload):
+                values = self.registry.decode("04000D00", payload)
+                self.assertEqual(values[0][0], "电压校准系数")
+                self.assertAlmostEqual(float(values[0][1]), expected, places=3)
+                frame = build_frame("000000000012", 0x91, encode_di("04000D00") + payload)
+                self.assertEqual(frame[9], 8)
+                parsed = parse_frame(frame, self.registry)
+                self.assertTrue(parsed.valid)
+                self.assertEqual(parsed.payload, payload)
+        request = parse_frame(build_read_data("000000000012", "04000D00"), self.registry)
+        self.assertTrue(request.valid)
+        self.assertEqual(request.data_identifier, "04000D00")
 
     def test_forward_active_total_energy(self):
         definition = self.registry.get("00010000")

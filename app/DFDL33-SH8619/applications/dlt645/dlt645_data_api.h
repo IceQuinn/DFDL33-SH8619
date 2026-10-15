@@ -67,6 +67,9 @@ typedef struct Dlt645PointTypeDef
 /* 获取协议转换单元A相电压，返回值单位为0.1V，当前使用默认值并预留真实采样接口替换位置。 */
 uint16_t dlt645_get_converter_phase_a_voltage(void);
 
+/* 读取04000D00电压校准系数，回复4字节单精度浮点小端数据。 */
+rt_err_t dlt645_read_voltage_calibration(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
 /* 读取本机三相电压块，A相为XXX.X BCD，B、C相为全FF无效值。 */
 rt_err_t dlt645_read_converter_voltage_block(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
 

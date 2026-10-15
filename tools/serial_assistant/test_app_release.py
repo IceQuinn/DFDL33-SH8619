@@ -15,6 +15,69 @@ from build_assets import ICON_SIZES, prepare_icon
 
 
 class AppReleaseTests(unittest.TestCase):
+    def test_copy_decoded_value_full_and_selected(self):
+        for selected in (False, True):
+            with self.subTest(selected=selected):
+                window = SimpleNamespace(clipboard_clear=Mock(), clipboard_append=Mock(), _show_copy_feedback=Mock())
+                entry, feedback = Mock(), Mock()
+                entry.get.return_value = "6422.9287109375"
+                entry.selection_present.return_value = selected
+                entry.selection_get.return_value = "9287109375"
+                self.assertEqual(SerialAssistant._copy_decoded_value(window, entry, feedback), "break")
+                window.clipboard_append.assert_called_once_with("9287109375" if selected else "6422.9287109375")
+                window._show_copy_feedback.assert_called_once_with(feedback, "已复制")
+
+    def test_copy_decoded_invalid_preserves_clipboard(self):
+        for value in ("--", "", "  "):
+            with self.subTest(value=value):
+                window = SimpleNamespace(clipboard_clear=Mock(), clipboard_append=Mock(), _show_copy_feedback=Mock())
+                entry, feedback = Mock(), Mock()
+                entry.get.return_value = value
+                SerialAssistant._copy_decoded_value(window, entry, feedback)
+                window.clipboard_clear.assert_not_called()
+                window.clipboard_append.assert_not_called()
+                window._show_copy_feedback.assert_called_once_with(feedback, "暂无有效数据")
+
+    def test_copy_feedback_restarts_timer_and_clears(self):
+        window = SimpleNamespace(after_cancel=Mock(), after=Mock(return_value="new_timer"))
+        label = Mock(_copy_after_id="old_timer")
+        SerialAssistant._show_copy_feedback(window, label, "已复制")
+        window.after_cancel.assert_called_once_with("old_timer")
+        self.assertEqual(window.after.call_args.args[0], 1000)
+        self.assertEqual(label._copy_after_id, "new_timer")
+        window.after.call_args.args[1]()
+        label.configure.assert_called_with(text="")
+        self.assertIsNone(label._copy_after_id)
+
+    def test_copy_calibration_coefficient_keeps_full_value(self):
+        window = SimpleNamespace(clipboard_clear=Mock(), clipboard_append=Mock())
+        tree = Mock()
+        tree.selection.return_value = ("coefficient",)
+        tree.get_children.return_value = ("coefficient",)
+        tree.set.return_value = "6422.9287109375"
+        self.assertEqual(SerialAssistant._copy_detail_values(window, tree), "break")
+        tree.set.assert_called_once_with("coefficient", "value")
+        window.clipboard_clear.assert_called_once_with()
+        window.clipboard_append.assert_called_once_with("6422.9287109375")
+
+    def test_copy_multiple_detail_values_uses_display_order(self):
+        window = SimpleNamespace(clipboard_clear=Mock(), clipboard_append=Mock())
+        tree = Mock()
+        tree.selection.return_value = ("second", "first")
+        tree.get_children.return_value = ("first", "skip", "second")
+        tree.set.side_effect = lambda row, column: {"first": "1.25", "second": "--"}[row]
+        SerialAssistant._copy_detail_values(window, tree)
+        window.clipboard_append.assert_called_once_with("1.25\n--")
+
+    def test_copy_without_selection_preserves_clipboard(self):
+        window = SimpleNamespace(clipboard_clear=Mock(), clipboard_append=Mock())
+        tree = Mock()
+        tree.selection.return_value = ()
+        tree.get_children.return_value = ("first",)
+        SerialAssistant._copy_detail_values(window, tree)
+        window.clipboard_clear.assert_not_called()
+        window.clipboard_append.assert_not_called()
+
     def test_dlt_selector_width_handles_chinese_and_minimum(self):
         """标识组和具体标识宽度应按最长中英文混排选项计算。"""
         self.assertEqual(display_column_width("AB厂家"), 6)

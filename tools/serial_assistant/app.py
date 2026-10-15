@@ -598,11 +598,55 @@ class SerialAssistant(tk.Tk):
             trailing_text = f"{unit}（{write_hint}）" if write_hint else unit
             ttk.Label(self.dlt_fields_frame, text=trailing_text).grid(row=display_row, column=2, padx=4, pady=2, sticky="w")
             if self.dlt_action_var.get() == "读" and not is_read_request:
-                decoded_var = tk.StringVar(value="解析值：--")
+                decoded_var = tk.StringVar(value="--")
                 self.dlt_decoded_vars[label] = decoded_var
-                ttk.Label(self.dlt_fields_frame, textvariable=decoded_var, foreground="#1565c0").grid(
+                self._create_decoded_value_widget(self.dlt_fields_frame, decoded_var).grid(
                     row=display_row, column=3, padx=(18, 4), pady=2, sticky="w"
                 )
+
+    def _show_copy_feedback(self, label, text: str) -> None:
+        """原位显示短提示，不弹模态窗口、不抢输入焦点，连续复制重新计时。"""
+        previous = getattr(label, "_copy_after_id", None)
+        if previous is not None:
+            self.after_cancel(previous)
+        label.configure(text=text)
+
+        def clear_feedback():
+            label._copy_after_id = None
+            if label.winfo_exists():
+                label.configure(text="")
+
+        label._copy_after_id = self.after(1000, clear_feedback)
+
+    def _copy_decoded_value(self, entry, feedback) -> str:
+        """有选区时只复制选中文字，无选区时复制整个解析值。"""
+        value = entry.get()
+        if not value.strip() or value.strip() == "--":
+            self._show_copy_feedback(feedback, "暂无有效数据")
+            return "break"
+        text = entry.selection_get() if entry.selection_present() else value
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(text)
+        except tk.TclError:
+            self._show_copy_feedback(feedback, "复制失败")
+        else:
+            self._show_copy_feedback(feedback, "已复制")
+        return "break"
+
+    def _create_decoded_value_widget(self, parent, variable):
+        """解析值只读但可鼠标选中，前缀与单位不混入数值文本。"""
+        frame = ttk.Frame(parent)
+        ttk.Label(frame, text="解析值：", foreground="#1565c0").pack(side="left")
+        entry = ttk.Entry(frame, textvariable=variable, state="readonly", width=28,
+                          foreground="#1565c0", exportselection=False)
+        entry.pack(side="left")
+        feedback = ttk.Label(frame, text="", foreground="#2e7d32")
+        feedback.pack(side="left", padx=(6, 0))
+        copy_value = lambda _event=None: self._copy_decoded_value(entry, feedback)
+        entry.bind("<Control-c>", copy_value)
+        entry.bind("<Control-C>", copy_value)
+        return frame
 
     def _toggle_dlt_all_ff_fields(self) -> None:
         """整块全FF操作启用时禁用普通字段，取消后恢复各控件原来的编辑状态。"""
@@ -1140,7 +1184,7 @@ class SerialAssistant(tk.Tk):
                         if field_def is not None:  # 协议库紧凑行直接显示“地址：值”等字段，不再添加解析值前缀。
                             variable.set(self._format_grouped_dlt_value(field_def, value, unit))
                         else:
-                            variable.set(f"解析值：{value}{unit if value != '--' else ''}")
+                            variable.set(str(value))  # 前缀和单位由独立标签显示，复制时只取数值。
             cache_payload = combined_payload if combined_payload is not None else result.payload  # 多帧读取只在最后一帧到达后缓存完整业务数据。
             if(result.valid and result.direction == "从机→主机" and function in (0x11, 0x12)
                     and not result.follow_up and result.data_identifier and cache_payload):
@@ -1246,6 +1290,15 @@ class SerialAssistant(tk.Tk):
         self.rx_count = self.tx_count = 0
         self._update_counter()
 
+    def _copy_detail_values(self, detail_tree) -> str:
+        """复制选中行的完整解析值，不附加字段名和单位，多行按显示顺序换行。"""
+        selected = set(detail_tree.selection())
+        values = [str(detail_tree.set(row, "value")) for row in detail_tree.get_children() if row in selected]
+        if values:
+            self.clipboard_clear()
+            self.clipboard_append("\n".join(values))
+        return "break"
+
     def _show_structured_detail(self, _event=None) -> None:
         selection = self.tree.selection()
         if not selection or selection[0] not in self.dlt_row_details:
@@ -1265,8 +1318,37 @@ class SerialAssistant(tk.Tk):
         for field_name, value, unit in self.dlt_row_details[selection[0]]:
             detail_tree.insert("", "end", values=(field_name, value, unit))
         detail_tree.pack(fill="both", expand=True, padx=10, pady=10)
+        copy_values = lambda _event=None: self._copy_detail_values(detail_tree)
+        detail_tree.bind("<Control-c>", copy_values)
+        detail_tree.bind("<Control-C>", copy_values)
+        menu = tk.Menu(dialog, tearoff=False)
+        menu.add_command(label="复制数值", command=copy_values)
+
+        def show_copy_menu(event):
+            row = detail_tree.identify_row(event.y)
+            if not row:
+                return
+            if row not in detail_tree.selection():
+                detail_tree.selection_set(row)
+            detail_tree.focus(row)
+            detail_tree.focus_set()
+            try:
+                menu.tk_popup(event.x_root, event.y_root)
+            finally:
+                menu.grab_release()
+
+        detail_tree.bind("<Button-3>", show_copy_menu)
+        toolbar = ttk.Frame(dialog)
+        toolbar.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(toolbar, text="复制数值", command=copy_values).pack(side="left")
+        ttk.Label(toolbar, text="选中行后按 Ctrl+C 或右键复制；多选时逐行复制数值").pack(side="left", padx=10)
+        rows = detail_tree.get_children()
+        if rows:
+            detail_tree.selection_set(rows[0])
+            detail_tree.focus(rows[0])
         dialog.lift()
         dialog.focus_force()
+        detail_tree.focus_set()
 
     def _update_counter(self) -> None:
         if self.mode_var.get() == "代理监听":

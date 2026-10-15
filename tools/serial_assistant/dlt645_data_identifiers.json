@@ -300,7 +300,12 @@
       "write_schema": "device_action"
     },
     {
-      "di": "04000D00", "category": "other", "group_id": "device_maintenance", "group_description": "通信与设备维护", "description": "电压校准（写1执行）", "access": "write",
+      "di": "04000D00", "category": "other", "group_id": "device_maintenance", "group_description": "通信与设备维护", "description": "电压校准（读系数，写1执行）", "access": "read_write",
+      "read_response": {
+        "fields": [
+          {"name": "voltage_calibration_coefficient", "description": "电压校准系数", "type": "float32", "length": 4, "byte_order": "little"}
+        ]
+      },
       "write_schema": "device_action"
     },
     {

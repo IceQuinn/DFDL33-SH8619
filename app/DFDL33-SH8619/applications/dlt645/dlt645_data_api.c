@@ -1,6 +1,7 @@
 #include "dlt645_data_api.h"
 
 #include <stdint.h>
+#include <math.h>
 #include <rtthread.h>
 
 #include "inv_data.h"
@@ -1020,6 +1021,31 @@ rt_err_t dlt645_write_poll_interval(const Dlt645PointTypeDef *point, uint32_t id
     ctu_cfg.poll_interval_seconds = (uint16_t)interval_seconds; /* 校验成功后更新全局轮询配置，调度器下一次判断即可使用。 */
     ctu_cfg_save(); /* 周期抄读间隔写成功后立即保存。 */
     *response_len = 0U; /* 成功时由顶层发送不带额外数据的标准写应答。 */
+    return RT_EOK;
+}
+
+/* 读取当前RAM校准系数，按4字节IEEE754单精度小端上送，不触发校准。 */
+rt_err_t dlt645_read_voltage_calibration(const Dlt645PointTypeDef *point, uint32_t id,
+                                         uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    float coefficient;
+    uint32_t bits;
+    uint8_t index;
+
+    RT_UNUSED(id);
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
+       (capacity < 4U) || (sizeof(coefficient) != sizeof(bits))) {
+        return -RT_EINVAL;
+    }
+    coefficient = ctu_cfg.g_vol_cal_coef; /* 只读取一次，避免编码期间校准线程更新系数。 */
+    if(!isfinite(coefficient)) {
+        return -RT_ERROR;
+    }
+    rt_memcpy(&bits, &coefficient, sizeof(bits));
+    for(index = 0U; index < 4U; ++index) {
+        data[index] = (uint8_t)(bits >> (8U * index));
+    }
+    *data_len = 4U; /* 点表长度仍为写动作的1字节，读取长度由回调独立返回。 */
     return RT_EOK;
 }
 
