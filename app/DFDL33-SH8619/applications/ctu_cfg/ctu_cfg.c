@@ -69,10 +69,17 @@ void set_default_para(enum CTU_RESET_CMD Reset_Cmd)
     ctu_cfg.uart_check[UART8_NO]        = 3;            //校验位 1=8,N,1; 2=8,O,1 3=8,E,1
 
     if(CTU_RESET_ALL == Reset_Cmd){
-        for(uint8_t i=0; i<6; i++)
-        {
-            ctu_cfg.dlt645_bcd_addr[i]      = i;        //dlt645通信地址
-        }
+        // for(uint8_t i=0; i<6; i++)
+        // {
+        //     ctu_cfg.dlt645_bcd_addr[i]      = i;        //dlt645通信地址
+        // }
+
+        ctu_cfg.dlt645_bcd_addr[5]      = 0x00;
+        ctu_cfg.dlt645_bcd_addr[4]      = 0x20;
+        ctu_cfg.dlt645_bcd_addr[3]      = 0x26;
+        ctu_cfg.dlt645_bcd_addr[2]      = 0x10;
+        ctu_cfg.dlt645_bcd_addr[1]      = 0x00;
+        ctu_cfg.dlt645_bcd_addr[0]      = 0x01;
     }
 
 

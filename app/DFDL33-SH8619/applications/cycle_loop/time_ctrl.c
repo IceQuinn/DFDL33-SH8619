@@ -21,8 +21,8 @@
 /* 时段控制线程的时间及状态轮询周期。 */
 #define TIME_CTRL_POLL_MS                    200U
 
-/* 时段调控和恢复请求失败后，按此间隔重新提交相同动作。 */
-#define TIME_CTRL_RESTORE_RETRY_MS          5000U
+/* 时段调控和恢复请求失败后，等待60秒再重新提交相同动作。 */
+#define TIME_CTRL_RESTORE_RETRY_MS         60000U
 
 /* 最终结果正常会在1秒内生成，额外留出队列调度余量。 */
 #define TIME_CTRL_RESULT_WAIT_MS             3000U
@@ -943,7 +943,7 @@ static void time_ctrl_process_archive(uint8_t archive_index, time_t now)
                 context->action = TIME_CTRL_ACTION_START;
                 context->action_period = (int8_t)period_index;
                 context->active_period = TIME_CTRL_NO_PERIOD;
-                context->retry_tick = 0U; /* 新节点立即提交，不继承旧报文的5秒等待。 */
+                context->retry_tick = 0U; /* 新节点立即提交，不继承旧报文的60秒等待。 */
             }
             break;
         }
