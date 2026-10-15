@@ -30,9 +30,6 @@
 /* 恢复额定输出时使用的有功百分比。 */
 #define TIME_CTRL_RESTORE_PERCENT            100
 
-/* 逆变器控制允许时段的起止小时，结束小时17不属于可提交控制的窗口。 */
-#define TIME_CTRL_WORK_START_HOUR               7U
-#define TIME_CTRL_WORK_STOP_HOUR               17U
 
 /* 必须与通用逆变器控制模块的内部数值缓冲区容量保持一致。 */
 #define TIME_CTRL_CONTROL_REG_MAX               4U
@@ -225,13 +222,6 @@ static Time_Ctrl_Result_t time_ctrl_validate(const Time_Ctrl_Command_t *command,
         }
         /* 采用左闭右开区间，开始时间必须严格早于结束时间。 */
         if(starts[period_index] >= ends[period_index]) {
-            return TIME_CTRL_RESULT_INVALID_RANGE;
-        }
-        /* 时分精度下结束时间最晚为16:59，确保恢复命令仍可在17:00停控前提交。 */
-        if((period->start.hour < TIME_CTRL_WORK_START_HOUR) ||
-           (period->start.hour >= TIME_CTRL_WORK_STOP_HOUR) ||
-           (period->end.hour < TIME_CTRL_WORK_START_HOUR) ||
-           (period->end.hour >= TIME_CTRL_WORK_STOP_HOUR)) {
             return TIME_CTRL_RESULT_INVALID_RANGE;
         }
     }
@@ -867,11 +857,11 @@ static void time_ctrl_process_archive(uint8_t archive_index, time_t now)
     /* 当前档案的线程私有运行状态。 */
     Time_Ctrl_Context_t *context = &g_time_ctrl_contexts[archive_index];
     uint8_t period_index; /* 上电恢复时用于查找当前正在生效的时段。 */
-    struct tm local_time; /* 用RTC本地小时判断当天控制是否已经收工。 */
+    struct tm local_time; /* 判断运行中的旧计划是否已经跨天。 */
 
-    /* 17:00起不再重试调控或恢复；在途请求只收结果，绝不重新提交。 */
+    /* 旧计划跨天后停止重试；在途请求只收结果，不重新提交旧调控或恢复。 */
     if((localtime_r(&now, &local_time) != RT_NULL) &&
-       (local_time.tm_hour >= TIME_CTRL_WORK_STOP_HOUR)) {
+       (Time_Ctrl_Init_Is_Expired(&context->command, &local_time) == RT_TRUE)) {
         if(context->action_request_id != 0U) {
             time_ctrl_process_action(archive_index, context, now);
             if(context->action_request_id != 0U) {
@@ -886,11 +876,7 @@ static void time_ctrl_process_archive(uint8_t archive_index, time_t now)
         context->output_limited = RT_FALSE;
         context->boot_restore_pending = RT_FALSE;
         context->enabled = RT_FALSE;
-        if(Time_Ctrl_Init_Save_Restore_Pending(archive_index, RT_FALSE) != RT_EOK) {
-            rt_kprintf("time control archive[%d] end of work flag clear failed\n",
-                       archive_index + 1U);
-        }
-        return;
+        /* Flash标志由跨天清理清除；继续同步邮箱，允许装载当天的新计划。 */
     }
 
     time_ctrl_sync_mailbox(archive_index, context); /* 先接收Set或Stop留下的最新邮箱状态。 */
@@ -1045,7 +1031,7 @@ static void time_ctrl_clear_expired(time_t now)
             mailbox->command.archive_index = archive_index;
             mailbox->enabled = RT_FALSE;
             ++mailbox->generation;
-            /* 不清运行上下文：等待在途响应/超时后，由邮箱同步安排100%恢复。 */
+            /* 上下文在处理档案时收尾在途请求，再停止旧计划和恢复重试。 */
         }
     }
     rt_hw_interrupt_enable(level);

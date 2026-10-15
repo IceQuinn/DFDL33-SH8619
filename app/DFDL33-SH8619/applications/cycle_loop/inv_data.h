@@ -102,9 +102,9 @@ typedef struct Inv_RealtimeValue
 /* 根据总有功功率推导的逆变器运行状态。 */
 typedef enum Inv_Run_State
 {
-    INV_RUN_STATE_OFF = 0,       /* 总有功功率小于5W，或当前处于07:00～17:00之外。 */
+    INV_RUN_STATE_OFF = 0,       /* 有效总有功功率小于或等于5W。 */
     INV_RUN_STATE_ON = 1,        /* 总有功功率大于5W。 */
-    INV_RUN_STATE_UNKNOWN = 0xFF /* 数据无效、过期、正好等于5W或无法取得协议。 */
+    INV_RUN_STATE_UNKNOWN = 0xFF /* 数据无效、过期或无法取得协议。 */
 } Inv_Run_State_t;
 
 /* 设备编号实时数据项，单独保存字符串以兼容协议库中的ASCII或BCD设备编号。 */
@@ -160,7 +160,7 @@ typedef struct Inv_Data
     Inv_RealtimeParam_t param;  /* 周期或初始化抄读的参数类实时数据。 */
     Inv_RealtimeCtrl_t ctrl;    /* 最近一次控制类实时数据。 */
     Inv_RealtimeValue_t daily_energy; /* 日发电量实时数据，与协议结构末尾寄存器对应。 */
-    Inv_Run_State_t run_state;  /* 根据总有功功率和工作时间窗口推导的运行状态。 */
+    Inv_Run_State_t run_state;  /* 根据总有功功率、数据有效性及更新时间推导的运行状态。 */
 } Inv_Data_t;
 
 /* 实时数据只保存在RAM中，下标与g_inv_archive_lib中的档案槽位一一对应。 */
@@ -172,7 +172,7 @@ void Inv_Data_Init(void);
 /* 统一调度线程在指定串口识别结束后开放其抄读与控制，不清空实时缓存。 */
 void Inv_Data_Enable_Port(uint16_t uart_no);
 
-/* 非阻塞推进所有已开放端口一次，并维护工作时段和运行状态。 */
+/* 非阻塞推进所有已开放端口一次，并维护运行状态。 */
 void Inv_Data_Poll_Step(rt_tick_t now);
 
 /* 清除指定档案槽位的全部RAM实时数据，删除档案后调用以避免重新建档时显示旧值。 */
@@ -208,8 +208,6 @@ uint32_t Inv_Control_Allocate_Request_Id(void);
 /* 按请求流水号等待并取出对应控制结果，不会误取或丢弃其他调用方的结果。 */
 rt_err_t Inv_Control_Get_Result_By_Id(uint32_t request_id, Inv_Control_Result_Info_t *result, int32_t timeout);
 
-/* 查询当前是否处于07:00～17:00逆变器控制允许时段。 */
-rt_bool_t Inv_Control_Is_Work_Enabled(void);
 
 /* 在目标档案所属Modbus端口完成指定点位图的实时读取，失败点会置为无效。 */
 rt_err_t Inv_Data_Refresh(uint8_t archive_index, uint32_t point_mask, int32_t timeout);
@@ -217,7 +215,7 @@ rt_err_t Inv_Data_Refresh(uint8_t archive_index, uint32_t point_mask, int32_t ti
 /* 清除指定点的有效标志，供整批实时读取在发送前排除旧缓存。 */
 void Inv_Data_Invalidate(uint8_t archive_index, uint32_t point_mask);
 
-/* 使用当前总有功功率和工作时段立即重新计算全部档案运行状态。 */
+/* 使用当前总有功功率及其有效性立即重新计算全部档案运行状态。 */
 void Inv_Data_Update_Run_States(void);
 
 /* 按0～11档案槽位获取实时数据，槽位无效或越界时返回RT_NULL。 */

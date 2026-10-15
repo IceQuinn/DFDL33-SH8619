@@ -52,7 +52,6 @@ static void dlt645_refresh_selected(uint32_t id, uint32_t point_mask)
     for(offset = 0U; offset < archive_count; ++offset) {
         Inv_Data_Invalidate(first_archive + offset, point_mask);
     }
-    if(Inv_Control_Is_Work_Enabled() != RT_TRUE) return;
 
     for(offset = 0U; offset < archive_count; ++offset) {
         rt_tick_t elapsed = rt_tick_get() - start_tick;
@@ -1361,7 +1360,6 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
     int32_t values[INVERTER_ARCHIVE_MAX_COUNT]; /* 完成BCD解码并换算到逆变器协议精度的控制值。 */
     Inv_Control_Type_t types[INVERTER_ARCHIVE_MAX_COUNT]; /* 每个有效数值对应的下行控制类型。 */
     rt_bool_t execute[INVERTER_ARCHIVE_MAX_COUNT]; /* 真表示当前槽位通过检查并需要实际下发。 */
-    rt_bool_t has_numeric_value = RT_FALSE; /* 用于区分全FF占位请求和实际控制请求。 */
 
     if((point == RT_NULL) || (data == RT_NULL) || (response == RT_NULL) || (response_len == RT_NULL)) /* 写入口的重要指针只检查一次。 */
     {
@@ -1391,7 +1389,6 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
             response[archive_offset] = DLT645_CONTROL_STATUS_NOT_CONTROLLED;
             continue;
         }
-        has_numeric_value = RT_TRUE; /* 至少一个数值意味着本帧包含实际控制意图。 */
         source_result = dlt645_get_control_source(id, first_archive + archive_offset, &types[archive_offset], &control_reg, &source);
         if(source_result == -RT_ENOSYS) /* 有效档案没有对应控制配置时返回03。 */
         {
@@ -1413,10 +1410,6 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
         execute[archive_offset] = RT_TRUE; /* 完整通过预检查后才允许进入实际下行控制。 */
     }
 
-    if((has_numeric_value == RT_TRUE) && (Inv_Control_Is_Work_Enabled() != RT_TRUE)) /* 非工作时段只要包含数值就整帧拒绝且不执行任何设备。 */
-    {
-        return -RT_EBUSY;
-    }
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
         if(execute[archive_offset] == RT_TRUE) /* FF、空档案、非法数值和不支持项都不会进入下行队列。 */
@@ -1731,7 +1724,7 @@ rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point, uint32_t id,
         {
             return -RT_EINVAL;
         }
-        if(Time_Ctrl_Check(&commands[archive_offset]) != TIME_CTRL_RESULT_OK) /* 检查工作窗口、重叠、控制能力和恢复能力。 */
+        if(Time_Ctrl_Check(&commands[archive_offset]) != TIME_CTRL_RESULT_OK) /* 检查同日时间范围、重叠、控制能力和恢复能力。 */
         {
             return -RT_EINVAL;
         }
@@ -1821,7 +1814,7 @@ static rt_err_t dlt645_control_run_state(uint8_t archive_index, int32_t value)
     request.type = (value == 0) ? INV_CONTROL_POWER_ON : INV_CONTROL_POWER_OFF; /* 0执行开机，1执行关机。 */
 
     control_result = Inv_Control_Submit(&request); /* 将请求提交到档案所属下行端口。 */
-    if(control_result != RT_EOK) /* 无效档案、非工作时段开机或队列不可用时直接失败。 */
+    if(control_result != RT_EOK) /* 无效档案、端口未就绪或队列不可用时直接失败。 */
     {
         return control_result;
     }

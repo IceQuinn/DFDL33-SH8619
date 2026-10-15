@@ -26,8 +26,6 @@
 #define INV_DATA_RESPONSE_TIMEOUT_TICKS  1000U
 #define INV_DATA_POLL_TICKS               10U
 #define INV_DATA_TIME_CHECK_TICKS        1000U
-#define INV_DATA_START_HOUR                  7
-#define INV_DATA_STOP_HOUR                  17
 #define INV_RUN_POWER_MAX_AGE_TICKS      120000U
 #define INV_RUN_POWER_THRESHOLD_W             5
 #define INV_DATA_RX_FRAME_SIZE            MODBUS_RTU_ADU_MAX
@@ -172,8 +170,6 @@ static uint32_t g_inv_control_request_id;        /* 所有控制请求共用的�
 static struct rt_semaphore g_inv_control_result_sem; /* 控制结果到达时唤醒等待结果的上层线程。 */
 static rt_bool_t g_inv_control_result_sem_initialized; /* RT_TRUE表示结果信号量已经初始化。 */
 static volatile rt_bool_t g_inv_data_initialized; /* RT_TRUE表示端口上下文已经完成初始化。 */
-static volatile rt_bool_t g_inv_data_work_enabled; /* RT_TRUE表示当前处于07:00～17:00工作时段。 */
-static rt_bool_t g_inv_data_work_state_initialized; /* RT_TRUE表示已经完成首次工作时段判断。 */
 
 /* 数据类各数组对应的日志名称。 */
 static const char *g_inv_data_u_name[ENUM_PHASE_MAX] = {"Ua", "Ub", "Uc"}; /* 三相电压点日志名称。 */
@@ -208,14 +204,6 @@ static rt_bool_t inv_data_state_waiting_response(Inv_Data_Port_State_t state)
     return RT_FALSE;
 }
 
-/* 根据RTC本地小时判断当前是否处于07:00:00～16:59:59周期工作时段。 */
-static rt_bool_t inv_data_work_time_active(void)
-{
-    struct tm local_time = get_local_time_t(); /* 从RTC取得已经转换为本地时区的日历时间。 */
-
-    return ((local_time.tm_hour >= INV_DATA_START_HOUR) &&
-            (local_time.tm_hour < INV_DATA_STOP_HOUR)) ? RT_TRUE : RT_FALSE;
-}
 
 /* 每秒根据总有功功率更新全部档案的运行状态，不额外增加轮询线程。 */
 static void inv_data_update_run_states(rt_tick_t now)
@@ -237,11 +225,6 @@ static void inv_data_update_run_states(rt_tick_t now)
             continue;
         }
 
-        /* 现有周期抄读在07:00前和17:00后停止，夜间按业务规则判定为关机。 */
-        if(g_inv_data_work_enabled != RT_TRUE) {
-            data->run_state = INV_RUN_STATE_OFF;
-            continue;
-        }
 
         protocol = Inv_Archive_Get_Protocol(archive_index);
         if((protocol == RT_NULL) ||
@@ -279,34 +262,6 @@ void Inv_Data_Update_Run_States(void)
     inv_data_update_run_states(rt_tick_get());
 }
 
-/* 更新时间窗口总开关，只在首次检查或运行状态变化时打印一次日志。 */
-static void inv_data_update_work_state(void)
-{
-    rt_bool_t work_enabled = inv_data_work_time_active(); /* 本次RTC检查得到的工作时段状态。 */
-    rt_bool_t state_changed;                             /* 本次状态是否与上次记录不同。 */
-    rt_base_t level;                                     /* 修改跨线程状态前保存的中断级别。 */
-
-    level = rt_hw_interrupt_disable(); /* 原子更新工作开关及首次初始化标志。 */
-    state_changed = ((g_inv_data_work_state_initialized != RT_TRUE) ||
-                     (g_inv_data_work_enabled != work_enabled)) ? RT_TRUE : RT_FALSE;
-    g_inv_data_work_enabled = work_enabled;
-    g_inv_data_work_state_initialized = RT_TRUE;
-    rt_hw_interrupt_enable(level); /* 工作时段共享状态更新完成后恢复中断。 */
-
-    /* 状态没有变化时不重复打印，避免每秒检查RTC产生相同日志。 */
-    if(state_changed != RT_TRUE) {
-        return;
-    }
-
-    /* 进入07:00～17:00窗口时打印一次启动日志。 */
-    if(work_enabled == RT_TRUE) {
-        rt_kprintf("%s inverter periodic reading started, active time[07:00-17:00]\n", get_char_time());
-    }
-    /* 离开工作窗口时打印一次停止日志，已在线事务仍由状态机收尾。 */
-    else {
-        rt_kprintf("%s inverter periodic reading stopped, active time[07:00-17:00]\n", get_char_time());
-    }
-}
 
 /* 按档案接入端口查找对应的周期抄读端口上下文。 */
 static Inv_Data_Port_Context_t *inv_control_find_port_context(uint8_t archive_index)
@@ -1950,21 +1905,14 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
         return;
     }
 
-    /* 645实时读取只在工作时段执行，越界后未发送点保持无效并立即收尾。 */
+    /* 645实时读取全天允许，仍优先于周期抄读和第二路转发。 */
     if(context->demand_pending == RT_TRUE) {
-        if(g_inv_data_work_enabled != RT_TRUE) {
-            context->resume_state = context->state;
-            inv_data_finish_demand(context);
-        }
-        else {
-            inv_data_send_demand_request(context);
-        }
+        inv_data_send_demand_request(context);
         return;
     }
 
     /* 任一档案到期时先恢复周期检查，避免连续透传使到期设备长期得不到抄读。 */
-    if((g_inv_data_work_enabled == RT_TRUE) &&
-       (ctu_cfg.poll_interval_seconds != 0U) &&
+    if((ctu_cfg.poll_interval_seconds != 0U) &&
        (context->state == INV_DATA_PORT_DEVICE_IDLE) &&
        (inv_data_port_has_due_archive(context, now) == RT_TRUE)) {
         context->state = INV_DATA_PORT_READY;
@@ -1972,21 +1920,16 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
         return;
     }
 
-    /* 周期项目完成后最多转发一帧；无周期任务、非工作时段或设备空闲时可直接使用空闲线路。 */
+    /* 周期项目完成后最多转发一帧；周期关闭、无档案或设备空闲时可使用空闲线路。 */
     if((context->forward_allowed == RT_TRUE) ||
        (ctu_cfg.poll_interval_seconds == 0U) ||
        (context->state == INV_DATA_PORT_DEVICE_IDLE) ||
-       (g_inv_data_work_enabled != RT_TRUE) ||
        (inv_forward_port_has_archive(context) != RT_TRUE)) {
         if(inv_forward_send_next(context) == RT_TRUE) {
             return;
         }
     }
 
-    /* 非工作时段不再推进设备空闲或发送新周期请求，已发送及已受理控制已在前面完成处理。 */
-    if(g_inv_data_work_enabled != RT_TRUE) {
-        return;
-    }
 
     /* 配置0表示关闭变量类周期抄读，端口仍可执行实时读写和透传。 */
     if(ctu_cfg.poll_interval_seconds == 0U) {
@@ -2012,8 +1955,6 @@ void Inv_Data_Init(void)
     static const char *forward_mutex_names[INV_DATA_PORT_COUNT] = {"fw_rp0", "fw_rp1", "fw_rp2"};
 
     g_inv_data_initialized = RT_FALSE;
-    g_inv_data_work_enabled = RT_FALSE;
-    g_inv_data_work_state_initialized = RT_FALSE;
     rt_memset(g_inv_data, 0, sizeof(g_inv_data)); /* 上电时全部实时数据默认为无效。 */
     for(uint8_t archive_index = 0U;
         archive_index < INVERTER_ARCHIVE_MAX_COUNT;
@@ -2099,7 +2040,7 @@ void Inv_Data_Enable_Port(uint16_t uart_no)
                 return;
             }
             g_inv_data_ports[index].poll_enabled = RT_TRUE;
-            rt_kprintf("%s uart[%d] periodic scheduler enabled\n", get_char_time(), uart_no); /* 表示已交接，实际发送仍取决于有效档案和工作时段。 */
+            rt_kprintf("%s uart[%d] periodic scheduler enabled\n", get_char_time(), uart_no); /* 表示已交接，实际发送仍取决于有效档案和周期开关。 */
             return;
         }
     }
@@ -2114,10 +2055,9 @@ void Inv_Data_Poll_Step(rt_tick_t now)
     if(g_inv_data_initialized != RT_TRUE) { /* 初始化失败时禁止使用未就绪的事务和控制队列。 */
         return;
     }
-    if((g_inv_data_work_state_initialized != RT_TRUE) ||
-       ((rt_tick_t)(now - time_check_tick) >= INV_DATA_TIME_CHECK_TICKS)) { /* 首次立即检查，后续每秒维护时段和运行状态。 */
+    if((time_check_tick == 0U) ||
+       ((rt_tick_t)(now - time_check_tick) >= INV_DATA_TIME_CHECK_TICKS)) { /* 首次立即检查，后续每秒维护运行状态。 */
         time_check_tick = now;
-        inv_data_update_work_state();
         inv_data_update_run_states(now);
     }
     for(index = 0U; index < INV_DATA_PORT_COUNT; ++index) {
@@ -2214,11 +2154,6 @@ rt_err_t Inv_Control_Submit(const Inv_Control_Request_t *request)
         return -RT_EBUSY;
     }
 
-    /* 非工作时段拒绝新的控制请求，调用方收到错误后不需要等待异步控制结果。 */
-    if(g_inv_data_work_enabled != RT_TRUE) {
-        rt_hw_interrupt_enable(level);
-        return -RT_EBUSY; /* 非工作时段不再提交任何新的实时控制。 */
-    }
 
     /* 每个端口最多暂存4项控制请求，队列满时由调用方稍后重试。 */
     if(context->control_queue.count >= INV_CONTROL_QUEUE_SIZE) {
@@ -2385,11 +2320,6 @@ uint32_t Inv_Control_Allocate_Request_Id(void)
     return request_id;
 }
 
-/* 返回周期线程维护的控制时段状态，供645在整批控制前完成一次性检查。 */
-rt_bool_t Inv_Control_Is_Work_Enabled(void)
-{
-    return g_inv_data_work_enabled; /* 该标志只按单字节读写，读取时不需要额外加锁。 */
-}
 
 /* 按流水号等待控制结果，查找过程中保留队列内其他调用方的结果及原有先后顺序。 */
 rt_err_t Inv_Control_Get_Result_By_Id(uint32_t request_id, Inv_Control_Result_Info_t *result, int32_t timeout)
@@ -2497,9 +2427,6 @@ rt_err_t Inv_Data_Refresh(uint8_t archive_index, uint32_t point_mask, int32_t ti
     context = inv_control_find_port_context(archive_index);
     if((context == RT_NULL) || (context->poll_enabled != RT_TRUE) ||
        (context->demand_sem_initialized != RT_TRUE)) {
-        return -RT_EBUSY;
-    }
-    if(g_inv_data_work_enabled != RT_TRUE) {
         return -RT_EBUSY;
     }
 
