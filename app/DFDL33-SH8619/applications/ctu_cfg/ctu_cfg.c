@@ -90,7 +90,7 @@ void set_default_para(enum CTU_RESET_CMD Reset_Cmd)
     }
 
     ctu_cfg.altitude                    = 0U;           /* 默认高度为0.00m，645写入位置信息后随配置统一保存。 */
-    ctu_cfg.poll_interval_seconds       = 10U;          /* 全局逆变器周期抄读时间默认10秒。 */
+    ctu_cfg.poll_interval_seconds       = 0U;          /* 全局逆变器周期抄读时间默认10秒。 */
 }
 
 void set_default_all_data(void)
