@@ -13,6 +13,9 @@
 #include <stdint.h>
 #include <rtthread.h>
 
+/* 百分比控制允许幅值上限；与时段结束恢复目标100%相互独立。 */
+#define INV_CONTROL_PERCENT_MAX 110
+
 #include "inverter_archive.h"
 #include "meas_cfg.h"
 

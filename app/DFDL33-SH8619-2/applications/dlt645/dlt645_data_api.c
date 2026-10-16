@@ -1276,6 +1276,7 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
     {
         return -RT_EBUSY;
     }
+
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
         if(execute[archive_offset] == RT_TRUE) /* FF、空档案、非法数值和不支持项都不会进入下行队列。 */
@@ -1284,6 +1285,7 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
                                                                  types[archive_offset], values[archive_offset]);
         }
     }
+
     *response_len = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? archive_count : 0U; /* 仅全量控制在正常写应答中携带逐台状态。 */
     if(selector != DLT645_VARIABLE_ALL_SELECTOR) /* 单台写没有逐台状态数据域，需要通过645正常或异常应答表达结果。 */
     {

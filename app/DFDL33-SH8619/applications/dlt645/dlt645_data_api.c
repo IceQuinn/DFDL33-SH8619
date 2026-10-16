@@ -37,7 +37,7 @@
 #define DLT645_FIRMWARE_VERSION_LEN         32U /* 04800001厂家软件版本号固定占32字节ASCII。 */
 #define DLT645_REALTIME_READ_TIMEOUT_MS   55000U /* 为主站60秒超时保留5秒组帧和发送余量。 */
 #define DLT645_CONTROL_WAIT_TICKS          3000  /* 单台控制最多等待3秒，FF逐台执行仍可控制在60秒内。 */
-#define DLT645_TIME_CTRL_FULL_PERCENT      1000  /* 时段值为FF时按XXX.X格式的100.0%执行。 */
+#define DLT645_CONTROL_PERCENT_MAX (INV_CONTROL_PERCENT_MAX * 10) /* XXX.X格式下110.0%的定点上限，FF执行目标仍为100%。 */
 
 /* 对单台或DI0=FF的全部档案顺序执行实时读，失败及未完成点保持无效。 */
 static void dlt645_refresh_selected(uint32_t id, uint32_t point_mask)
@@ -1585,7 +1585,7 @@ static rt_err_t dlt645_decode_time_control_block(uint32_t id,
         if((control_reg == RT_NULL) ||
            (dlt645_bcd_decode_s32(&block[value_offset], value_len, &decoded_value) != RT_EOK) ||
            ((mode == TIME_CTRL_ACTIVE_POWER_PERCENT) &&
-            ((decoded_value < 0) || (decoded_value > DLT645_TIME_CTRL_FULL_PERCENT))) ||
+            ((decoded_value < 0) || (decoded_value > DLT645_CONTROL_PERCENT_MAX))) ||
            (dlt645_rescale_value(decoded_value, source_decimals, control_reg->decimal_places,
                                  &command->periods[period_index].value) != RT_EOK)) /* 配置、BCD、百分比范围和定点换算必须全部有效。 */
         {

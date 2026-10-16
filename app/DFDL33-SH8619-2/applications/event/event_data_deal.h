@@ -60,11 +60,11 @@ typedef struct {
 
 /* 2、功率控制事件 (有功/无功/时段) */
 typedef struct {
-    EventTime start_time;
-    EventTime end_time;
-    uint8_t   event_type;
-    uint8_t   control_result[EVENT_MAX_INVERTER_NUM];
-    uint32_t  control_value[EVENT_MAX_INVERTER_NUM];
+    EventTime start_time;                               //开始时间
+    EventTime end_time;                                 //结束时间
+    uint8_t   event_type;                               //事件类型（功率值调节/百分比调节）
+    uint8_t   control_result[EVENT_MAX_INVERTER_NUM];   //调控结果
+    int32_t   control_value[EVENT_MAX_INVERTER_NUM];    //调控值
 }PowerControlEvent_t;
 
 /* 3、功率因数控制事件详细记录 (DI1=07) */
@@ -72,7 +72,7 @@ typedef struct {
     EventTime start_time;
     EventTime end_time;
     uint8_t   control_result[EVENT_MAX_INVERTER_NUM];
-    uint16_t  inv_values[EVENT_MAX_INVERTER_NUM];
+    int16_t   inv_values[EVENT_MAX_INVERTER_NUM];
 }PowerFactorEvent_t;
 
 /* 4、电压越限事件详细记录 (DI1=11) */

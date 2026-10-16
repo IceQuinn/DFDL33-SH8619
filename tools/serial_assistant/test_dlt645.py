@@ -749,9 +749,36 @@ class DLT645Tests(unittest.TestCase):
                 self.assertNotEqual(decoded[-1][1], "--")
 
         active_percent_field = self.registry.get("04E60801").write_request["fields"][0]
-        self.assertEqual(active_percent_field["write_hint"], "范围：0.0～100.0%，支持1位小数")
+        self.assertEqual(active_percent_field["write_hint"], "范围：0.0～110.0%，支持1位小数")
         with self.assertRaises(ValueError):
             self.registry.encode("04E60801", {"active_power_percentage_adjustment": "-0.1"})
+
+    def test_percent_controls_allow_110_percent_boundaries(self):
+        for prefix, field, limits in (
+                ("04E608", "active_power_percentage_adjustment", ("0.0", "100.0", "110.0")),
+                ("04E609", "reactive_power_percentage_adjustment", ("-110.0", "100.0", "110.0"))):
+            for value in limits:
+                with self.subTest(di=prefix, value=value):
+                    payload = self.registry.encode(prefix + "01", {field: value})
+                    self.assertEqual(len(payload), 2)
+                    self.assertEqual(float(self.registry.decode(prefix + "01", payload)[0][1]), float(value))
+                    all_fields = self.registry.get(prefix + "FF").write_request["fields"]
+                    all_values = {item["name"]: "FF" for item in all_fields}
+                    all_values[all_fields[0]["name"]] = value
+                    combined = self.registry.encode(prefix + "FF", all_values)
+                    self.assertEqual(combined[:2], payload)
+                    self.assertEqual(combined[2:], bytes([0xFF]) * 22)
+            for value in ("110.1", "-110.1"):
+                with self.assertRaises(ValueError):
+                    self.registry.encode(prefix + "01", {field: value})
+        schedule = {"period1_start": "06:00", "period1_end": "07:00",
+                    "period2_start": "18:00", "period2_end": "19:00",
+                    "period1_percent": "110.0", "period2_percent": "FF"}
+        payload = self.registry.encode("04E60C01", schedule)
+        self.assertEqual(payload[8:], bytes.fromhex("00 11 FF FF"))
+        for invalid in ("110.1", "-0.1"):
+            with self.assertRaises(ValueError):
+                self.registry.encode("04E60C01", dict(schedule, period1_percent=invalid))
 
     def test_active_power_time_controls_use_independent_hhmm_blocks(self):
         power_values = {

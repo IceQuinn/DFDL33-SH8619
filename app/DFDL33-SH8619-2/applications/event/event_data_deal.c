@@ -5,6 +5,8 @@
 #include "drv_ex_flash.h"
 #include <time.h>
 
+#include "inv_data.h"
+
 #define EVENT_DATA_VER              1
 
 struct Event_Management_Str
@@ -40,11 +42,11 @@ static struct rt_messagequeue Event_Data_mq;
 
 int32_t Send_Event_Data_To_Cache_By_Type(uint16_t event_class, void *p_act_val)
 {
-    uint8_t Events_Cache_Date[ONE_EVENT_RECORD_SIZE] = {0};
-    Events_Cache_Date[0] = event_class;
-    memcpy(&Events_Cache_Date[1], p_act_val, ONE_EVENT_RECORD_SIZE - 1);
+    uint8_t Events_Cache_Data[ONE_EVENT_RECORD_SIZE] = {0};
+    Events_Cache_Data[0] = event_class;
+    memcpy(&Events_Cache_Data[1], p_act_val, ONE_EVENT_RECORD_SIZE - 1);
 
-    if(RT_EOK != rt_mq_send(&Event_Data_mq, &Events_Cache_Date, sizeof(Events_Cache_Date)))
+    if(RT_EOK != rt_mq_send(&Event_Data_mq, &Events_Cache_Data, sizeof(Events_Cache_Data)))
     {
         rt_kprintf("Event Send Error\n");
         return -RT_ERROR;
@@ -250,13 +252,13 @@ void Event_Data_Init(void)
 
 void Event_Data_Deal_Loop(void *parameter)
 {
-    uint8_t Events_Cache_Date[ONE_EVENT_RECORD_SIZE] = {0};
-    uint8_t Event_Save_Class_Bits_Flg = 0;
+    uint8_t  Events_Cache_Data[ONE_EVENT_RECORD_SIZE] = {0};
+    uint16_t Event_Save_Class_Bits_Flg = 0;
     rt_thread_mdelay(4000);
     while(1)
     {
         Event_Save_Class_Bits_Flg = 0;
-        if (rt_mq_recv(&Event_Data_mq, Events_Cache_Date, sizeof(Events_Cache_Date), RT_WAITING_FOREVER) == RT_EOK)
+        if (rt_mq_recv(&Event_Data_mq, Events_Cache_Data, sizeof(Events_Cache_Data), RT_WAITING_FOREVER) == RT_EOK)
         {
 //            Show_Event(&Events_Cache_Date, 0, 1);
             // if(is_power_down() && !is_power_down_legal_work()){
@@ -264,17 +266,17 @@ void Event_Data_Deal_Loop(void *parameter)
             //     continue;
             // }
 
-            Save_Event_Data(Events_Cache_Date);
+            Save_Event_Data(Events_Cache_Data);
             // 记录需要保存的事件类型
-            Event_Save_Class_Bits_Flg = Event_Save_Class_Bits_Flg | (1 << Events_Cache_Date[0]);
+            Event_Save_Class_Bits_Flg = Event_Save_Class_Bits_Flg | (1 << Events_Cache_Data[0]);
 
             // 尝试取出队列里剩余消息（非阻塞）
-            while (rt_mq_recv(&Event_Data_mq, Events_Cache_Date, sizeof(Events_Cache_Date), 0) == RT_EOK)
+            while (rt_mq_recv(&Event_Data_mq, Events_Cache_Data, sizeof(Events_Cache_Data), 0) == RT_EOK)
             {
 //                Show_Event(&Events_Cache_Date, 0, 1);
-                Save_Event_Data(Events_Cache_Date);
+                Save_Event_Data(Events_Cache_Data);
                 // 记录需要保存的事件类型
-                Event_Save_Class_Bits_Flg = Event_Save_Class_Bits_Flg | (1 << Events_Cache_Date[0]);
+                Event_Save_Class_Bits_Flg = Event_Save_Class_Bits_Flg | (1 << Events_Cache_Data[0]);
             }
 
             // 队列空了再统一写 Flash
@@ -286,3 +288,151 @@ void Event_Data_Deal_Loop(void *parameter)
         }
     }
 }
+
+//开关机
+void Send_Inv_OnOff_Event_Data(EventTime start_time, EventTime end_time, uint8_t  ctrl_type, uint8_t *ctrl_result)
+{
+    uint16_t event = ETP_PV_INV_ONOFF_CTRL;
+    uint8_t  event_type = 0;
+//    uint8_t  *ctrl_cnt = 0;
+
+    if(ctrl_type == INV_CONTROL_POWER_ON)
+    {
+        event_type = 0;
+    }
+    else if(ctrl_type == INV_CONTROL_POWER_OFF)
+    {
+        event_type = 1;
+    }
+
+    uint8_t *p = &Event_Management[event].buf[sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str)];
+
+    SwitchEvent_t SwitchEvent;
+
+    SwitchEvent.start_time = start_time;
+    SwitchEvent.end_time = end_time;
+
+    for(int i = 0; i < INVERTER_ARCHIVE_MAX_COUNT; ++i)
+    {
+        SwitchEvent.event_type[i] = event_type;
+        SwitchEvent.control_result[i] = ctrl_result[i];
+        if(1 != SwitchEvent.control_result[i])
+        {
+            p[i]++;
+        }
+    }
+    Send_Event_Data_To_Cache_By_Type(event, &SwitchEvent);
+}
+
+//功率
+void Send_PowerEvent_Data(EventTime start_time, EventTime end_time, uint8_t  ctrl_type, uint8_t *ctrl_result, int32_t *ctrl_value)
+{
+    uint16_t event = 0;
+    uint8_t  event_type = 0;
+//    uint8_t  *ctrl_cnt = 0;
+
+    if(ctrl_type == INV_CONTROL_ACTIVE_POWER)
+    {
+        event = ETP_PV_INV_P_CTRL;
+        event_type = 0;
+    }
+    else if(ctrl_type == INV_CONTROL_ACTIVE_POWER_PERCENT)
+    {
+        event = ETP_PV_INV_P_CTRL;
+        event_type = 1;
+    }
+    else if(ctrl_type == INV_CONTROL_REACTIVE_POWER)
+    {
+        event = ETP_PV_INV_Q_CTRL;
+        event_type = 0;
+    }
+    else if(ctrl_type == INV_CONTROL_REACTIVE_POWER_PERCENT)
+    {
+        event = ETP_PV_INV_Q_CTRL;
+        event_type = 1;
+    }
+    else
+    {
+        event = ETP_PV_INV_PF_CTRL;
+    }
+
+    uint8_t *p = &Event_Management[event].buf[sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str)];
+
+    //事件类型判断
+    if(ctrl_type == INV_CONTROL_POWER_FACTOR)
+    {
+        PowerFactorEvent_t PowerFactorEvent;
+
+        PowerFactorEvent.start_time = start_time;
+        PowerFactorEvent.end_time = end_time;
+
+        for(int i = 0; i < INVERTER_ARCHIVE_MAX_COUNT; ++i)
+        {
+            PowerFactorEvent.control_result[i] = ctrl_result[i];
+            PowerFactorEvent.inv_values[i] = ctrl_value[i];
+            if(1 != PowerFactorEvent.control_result[i])
+            {
+                p[i]++;
+            }
+        }
+        Send_Event_Data_To_Cache_By_Type(event, &PowerFactorEvent);
+    }
+    else
+    {
+        PowerControlEvent_t PowerControlEvent;
+
+        PowerControlEvent.start_time = start_time;
+        PowerControlEvent.end_time = end_time;
+        PowerControlEvent.event_type = event_type;
+
+        for(int i = 0; i < INVERTER_ARCHIVE_MAX_COUNT; ++i)
+        {
+            PowerControlEvent.control_result[i] = ctrl_result[i];
+            PowerControlEvent.control_value[i] = ctrl_value[i];
+            if(1 != PowerControlEvent.control_result[i])
+            {
+                p[i]++;
+            }
+        }
+        Send_Event_Data_To_Cache_By_Type(event, &PowerControlEvent);
+    }
+}
+
+//校时
+void Send_TimeCalibrationEvent_Data(EventTime before_calibration_time, EventTime after_calibration_time)
+{
+    TimeCalibrationEvent_t TimeCalibrationEvent;
+
+    TimeCalibrationEvent.before_calibration = before_calibration_time;
+    TimeCalibrationEvent.after_calibration  = after_calibration_time;
+
+    uint8_t *p = &Event_Management[ETP_PROTO_UNIT_TIME_CALIB].buf[sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str)];
+
+    (*p)++;
+    Send_Event_Data_To_Cache_By_Type(ETP_PROTO_UNIT_TIME_CALIB, &TimeCalibrationEvent);
+}
+
+//升级
+void Send_UpgradeEvent_Data(uint16_t upgrade_version)
+{
+    uint16_t upgrade_data = upgrade_version;
+
+    uint8_t *p = &Event_Management[ETP_PROTO_UNIT_OTA_UPGRADE].buf[sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str)];
+    (*p)++;
+    Send_Event_Data_To_Cache_By_Type(ETP_PROTO_UNIT_OTA_UPGRADE, &upgrade_data);
+}
+
+//事件清零
+void Send_EventResetEvent_Data(EventTime event_reset_time)
+{
+    EventTime event_reset_event_data = event_reset_time;
+
+    uint8_t *p = &Event_Management[ETP_PROTO_UNIT_EVENT_CLEAR].buf[sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str)];
+    (*p)++;
+    Send_Event_Data_To_Cache_By_Type(ETP_PROTO_UNIT_EVENT_CLEAR, &event_reset_event_data);
+}
+
+//电压越限
+
+
+

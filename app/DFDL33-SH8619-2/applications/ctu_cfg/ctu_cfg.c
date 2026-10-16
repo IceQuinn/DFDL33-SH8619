@@ -109,7 +109,7 @@ void set_default_para(void)
 
     ctu_cfg.longitude                   = 1143999;      //经度
     ctu_cfg.latitude                    = 304456;       //纬度
-    ctu_cfg.g_vol_cal_coef              = 3562.04534;
+    ctu_cfg.g_vol_cal_coef              = 6459.27185;
     ctu_cfg.altitude                    = 0U;           /* 默认高度为0.00m，645写入位置信息后随配置统一保存。 */
     ctu_cfg.poll_interval_seconds       = 10U;          /* 全局逆变器周期抄读时间默认10秒。 */
 }

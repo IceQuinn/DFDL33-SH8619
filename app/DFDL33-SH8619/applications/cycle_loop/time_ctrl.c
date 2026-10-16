@@ -336,17 +336,17 @@ static rt_bool_t time_ctrl_value_valid(const Inv_CtrlRegBlk_t *control, int32_t 
     }
 }
 
-/* 检查有功百分比定点值是否位于0%～100%闭区间。 */
+/* 检查有功百分比定点值是否位于0%～110%闭区间，不使用100%恢复目标作为上限。 */
 static rt_bool_t time_ctrl_percent_value_valid(const Inv_CtrlRegBlk_t *control,
                                                int32_t value)
 {
-    int32_t maximum = TIME_CTRL_RESTORE_PERCENT; /* 当前小数位下100%的定点值。 */
+    int32_t maximum = INV_CONTROL_PERCENT_MAX; /* 允许上限与恢复目标分别定义。 */
     uint8_t decimal_index;                       /* 当前正在计算的小数位下标。 */
 
     if(control == RT_NULL) {
         return RT_FALSE;
     }
-    /* 按协议小数位逐位计算100%对应的定点整数上限。 */
+    /* 按协议小数位逐位计算110%对应的定点整数上限。 */
     for(decimal_index = 0U; decimal_index < control->decimal_places; ++decimal_index) {
         /* 每次乘10前检查int32_t上溢。 */
         if(maximum > (INT32_MAX / 10)) {
@@ -415,7 +415,7 @@ Time_Ctrl_Result_t Time_Ctrl_Check(const Time_Ctrl_Command_t *command)
                                         &control) == RT_FALSE) {
             return TIME_CTRL_RESULT_UNSUPPORTED;
         }
-        /* 控制值必须符合数据类型范围，百分比值还必须位于0%～100%。 */
+        /* 控制值必须符合数据类型范围，百分比值还必须位于0%～110%。 */
         if((time_ctrl_value_valid(&control,
                                   command->periods[period_index].value) == RT_FALSE) ||
            ((command->periods[period_index].mode == TIME_CTRL_ACTIVE_POWER_PERCENT) &&
