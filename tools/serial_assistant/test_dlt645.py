@@ -780,6 +780,26 @@ class DLT645Tests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.registry.encode("04E60C01", dict(schedule, period1_percent=invalid))
 
+    def test_time_control_all_readback_ff_roundtrip(self):
+        for di, size in (("04E60BFF", 16), ("04E60CFF", 12)):
+            with self.subTest(di=di):
+                fields = self.registry.get(di).write_request["fields"]
+                empty = bytes([0xFF]) * (size * 12)
+                cached = self.registry.decode_edit_values(di, empty)
+                self.assertEqual(len(cached), 72)
+                self.assertEqual(set(cached.values()), {"FF"})
+                self.assertEqual(self.registry.encode(di, cached), empty)
+                partial = bytearray(empty)
+                partial[:4] = bytes.fromhex("30 06 00 07")
+                partial[8:10 if size == 12 else 12] = (bytes.fromhex("00 11") if size == 12 else bytes.fromhex("00 00 10 00"))
+                cached = self.registry.decode_edit_values(di, bytes(partial))
+                self.assertEqual(cached[fields[0]["name"]], "06:30")
+                self.assertEqual(cached[fields[2]["name"]], "FF")
+                self.assertEqual(self.registry.encode(di, cached), bytes(partial))
+                for bad in (empty[:-1], empty + b"\xFF"):
+                    with self.assertRaises(ValueError):
+                        self.registry.decode_edit_values(di, bad)
+
     def test_active_power_time_controls_use_independent_hhmm_blocks(self):
         power_values = {
             "period1_start": "07:30", "period1_end": "08:45",

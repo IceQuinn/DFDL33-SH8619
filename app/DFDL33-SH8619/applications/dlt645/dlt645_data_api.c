@@ -1702,7 +1702,7 @@ rt_err_t dlt645_read_time_control(const Dlt645PointTypeDef *point, uint32_t id, 
     return RT_EOK;
 }
 
-/* 写入单台或全部逆变器的当天一次性时段计划，全部预检查通过后再统一更新邮箱。 */
+/* 写入单台或全部逆变器的当天一次性时段计划，逐台检查，合法项更新邮箱，异常项跳过并汇总应答。 */
 rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point, uint32_t id, const uint8_t *data,
                                    uint16_t data_len, uint8_t *response,
                                    uint16_t response_capacity, uint16_t *response_len)
@@ -1712,6 +1712,7 @@ rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point, uint32_t id,
     uint8_t archive_count;          /* 本次写入包含的固定单台块数量。 */
     uint8_t archive_offset;         /* 当前预检查或提交的相对档案槽位。 */
     Time_Ctrl_Command_t commands[INVERTER_ARCHIVE_MAX_COUNT]; /* 预解析完成且绑定接收当天的逐台命令。 */
+    rt_bool_t has_error = RT_FALSE; /* 任一槽位校验、提交或保存失败时最终返回写异常。 */
     rt_bool_t apply[INVERTER_ARCHIVE_MAX_COUNT]; /* RT_TRUE表示当前档案需要更新或停止时段计划。 */
 
     if((point == RT_NULL) || (data == RT_NULL) || (response_len == RT_NULL)) /* 公共写入口的重要指针只检查一次。 */
@@ -1742,21 +1743,29 @@ rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point, uint32_t id,
         {
             if((period1_disabled != RT_TRUE) || (period2_disabled != RT_TRUE)) /* 任一时段时间完整都表示存在对空档案的控制意图。 */
             {
-                return -RT_EINVAL;
+                has_error = RT_TRUE;
+                rt_kprintf("time control archive[%d] empty archive with enabled period\n", archive_index + 1U);
             }
             continue;
         }
         if(dlt645_decode_time_control_block(id, archive_index, block, &commands[archive_offset]) != RT_EOK) /* 单台块的时间、FF组合、数值或精度必须合法。 */
         {
-            return -RT_EINVAL;
+            has_error = RT_TRUE;
+            rt_kprintf("time control archive[%d] plan check failed, skipped\n", archive_index + 1U);
+            continue;
         }
         if(Time_Ctrl_Check(&commands[archive_offset]) != TIME_CTRL_RESULT_OK) /* 检查同日时间范围、重叠、控制能力和恢复能力。 */
         {
-            return -RT_EINVAL;
+            has_error = RT_TRUE;
+            rt_kprintf("time control archive[%d] plan check failed, skipped\n", archive_index + 1U);
+            continue;
         }
-        apply[archive_offset] = RT_TRUE; /* 全部预检查完成后才会实际修改这个档案的邮箱。 */
+        apply[archive_offset] = RT_TRUE; /* 本台校验成功才允许更新，不受其他槽位失败影响。 */
     }
 
+    if((archive_count == 1U) && (has_error == RT_TRUE)) {
+        return -RT_EINVAL; /* 单台写入保持原有校验失败语义。 */
+    }
     if((archive_count > 1U) && (Time_Ctrl_Init_Batch_Begin() != RT_EOK)) {
         return -RT_ERROR;
     }
@@ -1765,16 +1774,16 @@ rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point, uint32_t id,
         if((apply[archive_offset] == RT_TRUE) &&
            (Time_Ctrl_Set(commands[archive_offset]) != TIME_CTRL_RESULT_OK)) /* 两个时段全FF由Set统一转换为停止计划。 */
         {
-            if(archive_count > 1U) {
-                (void)Time_Ctrl_Init_Batch_End();
-            }
-            return -RT_ERROR; /* 极短窗口内档案或线程状态变化时返回写异常。 */
+            has_error = RT_TRUE;
+            rt_kprintf("time control archive[%d] plan update failed, skipped\n",
+                       first_archive + archive_offset + 1U);
         }
     }
     if((archive_count > 1U) && (Time_Ctrl_Init_Batch_End() != RT_EOK)) {
-        return -RT_ERROR;
+        has_error = RT_TRUE;
+        rt_kprintf("time control batch save failed\n");
     }
-    return RT_EOK; /* 所有需要处理的档案邮箱均已成功更新或停止。 */
+    return (has_error == RT_TRUE) ? -RT_ERROR : RT_EOK; /* 全部遍历后汇总，合法项不回滚。 */
 }
 
 /* 读取DI0指定逆变器或全部逆变器的推导运行状态，空档案和未知状态使用FF占位。 */

@@ -143,11 +143,13 @@ class SerialAssistant(tk.Tk):
         self.dlt_decoded_vars: dict[str, tk.StringVar] = {}
         self.dlt_decoded_defs: dict[str, dict] = {}  # 保存协议库读字段定义，用于按地址、功能码和上下限语义格式化显示。
         self.dlt_read_values: dict[str, dict[str, object]] = {}  # 按数据标识保存最近一次成功读取值，切换写操作时用于回填。
+        self.dlt_time_control_read_values: dict[tuple[str, str], dict[str, object]] = {}  # 全控按设备地址和控制类型分别缓存。
         self.dlt_all_ff_var: tk.BooleanVar | None = None  # 仅支持整块FF操作的数据标识会创建该复选状态。
         self.dlt_all_ff_widgets: list[tuple[tk.Widget, str]] = []  # 保存整块FF启用时需要禁用及恢复状态的普通字段控件。
         self.dlt_followup_payloads: dict[tuple[str, str], bytearray] = {}
         self.dlt_pending_writes: dict[str, str] = {}
         self._build_ui()
+        self.dlt_address_var.trace_add("write", self._dlt_address_changed)
         self.refresh_ports()
         self._refresh_dlt_definitions()
         if self.dlt_config_error:
@@ -503,6 +505,30 @@ class SerialAssistant(tk.Tk):
             return ""
         raise ValueError("请输入8位十六进制数据标识")
 
+    def _get_dlt_write_values(self, data_identifier: str) -> dict[str, object]:
+        if data_identifier not in ("04E60BFF", "04E60CFF"):
+            return self.dlt_read_values.get(data_identifier, {})
+        definition = self.dlt_registry.get(data_identifier)
+        values = {str(field["name"]): "FF" for field in definition.write_request["fields"]}
+        try:
+            key = (normalize_address(self.dlt_address_var.get()), data_identifier)
+        except ValueError:
+            return values
+        values.update(self.dlt_time_control_read_values.get(key, {}))
+        return values
+
+    def _cache_dlt_read_values(self, address: str, data_identifier: str, payload: bytes) -> None:
+        values = self.dlt_registry.decode_edit_values(data_identifier, payload)
+        if data_identifier in ("04E60BFF", "04E60CFF"):
+            self.dlt_time_control_read_values[(normalize_address(address), data_identifier)] = values
+        elif values:
+            self.dlt_read_values[data_identifier] = values
+
+    def _dlt_address_changed(self, *_args) -> None:
+        if (self.dlt_action_var.get() == "写" and
+                self._selected_di(silent=True) in ("04E60BFF", "04E60CFF")):
+            self._dlt_selection_changed()  # 地址编辑后立即重建回填，防止界面仍保留另一设备的旧计划。
+
     def _dlt_action_changed(self, _event=None) -> None:
         self._refresh_dlt_definitions()
 
@@ -536,7 +562,7 @@ class SerialAssistant(tk.Tk):
         section = (definition.write_request if self.dlt_action_var.get() == "写"
                    else definition.read_request if is_read_request else definition.read_response)
         fields = section.get("fields", [])
-        cached_values = self.dlt_read_values.get(data_identifier, {}) if self.dlt_action_var.get() == "写" else {}  # 写窗口优先采用同DI最近一次读取值。
+        cached_values = self._get_dlt_write_values(data_identifier) if self.dlt_action_var.get() == "写" else {}
         field_row_offset = 0  # 普通数据标识从首行开始显示，档案全FF选项会占用额外一行。
         if self.dlt_action_var.get() == "写" and bool(section.get("allow_all_ff", False)):
             self.dlt_all_ff_var = tk.BooleanVar(value=False)  # 每次选择档案写入时默认保持普通档案编辑模式。
@@ -1189,9 +1215,7 @@ class SerialAssistant(tk.Tk):
             if(result.valid and result.direction == "从机→主机" and function in (0x11, 0x12)
                     and not result.follow_up and result.data_identifier and cache_payload):
                 try:
-                    edit_values = self.dlt_registry.decode_edit_values(result.data_identifier, cache_payload)
-                    if edit_values:  # 全FF无效槽位不会清除此前读到并可继续编辑的有效协议。
-                        self.dlt_read_values[result.data_identifier] = edit_values
+                    self._cache_dlt_read_values(result.address, result.data_identifier, cache_payload)
                 except ValueError as exc:
                     details.append(f"写入回填缓存失败：{exc}")
         elif combined_payload is not None:

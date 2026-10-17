@@ -11,10 +11,41 @@ from PIL import Image
 from app import (SerialAssistant, combobox_width, display_column_width, load_settings, resource_path,
                  save_settings, saved_dlt_address)
 from app_version import APP_NAME, APP_VERSION, EXE_NAME
+from dlt645 import DataIdentifierRegistry
 from build_assets import ICON_SIZES, prepare_icon
 
 
 class AppReleaseTests(unittest.TestCase):
+    def test_time_control_cache_address_type_and_latest_ff(self):
+        registry = DataIdentifierRegistry.load(Path(__file__).with_name("dlt645_data_identifiers.json"))
+        window = SimpleNamespace(dlt_registry=registry, dlt_address_var=Mock(),
+                                 dlt_read_values={}, dlt_time_control_read_values={})
+        address = "000000000001"
+        window.dlt_address_var.get.return_value = address
+        for di, size in (("04E60BFF", 16), ("04E60CFF", 12)):
+            fields = registry.get(di).write_request["fields"]
+            values = SerialAssistant._get_dlt_write_values(window, di)
+            self.assertEqual(set(values.values()), {"FF"})
+            self.assertEqual(registry.encode(di, values), bytes([255]) * (size * 12))
+            payload = bytearray(bytes([255]) * (size * 12))
+            payload[:4] = bytes.fromhex("30 06 00 07")
+            SerialAssistant._cache_dlt_read_values(window, address, di, bytes(payload))
+            self.assertEqual(SerialAssistant._get_dlt_write_values(window, di)[fields[0]["name"]], "06:30")
+            window.dlt_address_var.get.return_value = "000000000002"
+            self.assertEqual(set(SerialAssistant._get_dlt_write_values(window, di).values()), {"FF"})
+            window.dlt_address_var.get.return_value = address
+            SerialAssistant._cache_dlt_read_values(window, address, di, bytes([255]) * (size * 12))
+            self.assertEqual(set(SerialAssistant._get_dlt_write_values(window, di).values()), {"FF"})
+
+    def test_address_change_rebuilds_only_time_control_all_write(self):
+        for action, di, expected in (("写", "04E60BFF", True), ("写", "04E60CFF", True),
+                                     ("读", "04E60BFF", False), ("写", "04E60B01", False)):
+            window = SimpleNamespace(dlt_action_var=Mock(), _selected_di=Mock(return_value=di),
+                                     _dlt_selection_changed=Mock())
+            window.dlt_action_var.get.return_value = action
+            SerialAssistant._dlt_address_changed(window)
+            self.assertEqual(window._dlt_selection_changed.called, expected)
+
     def test_copy_decoded_value_full_and_selected(self):
         for selected in (False, True):
             with self.subTest(selected=selected):

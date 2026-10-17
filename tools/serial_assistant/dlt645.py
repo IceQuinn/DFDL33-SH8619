@@ -887,8 +887,11 @@ class DataIdentifierRegistry:
     def decode_edit_values(self, data_identifier: str, payload: bytes) -> dict[str, Any]:
         """把读取数据转换为可再次编码的字段值，供同一数据标识从读切换到写时回填。"""
         definition = self.get(data_identifier)
-        if not definition or (payload and all(value == 0xFF for value in payload)):
+        is_time_control_all = bool(definition and definition.di in ("04E60BFF", "04E60CFF"))
+        if not definition or (not is_time_control_all and payload and all(value == 0xFF for value in payload)):
             return {}  # 未配置数据标识或全FF无效槽位不能覆盖写窗口中的已有内容。
+        if is_time_control_all and len(payload) != sum(int(field["length"]) for field in definition.read_response["fields"]):
+            raise ValueError("全设备时段控回填需要完整12台数据，不能使用截断或超长数据")
         values: dict[str, Any] = {}
         offset = 0
         for field_def in definition.read_response.get("fields", []):
@@ -898,7 +901,9 @@ class DataIdentifierRegistry:
             raw_value = payload[offset:offset + length]
             name = str(field_def["name"])
             kind = str(field_def.get("type", "hex")).lower()
-            if name.endswith("_address"):
+            if is_time_control_all and all(value == 0xFF for value in raw_value):
+                values[name] = "FF"  # 编码时由字段length展开为2或4字节，不把无效显示符--用于写入。
+            elif name.endswith("_address"):
                 values[name] = str(int.from_bytes(raw_value, _byte_order(field_def), signed=False))  # FFFF不支持地址仍以十进制65535无损回填。
             elif kind == "hex_uint":
                 integer = int.from_bytes(raw_value, _byte_order(field_def), signed=False)  # FFFF寄存器地址在编辑缓存中必须保留，不能转换成“--”。
