@@ -200,7 +200,7 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
 /* 读取五类逆变器调节设定值，空档案、不支持或缓存无效时使用全FF占位。 */
 rt_err_t dlt645_read_control_value(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
 
-/* 写入五类逆变器调节设定值，全量控制时为12个固定档案槽位生成逐台结果。 */
+/* 写入五类调节设定值，逐台执行并汇总，标准应答不携带12台结果。 */
 rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point,
                                     uint32_t id,
                                     const uint8_t *data,

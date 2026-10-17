@@ -69,6 +69,14 @@ def normalize_address(address: str) -> str:
     return value
 
 
+def uses_control_readback_cache(data_identifier: str) -> bool:
+    """五类即时控制（单台及全控）和两类时段全控使用FF可回写缓存。"""
+    di = normalize_di(data_identifier)
+    return (di in ("04E60BFF", "04E60CFF") or
+            (di[:6] in ("04E605", "04E606", "04E607", "04E608", "04E609") and
+             (1 <= int(di[6:], 16) <= 12 or di[6:] == "FF")))
+
+
 def encode_address(address: str) -> bytes:
     value = normalize_address(address)
     return bytes.fromhex(value)[::-1]
@@ -887,11 +895,11 @@ class DataIdentifierRegistry:
     def decode_edit_values(self, data_identifier: str, payload: bytes) -> dict[str, Any]:
         """把读取数据转换为可再次编码的字段值，供同一数据标识从读切换到写时回填。"""
         definition = self.get(data_identifier)
-        is_time_control_all = bool(definition and definition.di in ("04E60BFF", "04E60CFF"))
-        if not definition or (not is_time_control_all and payload and all(value == 0xFF for value in payload)):
+        is_control_readback = bool(definition and uses_control_readback_cache(definition.di))
+        if not definition or (not is_control_readback and payload and all(value == 0xFF for value in payload)):
             return {}  # 未配置数据标识或全FF无效槽位不能覆盖写窗口中的已有内容。
-        if is_time_control_all and len(payload) != sum(int(field["length"]) for field in definition.read_response["fields"]):
-            raise ValueError("全设备时段控回填需要完整12台数据，不能使用截断或超长数据")
+        if is_control_readback and len(payload) != sum(int(field["length"]) for field in definition.read_response["fields"]):
+            raise ValueError("控制值回填需要完整数据，不能使用截断或超长数据")
         values: dict[str, Any] = {}
         offset = 0
         for field_def in definition.read_response.get("fields", []):
@@ -901,7 +909,7 @@ class DataIdentifierRegistry:
             raw_value = payload[offset:offset + length]
             name = str(field_def["name"])
             kind = str(field_def.get("type", "hex")).lower()
-            if is_time_control_all and all(value == 0xFF for value in raw_value):
+            if is_control_readback and all(value == 0xFF for value in raw_value):
                 values[name] = "FF"  # 编码时由字段length展开为2或4字节，不把无效显示符--用于写入。
             elif name.endswith("_address"):
                 values[name] = str(int.from_bytes(raw_value, _byte_order(field_def), signed=False))  # FFFF不支持地址仍以十进制65535无损回填。

@@ -780,6 +780,24 @@ class DLT645Tests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.registry.encode("04E60C01", dict(schedule, period1_percent=invalid))
 
+    def test_immediate_controls_readback_ff_roundtrip(self):
+        for prefix, size in (("04E605", 4), ("04E606", 4), ("04E607", 2), ("04E608", 2), ("04E609", 2)):
+            for suffix, count in (("01", 1), ("FF", 12)):
+                di = prefix + suffix
+                with self.subTest(di=di):
+                    payload = bytes([255]) * (size * count)
+                    cached = self.registry.decode_edit_values(di, payload)
+                    self.assertEqual(len(cached), count)
+                    self.assertEqual(set(cached.values()), {"FF"})
+                    self.assertEqual(self.registry.encode(di, cached), payload)
+                    mixed = bytes(size) + payload[size:]
+                    cached = self.registry.decode_edit_values(di, mixed)
+                    self.assertNotIn("--", cached.values())
+                    self.assertEqual(self.registry.encode(di, cached), mixed)
+                    for bad in (mixed[:-1], mixed + b"\xFF"):
+                        with self.assertRaises(ValueError):
+                            self.registry.decode_edit_values(di, bad)
+
     def test_time_control_all_readback_ff_roundtrip(self):
         for di, size in (("04E60BFF", 16), ("04E60CFF", 12)):
             with self.subTest(di=di):

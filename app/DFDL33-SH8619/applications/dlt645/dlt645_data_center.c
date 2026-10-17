@@ -794,7 +794,7 @@ void dlt645_ctrl_write_data(uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t
         }
     }
 
-    if((err_code == E_D07_W_OK) && (response_len > 0U)) /* 全量数值调节使用带数据标识和12个状态的正常应答。 */
+    if((err_code == E_D07_W_OK) && (response_len > 0U)) /* 仅显式返回业务数据的回调使用扩展应答，五类调节返回长度0。 */
     {
         dlt645_send_write_data_response(id, g_dlt645_point_data, response_len, uart_no);
         return;

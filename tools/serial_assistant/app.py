@@ -34,6 +34,7 @@ from dlt645 import (
     build_write_data,
     looks_like_frame,
     normalize_address,
+    uses_control_readback_cache,
     parse_frame as parse_dlt645_frame,
 )
 from virtual_ports import COM0COM_DOWNLOAD_URL, create_pair_elevated, find_setupc, suggest_com_pair
@@ -143,7 +144,7 @@ class SerialAssistant(tk.Tk):
         self.dlt_decoded_vars: dict[str, tk.StringVar] = {}
         self.dlt_decoded_defs: dict[str, dict] = {}  # 保存协议库读字段定义，用于按地址、功能码和上下限语义格式化显示。
         self.dlt_read_values: dict[str, dict[str, object]] = {}  # 按数据标识保存最近一次成功读取值，切换写操作时用于回填。
-        self.dlt_time_control_read_values: dict[tuple[str, str], dict[str, object]] = {}  # 全控按设备地址和控制类型分别缓存。
+        self.dlt_control_read_values: dict[tuple[str, str], dict[str, object]] = {}  # 即时调控及两类时段全控按设备地址和DI分别缓存。
         self.dlt_all_ff_var: tk.BooleanVar | None = None  # 仅支持整块FF操作的数据标识会创建该复选状态。
         self.dlt_all_ff_widgets: list[tuple[tk.Widget, str]] = []  # 保存整块FF启用时需要禁用及恢复状态的普通字段控件。
         self.dlt_followup_payloads: dict[tuple[str, str], bytearray] = {}
@@ -506,7 +507,7 @@ class SerialAssistant(tk.Tk):
         raise ValueError("请输入8位十六进制数据标识")
 
     def _get_dlt_write_values(self, data_identifier: str) -> dict[str, object]:
-        if data_identifier not in ("04E60BFF", "04E60CFF"):
+        if not uses_control_readback_cache(data_identifier):
             return self.dlt_read_values.get(data_identifier, {})
         definition = self.dlt_registry.get(data_identifier)
         values = {str(field["name"]): "FF" for field in definition.write_request["fields"]}
@@ -514,19 +515,19 @@ class SerialAssistant(tk.Tk):
             key = (normalize_address(self.dlt_address_var.get()), data_identifier)
         except ValueError:
             return values
-        values.update(self.dlt_time_control_read_values.get(key, {}))
+        values.update(self.dlt_control_read_values.get(key, {}))
         return values
 
     def _cache_dlt_read_values(self, address: str, data_identifier: str, payload: bytes) -> None:
         values = self.dlt_registry.decode_edit_values(data_identifier, payload)
-        if data_identifier in ("04E60BFF", "04E60CFF"):
-            self.dlt_time_control_read_values[(normalize_address(address), data_identifier)] = values
+        if uses_control_readback_cache(data_identifier):
+            self.dlt_control_read_values[(normalize_address(address), data_identifier)] = values
         elif values:
             self.dlt_read_values[data_identifier] = values
 
     def _dlt_address_changed(self, *_args) -> None:
         if (self.dlt_action_var.get() == "写" and
-                self._selected_di(silent=True) in ("04E60BFF", "04E60CFF")):
+                self._selected_di(silent=True) and uses_control_readback_cache(self._selected_di(silent=True))):
             self._dlt_selection_changed()  # 地址编辑后立即重建回填，防止界面仍保留另一设备的旧计划。
 
     def _dlt_action_changed(self, _event=None) -> None:

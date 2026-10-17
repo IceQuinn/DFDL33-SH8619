@@ -1373,7 +1373,7 @@ static uint8_t dlt645_control_one_value(uint8_t archive_index, Inv_Control_Type_
     return dlt645_control_result_to_status(result.result); /* 将下行详细结果压缩为00～04状态。 */
 }
 
-/* 写入单台或全部逆变器的五类调节值，全量写入时逐个返回对应处理状态。 */
+/* 五类调节逐台执行后汇总，只回复标准645正常/异常应答，不上送逐台状态。 */
 rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id, const uint8_t *data,
                                     uint16_t data_len, uint8_t *response,
                                     uint16_t response_capacity, uint16_t *response_len)
@@ -1444,13 +1444,14 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
                                                                  types[archive_offset], values[archive_offset]);
         }
     }
-    *response_len = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? archive_count : 0U; /* 仅全量控制在正常写应答中携带逐台状态。 */
-    if(selector != DLT645_VARIABLE_ALL_SELECTOR) /* 单台写没有逐台状态数据域，需要通过645正常或异常应答表达结果。 */
-    {
-        return ((response[0] == DLT645_CONTROL_STATUS_SUCCESS) ||
-                (response[0] == DLT645_CONTROL_STATUS_NOT_CONTROLLED)) ? RT_EOK : -RT_ERROR; /* 成功或FF不控制正常回复，其余状态返回写异常。 */
+    *response_len = 0U; /* 逐台状态仅用于内部汇总，不放入645应答数据域。 */
+    for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset) {
+        if((response[archive_offset] != DLT645_CONTROL_STATUS_SUCCESS) &&
+           (response[archive_offset] != DLT645_CONTROL_STATUS_NOT_CONTROLLED)) {
+            return -RT_ERROR; /* 全部执行结束后才返回失败，顶层映射为其他错误01。 */
+        }
     }
-    return RT_EOK; /* 全量请求始终通过12个状态表达各槽位结果。 */
+    return RT_EOK; /* 所有槽位成功或FF不控制时，返回无数据的标准正常写应答。 */
 }
 
 /* 根据04E60B或04E60C取得时段控制方式、单个数值长度和645目标小数位。 */

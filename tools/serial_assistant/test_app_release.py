@@ -16,10 +16,29 @@ from build_assets import ICON_SIZES, prepare_icon
 
 
 class AppReleaseTests(unittest.TestCase):
+    def test_immediate_control_cache_and_defaults(self):
+        registry = DataIdentifierRegistry.load(Path(__file__).with_name("dlt645_data_identifiers.json"))
+        window = SimpleNamespace(dlt_registry=registry, dlt_address_var=Mock(),
+                                 dlt_read_values={}, dlt_control_read_values={})
+        for prefix, size in (("04E605", 4), ("04E606", 4), ("04E607", 2), ("04E608", 2), ("04E609", 2)):
+            for suffix, count in (("01", 1), ("FF", 12)):
+                di = prefix + suffix
+                with self.subTest(di=di):
+                    window.dlt_address_var.get.return_value = "000000000001"
+                    self.assertEqual(set(SerialAssistant._get_dlt_write_values(window, di).values()), {"FF"})
+                    payload = bytes(size) + bytes([255]) * (size * (count - 1))
+                    SerialAssistant._cache_dlt_read_values(window, "000000000001", di, payload)
+                    self.assertEqual(registry.encode(di, SerialAssistant._get_dlt_write_values(window, di)), payload)
+                    window.dlt_address_var.get.return_value = "000000000002"
+                    self.assertEqual(set(SerialAssistant._get_dlt_write_values(window, di).values()), {"FF"})
+                    window.dlt_address_var.get.return_value = "000000000001"
+                    SerialAssistant._cache_dlt_read_values(window, "000000000001", di, bytes([255]) * (size * count))
+                    self.assertEqual(set(SerialAssistant._get_dlt_write_values(window, di).values()), {"FF"})
+
     def test_time_control_cache_address_type_and_latest_ff(self):
         registry = DataIdentifierRegistry.load(Path(__file__).with_name("dlt645_data_identifiers.json"))
         window = SimpleNamespace(dlt_registry=registry, dlt_address_var=Mock(),
-                                 dlt_read_values={}, dlt_time_control_read_values={})
+                                 dlt_read_values={}, dlt_control_read_values={})
         address = "000000000001"
         window.dlt_address_var.get.return_value = address
         for di, size in (("04E60BFF", 16), ("04E60CFF", 12)):
