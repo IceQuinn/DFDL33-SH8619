@@ -1,0 +1,21 @@
+{
+  "links": [
+    {
+      "name": "链路1",
+      "mode": "RTU",
+      "port": "COM21",
+      "baud": 9600,
+      "parity": "N",
+      "databits": 8,
+      "stopbits": 1.0,
+      "devices": [
+        {
+          "name": "设备1",
+          "slave_addr": 1,
+          "template_name": "华为SUN2000",
+          "enabled": true
+        }
+      ]
+    }
+  ]
+}

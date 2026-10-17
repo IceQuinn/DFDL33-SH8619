@@ -1,0 +1,141 @@
+{
+  "version": "1.0",
+  "templateName": "逆变器示例模板",
+  "registers": [
+    {
+      "name": "母线电压",
+      "fc": 3,
+      "dataType": "uint16",
+      "regAddr": 0,
+      "byteOrder": "ABCD",
+      "scale": 10,
+      "access": "RO",
+      "formula": "$value",
+      "value": 238.4,
+      "notes": "单位 V，放大倍率10"
+    },
+    {
+      "name": "输出频率",
+      "fc": 3,
+      "dataType": "uint16",
+      "regAddr": 1,
+      "byteOrder": "ABCD",
+      "scale": 100,
+      "access": "RO",
+      "formula": "$value",
+      "value": 50.02,
+      "notes": "单位 Hz"
+    },
+    {
+      "name": "输出功率",
+      "fc": 3,
+      "dataType": "uint32",
+      "regAddr": 2,
+      "byteOrder": "ABCD",
+      "scale": 1,
+      "access": "RO",
+      "formula": "$value",
+      "value": 5200,
+      "notes": "单位 W，32位"
+    },
+    {
+      "name": "日发电量",
+      "fc": 3,
+      "dataType": "float32",
+      "regAddr": 4,
+      "byteOrder": "ABCD",
+      "scale": 1,
+      "access": "RO",
+      "formula": "$value",
+      "value": 12.35,
+      "notes": "单位 kWh"
+    },
+    {
+      "name": "机内温度",
+      "fc": 3,
+      "dataType": "int16",
+      "regAddr": 6,
+      "byteOrder": "ABCD",
+      "scale": 10,
+      "access": "RO",
+      "formula": "$value",
+      "value": 42.6,
+      "notes": "单位 ℃，可负"
+    },
+    {
+      "name": "运行状态",
+      "fc": 3,
+      "dataType": "uint16",
+      "regAddr": 7,
+      "byteOrder": "ABCD",
+      "scale": 1,
+      "access": "RW",
+      "formula": "$value",
+      "value": 1,
+      "notes": "0停机 1运行 2故障"
+    },
+    {
+      "name": "设备序列号",
+      "fc": 3,
+      "dataType": "string",
+      "regAddr": 8,
+      "byteOrder": "ABCD",
+      "scale": 1,
+      "access": "RO",
+      "formula": "$value",
+      "value": "INV2026X",
+      "notes": "字符串类型"
+    },
+    {
+      "name": "固件版本",
+      "fc": 3,
+      "dataType": "hex",
+      "regAddr": 16,
+      "byteOrder": "ABCD",
+      "scale": 1,
+      "access": "RO",
+      "formula": "$value",
+      "value": "0x0103",
+      "notes": "16位HEX"
+    },
+    {
+      "name": "时间戳",
+      "fc": 4,
+      "dataType": "datetime",
+      "regAddr": 20,
+      "byteOrder": "ABCD",
+      "scale": 1,
+      "access": "RO",
+      "formula": "$value",
+      "value": 1700000000,
+      "notes": "输入寄存器，Unix时间戳"
+    },
+    {
+      "name": "启动命令",
+      "fc": 6,
+      "dataType": "uint16",
+      "regAddr": 30,
+      "byteOrder": "ABCD",
+      "scale": 1,
+      "access": "RW",
+      "formula": "$value",
+      "value": 0,
+      "notes": "写单寄存器控制"
+    },
+    {
+      "name": "运行小时",
+      "fc": 3,
+      "dataType": "uint32",
+      "regAddr": 31,
+      "byteOrder": "CDAB",
+      "scale": 1,
+      "access": "RO",
+      "formula": "$value",
+      "value": 8760,
+      "notes": "CDAB字节序演示"
+    }
+  ],
+  "addressOffset": 0,
+  "writeFunctionCode": 0,
+  "autoProvisionMissing": false
+}
