@@ -610,8 +610,11 @@ class SerialAssistant(tk.Tk):
                     variable = tk.StringVar(value=str(cached_values.get(name, default_value)))  # 普通字段直接回填读取时保存的可编码文本。
                     self.dlt_field_vars[name] = variable
                     if kind == "enum" and field_def.get("values"):
+                        choices = tuple(field_def["values"].values())
+                        if field_def.get("allow_ff"):
+                            choices += ("FF",)  # 开关机不控制项保持FF原文，与读取回填值一致。
                         widget = ttk.Combobox(self.dlt_fields_frame, textvariable=variable,
-                                              values=tuple(field_def["values"].values()), state="readonly", width=22)
+                                              values=choices, state="readonly", width=22)
                         if not variable.get():
                             variable.set(next(iter(field_def["values"].values())))
                     else:

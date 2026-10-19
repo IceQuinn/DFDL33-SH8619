@@ -20,7 +20,7 @@ class AppReleaseTests(unittest.TestCase):
         registry = DataIdentifierRegistry.load(Path(__file__).with_name("dlt645_data_identifiers.json"))
         window = SimpleNamespace(dlt_registry=registry, dlt_address_var=Mock(),
                                  dlt_read_values={}, dlt_control_read_values={})
-        for prefix, size in (("04E605", 4), ("04E606", 4), ("04E607", 2), ("04E608", 2), ("04E609", 2)):
+        for prefix, size in (("04E604", 1), ("04E605", 4), ("04E606", 4), ("04E607", 2), ("04E608", 2), ("04E609", 2)):
             for suffix, count in (("01", 1), ("FF", 12)):
                 di = prefix + suffix
                 with self.subTest(di=di):

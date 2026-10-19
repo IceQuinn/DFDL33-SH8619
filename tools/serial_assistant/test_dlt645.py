@@ -781,7 +781,7 @@ class DLT645Tests(unittest.TestCase):
                 self.registry.encode("04E60C01", dict(schedule, period1_percent=invalid))
 
     def test_immediate_controls_readback_ff_roundtrip(self):
-        for prefix, size in (("04E605", 4), ("04E606", 4), ("04E607", 2), ("04E608", 2), ("04E609", 2)):
+        for prefix, size in (("04E604", 1), ("04E605", 4), ("04E606", 4), ("04E607", 2), ("04E608", 2), ("04E609", 2)):
             for suffix, count in (("01", 1), ("FF", 12)):
                 di = prefix + suffix
                 with self.subTest(di=di):
@@ -797,6 +797,16 @@ class DLT645Tests(unittest.TestCase):
                     for bad in (mixed[:-1], mixed + b"\xFF"):
                         with self.assertRaises(ValueError):
                             self.registry.decode_edit_values(di, bad)
+
+    def test_switch_control_three_values(self):
+        for value, raw in (("开机", b"\x00"), ("关机", b"\x01"), ("FF", b"\xFF")):
+            self.assertEqual(self.registry.encode("04E60401", {"status": value}), raw)
+        payload = bytes.fromhex("00 01 FF FF FF FF FF FF FF FF FF FF")
+        cached = self.registry.decode_edit_values("04E604FF", payload)
+        self.assertEqual(list(cached.values()), ["开机", "关机"] + ["FF"] * 10)
+        self.assertEqual(self.registry.encode("04E604FF", cached), payload)
+        with self.assertRaises(ValueError):
+            self.registry.encode("04E60401", {"status": "02"})
 
     def test_time_control_all_readback_ff_roundtrip(self):
         for di, size in (("04E60BFF", 16), ("04E60CFF", 12)):

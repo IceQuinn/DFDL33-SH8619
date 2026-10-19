@@ -1862,7 +1862,7 @@ static rt_err_t dlt645_control_run_state(uint8_t archive_index, int32_t value)
     return RT_EOK;
 }
 
-/* 解码并校验单台或12台运行状态写数据，全部目标控制成功后才返回成功。 */
+/* 开关机逐台检查，FF正常跳过、非法值计错跳过；合法项执行完后汇总应答。 */
 rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
                                 uint32_t id,
                                 const uint8_t *data,
@@ -1875,8 +1875,9 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
     uint8_t first_archive;          /* 本次控制的首个档案槽位下标。 */
     uint8_t archive_count;          /* 本次需要逐个执行的控制数量。 */
     uint8_t archive_offset;         /* 当前校验或控制相对首档案的偏移。 */
-    int32_t values[INVERTER_ARCHIVE_MAX_COUNT]; /* 先完整校验后保存的12个状态值，避免格式错误时产生部分控制。 */
-    rt_bool_t all_success = RT_TRUE; /* 只有每个档案最终控制成功时才保持为真。 */
+    int32_t values[INVERTER_ARCHIVE_MAX_COUNT]; /* 保存通过校验的开关机值，非法槽位不会执行。 */
+    rt_bool_t execute[INVERTER_ARCHIVE_MAX_COUNT]; /* 只有本台值合法才下发，不受其他台非法值影响。 */
+    rt_bool_t all_success = RT_TRUE; /* 每个档案控制成功或FF不控制时保持为真。 */
 
     RT_UNUSED(response); /* 运行状态沿用原有无数据写应答，不生成逐台状态数据域。 */
     RT_UNUSED(response_capacity);
@@ -1889,22 +1890,30 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
         return -RT_EINVAL;
     }
 
+    rt_memset(execute, 0, sizeof(execute));
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
+        if(data[archive_offset] == 0xFFU) /* FF表示本台不控制，不检查档案也不计为失败。 */
+        {
+            continue;
+        }
         if((dlt645_bcd_decode_u32(&data[archive_offset], point->data_len, &values[archive_offset]) != RT_EOK) ||
            (values[archive_offset] < point->write_min) ||
-           (values[archive_offset] > point->write_max)) /* 12个值必须全部为合法BCD且只能取0或1。 */
+           (values[archive_offset] > point->write_max)) /* 除FF不控制外，仅允许00开机、01关机。 */
         {
-            return -RT_EINVAL;
+            all_success = RT_FALSE;
+            continue;
         }
+        execute[archive_offset] = RT_TRUE;
     }
 
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
-        if(dlt645_control_run_state(first_archive + archive_offset, values[archive_offset]) != RT_EOK) /* 无效档案或控制失败会使最终645应答为错误。 */
+        if((execute[archive_offset] == RT_TRUE) &&
+           (dlt645_control_run_state(first_archive + archive_offset, values[archive_offset]) != RT_EOK)) /* 无效档案或控制失败不阻塞后续台，最终汇总错误。 */
         {
             all_success = RT_FALSE;
         }
     }
-    return (all_success == RT_TRUE) ? RT_EOK : -RT_ERROR; /* 仅全部12台或目标单台成功时正常应答。 */
+    return (all_success == RT_TRUE) ? RT_EOK : -RT_ERROR; /* 控制成功和FF不控制均正常应答，其余汇总其他错误。 */
 }

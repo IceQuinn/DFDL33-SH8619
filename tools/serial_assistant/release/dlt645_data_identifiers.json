@@ -58,7 +58,8 @@
           "type": "enum",
           "length": 1,
           "byte_order": "little",
-          "values": {"0": "开机", "1": "关机"}
+          "values": {"0": "开机", "1": "关机"},
+          "allow_ff": true
         }
       ]
     },

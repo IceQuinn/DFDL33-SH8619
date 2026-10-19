@@ -70,10 +70,10 @@ def normalize_address(address: str) -> str:
 
 
 def uses_control_readback_cache(data_identifier: str) -> bool:
-    """五类即时控制（单台及全控）和两类时段全控使用FF可回写缓存。"""
+    """开关机、五类即时控制（单台及全控）和两类时段全控使用FF可回写缓存。"""
     di = normalize_di(data_identifier)
     return (di in ("04E60BFF", "04E60CFF") or
-            (di[:6] in ("04E605", "04E606", "04E607", "04E608", "04E609") and
+            (di[:6] in ("04E604", "04E605", "04E606", "04E607", "04E608", "04E609") and
              (1 <= int(di[6:], 16) <= 12 or di[6:] == "FF")))
 
 
