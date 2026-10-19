@@ -81,6 +81,12 @@ Time_Ctrl_Result_t Time_Ctrl_Get(uint8_t archive_index, Time_Ctrl_Command_t *com
 /* 停止指定档案的时段控制；正在调控时会先排队恢复额定功率。 */
 Time_Ctrl_Result_t Time_Ctrl_Stop_Archive(uint8_t archive_index);
 
+/* 档案校验通过后调用：锁定时段运行并彻底清除旧计划；失败时已自行解锁。 */
+rt_err_t Time_Ctrl_Archive_Change_Begin(uint8_t archive_index);
+
+/* Begin成功后完成档案替换或删除，再调用本接口释放运行锁。 */
+void Time_Ctrl_Archive_Change_End(void);
+
 /* 停止全部12个档案的时段控制。 */
 Time_Ctrl_Result_t Time_Ctrl_Stop(void);
 

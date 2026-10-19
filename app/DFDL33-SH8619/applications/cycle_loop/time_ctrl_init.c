@@ -212,6 +212,32 @@ rt_err_t Time_Ctrl_Init_Save_Command(const Time_Ctrl_Command_t *command,
     return result;
 }
 
+/* 档案变更时同时删除计划、启用状态和恢复标志，空记录无需重复擦写。 */
+rt_err_t Time_Ctrl_Init_Clear_Archive(uint8_t archive_index)
+{
+    Time_Ctrl_Store_Entry_t empty;
+    rt_err_t result = RT_EOK;
+
+    if(archive_index >= INVERTER_ARCHIVE_MAX_COUNT) {
+        return -RT_EINVAL;
+    }
+    rt_memset(&empty, 0, sizeof(empty));
+    empty.command.archive_index = archive_index;
+    rt_mutex_take(&g_time_ctrl_store_mutex, RT_WAITING_FOREVER);
+    if(rt_memcmp(&g_time_ctrl_store.entries[archive_index], &empty, sizeof(empty)) != 0) {
+        g_time_ctrl_store.entries[archive_index] = empty;
+        g_time_ctrl_store_dirty = RT_TRUE;
+    }
+    if((g_time_ctrl_store_dirty == RT_TRUE) && (g_time_ctrl_store_batch_depth == 0U)) {
+        result = time_ctrl_store_save_locked();
+        if(result == RT_EOK) {
+            g_time_ctrl_store_dirty = RT_FALSE;
+        }
+    }
+    rt_mutex_release(&g_time_ctrl_store_mutex);
+    return result;
+}
+
 /* 进入批量更新模式，允许嵌套调用并延迟Flash擦写。 */
 rt_err_t Time_Ctrl_Init_Batch_Begin(void)
 {

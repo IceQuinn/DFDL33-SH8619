@@ -5,6 +5,7 @@
 #include "drv_ex_flash.h"
 #include "inverter_protocol_library.h"
 #include "user_ex_flash_mgmt.h"
+#include "time_ctrl.h"
 
 /* 全局逆变器档案库，固定提供12个档案槽位，上电后由应用程序负责装载和维护。 */
 Inv_ArchiveLib_t g_inv_archive_lib; /* 保存档案头、有效数量、12个有效标志和12条档案内容。 */
@@ -187,11 +188,20 @@ int8_t Inv_Archive_Set(uint8_t archive_index, const Inv_Archive_t *archive)
         }
     }
 
+    if((g_inv_archive_lib.valid[archive_index] == INVERTER_ARCHIVE_VALID) &&
+       (rt_memcmp(&g_inv_archive_lib.archives[archive_index], archive, sizeof(*archive)) == 0)) {
+        return (int8_t)archive_index; /* 原样重复写入不删除原计划，也不重复擦写档案。 */
+    }
+    if(Time_Ctrl_Archive_Change_Begin(archive_index) != RT_EOK) {
+        return INVERTER_ARCHIVE_ADD_FAILED; /* 清理持久化旧计划失败时不替换档案。 */
+    }
     rt_enter_critical(); /* 防止任务切换发生在档案内容、有效标志和协议指针更新到一半时。 */
     rt_memcpy(&g_inv_archive_lib.archives[archive_index], archive, sizeof(*archive)); /* 完整替换DI0指定的固定档案槽位。 */
     g_inv_archive_lib.valid[archive_index] = INVERTER_ARCHIVE_VALID; /* 完整档案复制完成后再将槽位置为有效。 */
     g_inv_archive_proto[archive_index] = protocol; /* 同步厂家协议指针，重启前也不保留旧协议引用。 */
     rt_exit_critical();
+
+    Time_Ctrl_Archive_Change_End(); /* 档案切换完成后才允许新时段命令受理和执行。 */
 
     Inv_Archive_Save(); /* 重新统计有效档案数量并将修改后的档案库持久化到Flash A/B区。 */
     return (int8_t)archive_index;
@@ -213,11 +223,16 @@ int8_t Inv_Archive_Delete(uint8_t archive_index)
                        (rt_memcmp(&g_inv_archive_lib.archives[archive_index], &empty_archive, sizeof(empty_archive)) != 0) ||
                        (g_inv_archive_proto[archive_index] != RT_NULL)) ? RT_TRUE : RT_FALSE; /* 已完全清空的槽位无需重复擦写Flash。 */
 
+    if(Time_Ctrl_Archive_Change_Begin(archive_index) != RT_EOK) {
+        return INVERTER_ARCHIVE_ADD_FAILED; /* 即使重复删除空槽，也先清理可能残留的时段计划。 */
+    }
     rt_enter_critical(); /* 先使槽位失效，再清内容，避免周期线程读取到半清空的有效档案。 */
     g_inv_archive_lib.valid[archive_index] = INVERTER_ARCHIVE_INVALID; /* 删除后该槽位立即从有效档案集合移除。 */
     g_inv_archive_proto[archive_index] = RT_NULL; /* 清除协议绑定，后续周期抄读不能继续取得旧协议。 */
     rt_memset(&g_inv_archive_lib.archives[archive_index], 0, sizeof(g_inv_archive_lib.archives[archive_index])); /* 清除地址、厂家、规约版本和端口。 */
     rt_exit_critical();
+
+    Time_Ctrl_Archive_Change_End(); /* 清理不走Stop接口，不向旧设备或新设备发送恢复命令。 */
 
     if(archive_changed == RT_TRUE) /* 第一次删除或清理遗留内容时才更新数量并保存档案库。 */
     {

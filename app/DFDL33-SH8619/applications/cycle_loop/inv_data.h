@@ -202,6 +202,9 @@ rt_bool_t Inv_Forward_Scan_Step(uint16_t primary_uart_no, rt_tick_t now);
 /* 异步提交逆变器控制请求，返回RT_EOK仅表示请求已经进入目标端口队列。 */
 rt_err_t Inv_Control_Submit(const Inv_Control_Request_t *request);
 
+/* 撤销指定流水号尚未取出的排队命令，已开始执行的请求不可撤回。 */
+void Inv_Control_Cancel_Queued(uint32_t request_id);
+
 /* 等待并取出一项控制结果，timeout单位为系统tick，支持0和RT_WAITING_FOREVER。 */
 rt_err_t Inv_Control_Get_Result(Inv_Control_Result_Info_t *result, int32_t timeout);
 

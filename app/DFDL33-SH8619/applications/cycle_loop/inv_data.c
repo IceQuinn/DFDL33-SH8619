@@ -313,6 +313,34 @@ static rt_bool_t inv_control_queue_get(Inv_Control_Queue_t *queue, Inv_Control_R
     return RT_TRUE;
 }
 
+/* 按流水号删除尚未执行的时段命令，保留队列中其他请求的原有顺序。 */
+void Inv_Control_Cancel_Queued(uint32_t request_id)
+{
+    uint8_t port_index;
+    rt_base_t level;
+
+    if(request_id == 0U) {
+        return;
+    }
+    level = rt_hw_interrupt_disable();
+    for(port_index = 0U; port_index < INV_DATA_PORT_COUNT; ++port_index) {
+        Inv_Control_Queue_t *queue = &g_inv_data_ports[port_index].control_queue;
+        uint8_t offset;
+        uint8_t kept = 0U;
+        for(offset = 0U; offset < queue->count; ++offset) {
+            uint8_t source = (queue->read_index + offset) % INV_CONTROL_QUEUE_SIZE;
+            if(queue->requests[source].request_id != request_id) {
+                uint8_t target = (queue->read_index + kept) % INV_CONTROL_QUEUE_SIZE;
+                queue->requests[target] = queue->requests[source];
+                ++kept;
+            }
+        }
+        queue->count = kept;
+        queue->write_index = (queue->read_index + kept) % INV_CONTROL_QUEUE_SIZE;
+    }
+    rt_hw_interrupt_enable(level);
+}
+
 /* 查询端口控制队列是否存在待执行命令，读取计数时使用临界区避免并发提交。 */
 static rt_bool_t inv_control_queue_has_request(Inv_Control_Queue_t *queue)
 {

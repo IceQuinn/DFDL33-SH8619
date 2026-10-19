@@ -87,6 +87,49 @@ static Time_Ctrl_Mailbox_t g_time_ctrl_mailboxes[INVERTER_ARCHIVE_MAX_COUNT];
 /* 12个档案相互独立的运行状态，只由轮询线程修改。 */
 static Time_Ctrl_Context_t g_time_ctrl_contexts[INVERTER_ARCHIVE_MAX_COUNT];
 
+/* 串行化计划受理、状态推进和档案替换，避免旧结果在清理后重新保存恢复标志。 */
+static struct rt_mutex g_time_ctrl_runtime_mutex;
+
+/* 档案已完成参数校验，先封锁旧计划并清理Flash，成功后保持锁直到档案替换完成。 */
+rt_err_t Time_Ctrl_Archive_Change_Begin(uint8_t archive_index)
+{
+    Time_Ctrl_Mailbox_t *mailbox;
+    Time_Ctrl_Context_t *context;
+    rt_base_t level;
+    rt_err_t result;
+
+    if(archive_index >= INVERTER_ARCHIVE_MAX_COUNT) {
+        return -RT_EINVAL;
+    }
+    rt_mutex_take(&g_time_ctrl_runtime_mutex, RT_WAITING_FOREVER);
+    mailbox = &g_time_ctrl_mailboxes[archive_index];
+    context = &g_time_ctrl_contexts[archive_index];
+    Inv_Control_Cancel_Queued(context->action_request_id); /* 不触碰其他来源的即时控制命令。 */
+    level = rt_hw_interrupt_disable();
+    rt_memset(&mailbox->command, 0, sizeof(mailbox->command));
+    mailbox->command.archive_index = archive_index;
+    mailbox->enabled = RT_FALSE;
+    ++mailbox->generation;
+    rt_memset(context, 0, sizeof(*context)); /* 丢弃旧流水号，其迟到结果不再参与时段状态机。 */
+    context->command.archive_index = archive_index;
+    context->generation = mailbox->generation;
+    context->active_period = TIME_CTRL_NO_PERIOD;
+    context->action_period = TIME_CTRL_NO_PERIOD;
+    rt_hw_interrupt_enable(level);
+    result = Time_Ctrl_Init_Clear_Archive(archive_index);
+    if(result != RT_EOK) {
+        rt_kprintf("time control archive[%d] clear cfg failed, archive unchanged\n", archive_index + 1U);
+        rt_mutex_release(&g_time_ctrl_runtime_mutex); /* RAM先保持禁用，防止保存失败后旧计划继续运行。 */
+    }
+    return result;
+}
+
+/* 档案内存内容和协议指针已经更新，允许线程继续处理新档案。 */
+void Time_Ctrl_Archive_Change_End(void)
+{
+    rt_mutex_release(&g_time_ctrl_runtime_mutex);
+}
+
 /* 读取并检查一台逆变器指定有功控制方式的协议配置。 */
 static rt_bool_t time_ctrl_get_control_config(uint8_t archive_index,
                                               Time_Ctrl_Mode_t mode,
@@ -438,17 +481,22 @@ Time_Ctrl_Result_t Time_Ctrl_Check(const Time_Ctrl_Command_t *command)
 /* 按值受理一台逆变器的命令；邮箱只在短临界区内更新。 */
 Time_Ctrl_Result_t Time_Ctrl_Set(Time_Ctrl_Command_t command)
 {
-    Time_Ctrl_Result_t result = Time_Ctrl_Check(&command); /* 修改邮箱前先完成全部无副作用校验。 */
+    Time_Ctrl_Result_t result;
     Time_Ctrl_Mailbox_t *mailbox; /* 目标档案的命令邮箱。 */
     rt_base_t level;              /* 关中断前的CPU中断状态。 */
 
+    rt_mutex_take(&g_time_ctrl_runtime_mutex, RT_WAITING_FOREVER);
+    result = Time_Ctrl_Check(&command); /* 与档案变更互斥，始终按最新档案校验。 */
     if(result != TIME_CTRL_RESULT_OK) /* 校验失败时保持原计划不变。 */
     {
+        rt_mutex_release(&g_time_ctrl_runtime_mutex);
         return result;
     }
     if((command.periods[0].enabled != RT_TRUE) && (command.periods[1].enabled != RT_TRUE)) /* 两个时段都为全FF表示取消当前计划。 */
     {
-        return Time_Ctrl_Stop_Archive(command.archive_index);
+        result = Time_Ctrl_Stop_Archive(command.archive_index); /* RT-Thread互斥锁允许同线程递归获取。 */
+        rt_mutex_release(&g_time_ctrl_runtime_mutex);
+        return result;
     }
 
     mailbox = &g_time_ctrl_mailboxes[command.archive_index]; /* 定位目标档案对应的共享命令邮箱。 */
@@ -460,6 +508,7 @@ Time_Ctrl_Result_t Time_Ctrl_Set(Time_Ctrl_Command_t command)
     if(Time_Ctrl_Init_Save_Command(&command, RT_TRUE) != RT_EOK) {
         rt_kprintf("time control archive[%d] cfg save failed\n", command.archive_index + 1U);
     }
+    rt_mutex_release(&g_time_ctrl_runtime_mutex);
     return TIME_CTRL_RESULT_OK;
 }
 
@@ -496,6 +545,7 @@ Time_Ctrl_Result_t Time_Ctrl_Stop_Archive(uint8_t archive_index)
         return TIME_CTRL_RESULT_ARCHIVE_INVALID;
     }
 
+    rt_mutex_take(&g_time_ctrl_runtime_mutex, RT_WAITING_FOREVER);
     mailbox = &g_time_ctrl_mailboxes[archive_index]; /* 定位需要停止的单档案共享邮箱。 */
     level = rt_hw_interrupt_disable();
     mailbox->enabled = RT_FALSE;
@@ -506,6 +556,7 @@ Time_Ctrl_Result_t Time_Ctrl_Stop_Archive(uint8_t archive_index)
     if(Time_Ctrl_Init_Save_Command(&command, RT_FALSE) != RT_EOK) {
         rt_kprintf("time control archive[%d] stop cfg save failed\n", archive_index + 1U);
     }
+    rt_mutex_release(&g_time_ctrl_runtime_mutex);
     return TIME_CTRL_RESULT_OK;
 }
 
@@ -515,6 +566,7 @@ Time_Ctrl_Result_t Time_Ctrl_Stop(void)
     uint8_t archive_index; /* 当前正在停止的档案下标。 */
     rt_base_t level;       /* 关中断前的CPU中断状态。 */
 
+    rt_mutex_take(&g_time_ctrl_runtime_mutex, RT_WAITING_FOREVER);
     level = rt_hw_interrupt_disable();
     /* 在同一临界区中关闭全部12个邮箱并递增各自版本号。 */
     for(archive_index = 0U; archive_index < INVERTER_ARCHIVE_MAX_COUNT; ++archive_index) {
@@ -525,6 +577,7 @@ Time_Ctrl_Result_t Time_Ctrl_Stop(void)
     if(Time_Ctrl_Init_Disable_All() != RT_EOK) {
         rt_kprintf("time control all stop cfg save failed\n");
     }
+    rt_mutex_release(&g_time_ctrl_runtime_mutex);
     return TIME_CTRL_RESULT_OK;
 }
 
@@ -981,6 +1034,7 @@ void Time_Ctrl_Runtime_Init(void)
 {
     uint8_t archive_index;
 
+    rt_mutex_init(&g_time_ctrl_runtime_mutex, "tc_run", RT_IPC_FLAG_PRIO);
     Time_Ctrl_Init(); /* 先从外部Flash A/B区装载掉电保存的计划和安全恢复标志。 */
     rt_memset(g_time_ctrl_mailboxes, 0, sizeof(g_time_ctrl_mailboxes));
     rt_memset(g_time_ctrl_contexts, 0, sizeof(g_time_ctrl_contexts));   /* 清除全部档案的线程运行状态。 */
@@ -1050,11 +1104,13 @@ void time_ctrl_thread_entry(void *parameter)
 
         /* RTC读取成功时才推进控制，避免无效时间误触发历史时段。 */
         if(now != (time_t)-1) {
+            rt_mutex_take(&g_time_ctrl_runtime_mutex, RT_WAITING_FOREVER);
             time_ctrl_clear_expired(now); /* 包括已经停止但仍保留内容的旧计划。 */
             /* 逐档案推进独立状态，某一档案队列满不会阻塞其他档案。 */
             for(archive_index = 0U; archive_index < INVERTER_ARCHIVE_MAX_COUNT; ++archive_index) {
                 time_ctrl_process_archive(archive_index, now); /* 每个档案保持独立的时段控制状态。 */
             }
+            rt_mutex_release(&g_time_ctrl_runtime_mutex);
         }
 
         rt_thread_mdelay(TIME_CTRL_POLL_MS); /* 固定节拍轮询命令版本和时段边界。 */

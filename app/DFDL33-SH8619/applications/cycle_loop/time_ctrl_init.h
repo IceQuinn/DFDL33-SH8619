@@ -39,6 +39,9 @@ rt_err_t Time_Ctrl_Init_Get(uint8_t archive_index,
 rt_err_t Time_Ctrl_Init_Save_Command(const Time_Ctrl_Command_t *command,
                                      rt_bool_t enabled);
 
+/* 档案变更时彻底清除单台计划和恢复标志，不执行100%恢复。 */
+rt_err_t Time_Ctrl_Init_Clear_Archive(uint8_t archive_index);
+
 /* 批量设置期间只更新RAM，End时把全部变化合并成一次A/B区保存。 */
 rt_err_t Time_Ctrl_Init_Batch_Begin(void);
 rt_err_t Time_Ctrl_Init_Batch_End(void);
