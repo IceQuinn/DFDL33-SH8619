@@ -83,13 +83,15 @@ void set_default_para(enum CTU_RESET_CMD Reset_Cmd)
     }
 
 
-    ctu_cfg.longitude                   = 1143999;      //经度
-    ctu_cfg.latitude                    = 304456;       //纬度
+
     if(CTU_RESET_ALL == Reset_Cmd){
         ctu_cfg.g_vol_cal_coef          = 6422.92879;
+
+        ctu_cfg.longitude                   = 1143999;      //经度
+        ctu_cfg.latitude                    = 304456;       //纬度
+        ctu_cfg.altitude                    = 0U;           /* 默认高度为0.00m，645写入位置信息后随配置统一保存。 */
     }
 
-    ctu_cfg.altitude                    = 0U;           /* 默认高度为0.00m，645写入位置信息后随配置统一保存。 */
     ctu_cfg.poll_interval_seconds       = 0U;          /* 全局逆变器周期抄读时间默认10秒。 */
 }
 
