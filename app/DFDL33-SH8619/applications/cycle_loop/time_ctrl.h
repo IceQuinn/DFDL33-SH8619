@@ -90,6 +90,9 @@ void Time_Ctrl_Archive_Change_End(void);
 /* 停止全部12个档案的时段控制。 */
 Time_Ctrl_Result_t Time_Ctrl_Stop(void);
 
+/* 彻底清除全部计划、重试和恢复标志并保存，不下发100%恢复命令。 */
+rt_err_t Time_Ctrl_Clear_All(void);
+
 /* 将时段控制结果码转换成固定英文说明。 */
 const char *Time_Ctrl_Result_Text(Time_Ctrl_Result_t result);
 

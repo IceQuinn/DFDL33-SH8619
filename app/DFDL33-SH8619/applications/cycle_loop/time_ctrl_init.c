@@ -238,6 +238,36 @@ rt_err_t Time_Ctrl_Init_Clear_Archive(uint8_t archive_index)
     return result;
 }
 
+/* 全部清空只执行一次A/B保存，不能把延迟写入误认为已经完成恢复出厂。 */
+rt_err_t Time_Ctrl_Init_Clear_All(void)
+{
+    uint8_t archive_index;
+    Time_Ctrl_Store_Entry_t empty;
+    rt_err_t result = RT_EOK;
+
+    rt_mutex_take(&g_time_ctrl_store_mutex, RT_WAITING_FOREVER);
+    if(g_time_ctrl_store_batch_depth != 0U) {
+        rt_mutex_release(&g_time_ctrl_store_mutex);
+        return -RT_EBUSY;
+    }
+    rt_memset(&empty, 0, sizeof(empty));
+    for(archive_index = 0U; archive_index < INVERTER_ARCHIVE_MAX_COUNT; ++archive_index) {
+        empty.command.archive_index = archive_index;
+        if(rt_memcmp(&g_time_ctrl_store.entries[archive_index], &empty, sizeof(empty)) != 0) {
+            g_time_ctrl_store.entries[archive_index] = empty;
+            g_time_ctrl_store_dirty = RT_TRUE;
+        }
+    }
+    if(g_time_ctrl_store_dirty == RT_TRUE) {
+        result = time_ctrl_store_save_locked();
+        if(result == RT_EOK) {
+            g_time_ctrl_store_dirty = RT_FALSE;
+        }
+    }
+    rt_mutex_release(&g_time_ctrl_store_mutex);
+    return result;
+}
+
 /* 进入批量更新模式，允许嵌套调用并延迟Flash擦写。 */
 rt_err_t Time_Ctrl_Init_Batch_Begin(void)
 {

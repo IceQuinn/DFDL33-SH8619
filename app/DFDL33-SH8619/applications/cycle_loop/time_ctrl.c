@@ -130,6 +130,35 @@ void Time_Ctrl_Archive_Change_End(void)
     rt_mutex_release(&g_time_ctrl_runtime_mutex);
 }
 
+/* 恢复出厂时删除全部时段状态；旧流水号不再被状态机跟踪，也不生成恢复动作。 */
+rt_err_t Time_Ctrl_Clear_All(void)
+{
+    uint8_t archive_index;
+    rt_base_t level;
+    rt_err_t result;
+
+    rt_mutex_take(&g_time_ctrl_runtime_mutex, RT_WAITING_FOREVER);
+    for(archive_index = 0U; archive_index < INVERTER_ARCHIVE_MAX_COUNT; ++archive_index) {
+        Time_Ctrl_Mailbox_t *mailbox = &g_time_ctrl_mailboxes[archive_index];
+        Time_Ctrl_Context_t *context = &g_time_ctrl_contexts[archive_index];
+        Inv_Control_Cancel_Queued(context->action_request_id); /* 只撤销该档案当前的时段命令。 */
+        level = rt_hw_interrupt_disable();
+        rt_memset(&mailbox->command, 0, sizeof(mailbox->command));
+        mailbox->command.archive_index = archive_index;
+        mailbox->enabled = RT_FALSE;
+        ++mailbox->generation;
+        rt_memset(context, 0, sizeof(*context));
+        context->command.archive_index = archive_index;
+        context->generation = mailbox->generation;
+        context->active_period = TIME_CTRL_NO_PERIOD;
+        context->action_period = TIME_CTRL_NO_PERIOD;
+        rt_hw_interrupt_enable(level);
+    }
+    result = Time_Ctrl_Init_Clear_All(); /* 12台统一落盘，失败后RAM保持禁用，允许重新执行清理。 */
+    rt_mutex_release(&g_time_ctrl_runtime_mutex);
+    return result;
+}
+
 /* 读取并检查一台逆变器指定有功控制方式的协议配置。 */
 static rt_bool_t time_ctrl_get_control_config(uint8_t archive_index,
                                               Time_Ctrl_Mode_t mode,

@@ -22,6 +22,7 @@ typedef int rt_bool_t;
 typedef int rt_base_t;
 #define RT_EOK 0
 #define RT_EINVAL 1
+#define RT_EBUSY 2
 #define RT_TRUE 1
 #define RT_FALSE 0
 #define RT_WAITING_FOREVER -1
@@ -75,7 +76,8 @@ static Time_Ctrl_Mailbox_t g_time_ctrl_mailboxes[12];
 static Time_Ctrl_Context_t g_time_ctrl_contexts[12];
 static int g_time_ctrl_runtime_mutex;
 static uint32_t cancelled;
-static void Inv_Control_Cancel_Queued(uint32_t id) {cancelled=id;}
+static int cancel_calls;
+static void Inv_Control_Cancel_Queued(uint32_t id) {cancelled=id;cancel_calls++;}
 '''
 RUNTIME_CASES = r'''
 int main(void) {

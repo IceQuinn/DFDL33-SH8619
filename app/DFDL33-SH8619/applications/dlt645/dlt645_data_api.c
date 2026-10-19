@@ -1078,8 +1078,12 @@ rt_err_t dlt645_write_device_action(const Dlt645PointTypeDef *point, uint32_t id
             Clear_Events(EVT_CLASS_MAX); /* 按用户确认的统一接口清除所有事件记录。 */
             break;
         case 0x04000C00U:
+            if(Time_Ctrl_Clear_All() != RT_EOK) /* 旧计划必须先清除并保存成功，失败时不继续恢复或重启。 */
+            {
+                return -RT_ERROR;
+            }
             Inv_Archive_Default_Init(); // 清空逆变器档案
-            set_default_data(); /* 恢复默认配置并保存，但不自动重启，等待人工重启后整体生效。 */
+            set_default_data(); /* 恢复默认配置并保存，再请求看门狗重启。 */
             reboot();
             break;
         case 0x04000D00U:
