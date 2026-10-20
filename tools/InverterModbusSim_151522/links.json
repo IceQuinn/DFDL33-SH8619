@@ -12,7 +12,7 @@
         {
           "name": "设备1",
           "slave_addr": 1,
-          "template_name": "华为SUN2000",
+          "template_name": "银河耐吉光储一体机",
           "enabled": true
         }
       ]

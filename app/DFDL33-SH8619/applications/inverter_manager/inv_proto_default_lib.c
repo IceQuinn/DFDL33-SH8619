@@ -194,8 +194,8 @@ Inv_Mfr_Id_t g_inv_mfr[] = {    // 厂家信息
     {INV_MFR_TEBA_1,    {"TEBA",                    0x0100}},   // 特变电工
     {INV_MFR_AISIWEI_1, {"AISIWEI",                 0x0100}},   // 爱士惟
     {INV_MFR_HSNV_1,    {"HSNV",                    0x0100}},   // 禾望
-    {INV_MFR_YHNJ_1,    {"YHNJ",                    0x0100}},   // 银河耐吉光伏逆变器
-    {INV_MFR_YHNJ_2,    {"YHNJ",                    0x0100}},   // 银河耐吉光储一体机
+    {INV_MFR_YHNJ_1,    {"YHNJ1",                   0x0100}},   // 银河耐吉光伏逆变器
+    {INV_MFR_YHNJ_2,    {"YHNJ2",                   0x0100}},   // 银河耐吉光储一体机
 
 };
 
