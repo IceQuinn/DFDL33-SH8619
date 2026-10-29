@@ -103,7 +103,7 @@ void system_clock_config(int target_freq_Mhz)
     }
 
     /* config pll clock resource */
-    crm_pll_config(CRM_PLL_SOURCE_HICK, CRM_PLL_MULT_60, CRM_PLL_OUTPUT_RANGE_GT72MHZ);
+    crm_pll_config(CRM_PLL_SOURCE_HEXT, CRM_PLL_MULT_20, CRM_PLL_OUTPUT_RANGE_GT72MHZ);
 
     /* enable pll */
     crm_clock_source_enable(CRM_CLOCK_SOURCE_PLL, TRUE);

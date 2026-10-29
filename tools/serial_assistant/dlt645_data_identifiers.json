@@ -227,7 +227,7 @@
     },
     "serial_port_parameter": {
       "fields": [
-        {"name": "baud_rate", "description": "波特率（重启生效）", "type": "enum", "length": 4, "byte_order": "little", "values": {"2400": "2400", "4800": "4800", "9600": "9600", "19200": "19200", "38400": "38400"}, "default": "9600"},
+        {"name": "baud_rate", "description": "波特率（重启生效）", "type": "enum", "length": 4, "byte_order": "little", "values": {"2400": "2400", "4800": "4800", "9600": "9600", "19200": "19200", "38400": "38400", "115200": "115200"}, "default": "9600"},
         {"name": "check_format", "description": "校验格式（重启生效）", "type": "enum", "length": 1, "byte_order": "little", "values": {"1": "8,N,1", "2": "8,O,1", "3": "8,E,1"}, "default": "8,N,1"}
       ]
     },

@@ -42,7 +42,7 @@ void wk_adc1_init(void)
     adc_base_config(ADC1, &adc_base_struct);
 
     /* adc_ordinary_conversionmode-------------------------------------------- */
-    adc_ordinary_channel_set(ADC1, ADC_CHANNEL_0, 1, ADC_SAMPLETIME_239_5);
+    adc_ordinary_channel_set(ADC1, ADC_CHANNEL_0, 1, ADC_SAMPLETIME_55_5);
 
     /* When "ADCx_ORDINARY_TRIG_SOFTWARE" is selected, user can only use software trigger. \
       The software trigger function is adc_ordinary_software_trigger_enable(ADCx, TRUE); */

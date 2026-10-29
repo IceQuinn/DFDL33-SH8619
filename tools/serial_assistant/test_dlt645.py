@@ -217,8 +217,18 @@ class DLT645Tests(unittest.TestCase):
         self.assertEqual(payload, bytes.fromhex("80 25 00 00 03"))
         self.assertEqual(self.registry.decode("04000800", payload),
                          [("波特率（重启生效）", "9600", ""), ("校验格式（重启生效）", "8,E,1", "")])
-        with self.assertRaises(ValueError):
-            self.registry.encode("04000800", {"baud_rate": "115200", "check_format": "8,N,1"})
+        for suffix in range(7):
+            for check, code in (("8,N,1", 1), ("8,O,1", 2), ("8,E,1", 3)):
+                di = f"040008{suffix:02X}"
+                with self.subTest(di=di, check=check):
+                    values = {"baud_rate": "115200", "check_format": check}
+                    payload = self.registry.encode(di, values)
+                    self.assertEqual(payload, bytes.fromhex("00 C2 01 00") + bytes([code]))
+                    self.assertEqual(self.registry.decode_edit_values(di, payload), values)
+                    self.assertEqual(self.registry.decode(di, payload)[0][1], "115200")
+        for invalid in ("1200", "57600", "230400"):
+            with self.assertRaises(ValueError):
+                self.registry.encode("04000800", {"baud_rate": invalid, "check_format": "8,N,1"})
         with self.assertRaises(ValueError):
             self.registry.encode("04000800", {"baud_rate": "9600", "check_format": "8,N,2"})
 

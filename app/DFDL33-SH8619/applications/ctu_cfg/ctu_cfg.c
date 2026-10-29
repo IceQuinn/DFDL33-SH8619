@@ -85,7 +85,7 @@ void set_default_para(enum CTU_RESET_CMD Reset_Cmd)
 
 
     if(CTU_RESET_ALL == Reset_Cmd){
-        ctu_cfg.g_vol_cal_coef          = 6422.92879;
+        ctu_cfg.g_vol_cal_coef          = 6423.146237;
 
         ctu_cfg.longitude                   = 1143999;      //经度
         ctu_cfg.latitude                    = 304456;       //纬度
@@ -147,7 +147,7 @@ void Ctu_Cfg_Init(void)
 }
 
 
-uint32_t baud_table[][2] = {{0, 2400}, {1, 4800}, {2, 9600}, {3, 19200}, {4, 38400}};
+uint32_t baud_table[][2] = {{0, 2400}, {1, 4800}, {2, 9600}, {3, 19200}, {4, 38400}, {5, 115200}};
 
 int baud_check(uint32_t baud)
 {

@@ -906,7 +906,7 @@ rt_err_t dlt645_read_serial_parameter(const Dlt645PointTypeDef *point, uint32_t 
                                       uint8_t *data, uint16_t capacity, uint16_t *data_len)
 {
     uint16_t uart_no; /* DI0映射得到的内部UART配置数组下标。 */
-    uint32_t baud; /* 当前串口波特率，仅允许点表约定的五种枚举值。 */
+    uint32_t baud; /* 当前串口波特率，仅允许波特率白名单中的配置值。 */
     uint16_t check_format; /* 当前校验格式，1/2/3依次表示8N1、8O1和8E1。 */
 
     if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
