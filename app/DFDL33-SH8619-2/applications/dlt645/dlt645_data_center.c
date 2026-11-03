@@ -142,6 +142,18 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
     {0x04E701FEU, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_RAW, DLT645_SELECTOR_NONE, 1U, 1, 0, INVERTER_PROTOCOL_LIBRARY_COUNT, dlt645_read_protocol_count, RT_NULL, "protocol library count"}, /* 有效协议数量根据RAM有效标志实时统计，仅支持读取。 */
     // 协议库槽位01～64分别映射RAM中的100条临时协议。
     {0x04E70100U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_PROTOCOL, INV_PROTO_SIZE, 1, 0, 0, dlt645_read_protocol, dlt645_write_protocol, "protocol library slot"}, /* 有效槽位返回238字节结构，无效槽位返回全FF，写入不保存到Flash。 */
+
+
+    //事件类
+    //开关机总次数
+    {0x03E60001U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 3U, 1, 0, 0, dlt645_read_switch_event_count, RT_NULL, "switch event count"},
+    //开关机事件记录
+    {0x03E60101U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 36U, 1, 0, 0, dlt645_read_switch_event_record, RT_NULL, "switch event record"},
+
+    //电压越限总次数
+    {0x03E61100U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 3U, 1, 0, 0, dlt645_read_volt_over_limit_count, RT_NULL, "voltage over-limit count"},
+    //电压越限事件记录
+    {0x03E61101U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 24U, 1, 0, 0, dlt645_read_volt_over_limit_record, RT_NULL, "voltage over-limit record"},
 };
 
 uint8_t BCD2DEC(uint8_t ch)

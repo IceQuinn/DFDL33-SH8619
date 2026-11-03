@@ -45,8 +45,8 @@ typedef char Inv_MfrInfoSizeCheck_t[
 /* 逆变器接入端口。 */
 typedef enum Inv_Port
 {
-    INV_PORT_RJ45_1 = 1,  /* 端口1：RJ45-I。 */
-    INV_PORT_RJ45_2 = 2,  /* 端口2：RJ45-II。 */
+    INV_PORT_RJ45_1 = 1,  /* 档案端口1：RJ45-1，第一路UART4抄读，第二路UART1转发。 */
+    INV_PORT_RJ45_2 = 2,  /* 档案端口2：RJ45-2，第一路UART7抄读，第二路UART5转发。 */
     INV_PORT_RS485_2 = 3, /* 端口3：RS485-II。 */
     INV_PORT_WIRELESS = 4 /* 端口4：无线。 */
 } Inv_Port_t;

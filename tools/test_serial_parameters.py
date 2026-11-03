@@ -28,7 +28,7 @@ CASES = r'''
 int main(void) {
     Dlt645PointTypeDef p={5};uint16_t len;
     const uint32_t rates[]={2400,4800,9600,19200,38400,115200};
-    const int ports[]={UART3_NO,UART6_NO,UART7_NO,UART5_NO,UART4_NO,UART1_NO,UART8_NO};
+    const int ports[]={UART3_NO,UART6_NO,UART4_NO,UART1_NO,UART7_NO,UART5_NO,UART8_NO};
     for(int r=0;r<6;r++) for(int port=0;port<7;port++) for(int check=1;check<=3;check++) {
         uint32_t baud=rates[r];
         uint8_t data[]={baud,baud>>8,baud>>16,baud>>24,check},out[5];

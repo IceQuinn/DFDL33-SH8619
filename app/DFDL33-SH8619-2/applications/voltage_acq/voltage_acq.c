@@ -3,6 +3,8 @@
 #include "drv_dma.h"
 #include "user_logic_func.h"
 #include "ctu_cfg.h"
+#include "event_data_deal.h"
+#include "voltage_monitoring.h"
 
 #define  M_PI    3.14159265358979
 #define  VOLTAGE_CALIBRATION_COEFFICIENT   356.204534
@@ -62,6 +64,21 @@ float Averaging(float *buf, uint16_t len)
     }
     return sum / (float)len;
 }
+
+uint8_t over_voltage_stas;
+over_voltage over_voltage_struct = {
+        &g_voltage_rms,
+//        &m_relay_values.u_b,
+//        &m_relay_values.u_c,
+
+        &ctu_cfg.overvoltage_setting,
+        &ctu_cfg.overvoltage_t_delay,
+
+        &over_voltage_stas,
+        ETP_VOLT_OVER_LIMIT,
+};
+
+
 
 float rms_buf[50] = {0};
 int rms_buf_idx = 0;
@@ -124,6 +141,8 @@ void voltage_acq_thread_entry(void *param)
             rms_accumulator = 0.0f;
             rms_count = 0;
         }
+
+        over_voltage_check(&over_voltage_struct);
 
         /* 空闲 500ms */
         rt_thread_mdelay(VOL_IDLE_MS);

@@ -151,8 +151,8 @@ typedef struct Inv_Data_Port_Context {
 /* 三个物理串口与档案接入端口保持固定映射，运行上下文只需保存本表下标。 */
 static const Inv_Data_Port_Config_t g_inv_data_port_configs[INV_DATA_PORT_COUNT] = {
         {UART6_NO, INV_PORT_RS485_2, UART_NO_MAXS}, /* 独立RS485-II没有配对的第二路串口。 */
-        {UART4_NO, INV_PORT_RJ45_1, UART1_NO},      /* RJ45-2-II收到的报文通过RJ45-2-I转发。 */
-        {UART7_NO, INV_PORT_RJ45_2, UART5_NO},      /* RJ45-1-II收到的报文通过RJ45-1-I转发。 */
+        {UART4_NO, INV_PORT_RJ45_1, UART1_NO},      /* 档案端口1：RJ45-1-2（UART1）收到的报文通过RJ45-1-1（UART4）转发。 */
+        {UART7_NO, INV_PORT_RJ45_2, UART5_NO},      /* 档案端口2：RJ45-2-2（UART5）收到的报文通过RJ45-2-1（UART7）转发。 */
 };
 
 /* 实时数据数组下标与档案槽位下标固定对应，数据不写入Flash。 */

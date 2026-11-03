@@ -12,6 +12,7 @@
 #include "user_iwdg.h"
 #include "user_rtc.h"
 #include "voltage_acq.h"
+#include "event_data_deal.h"
 
 #define DLT645_VARIABLE_ALL_SELECTOR  0xFFU /* DI0等于FF时按档案顺序返回全部12台逆变器。 */
 #define DLT645_VOLTAGE_LEN            6U    /* 三相电压各占2字节，单台合计6字节。 */
@@ -1714,3 +1715,289 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
 
     return (all_success == RT_TRUE) ? RT_EOK : -RT_ERROR; /* 仅全部12台或目标单台成功时正常应答。 */
 }
+
+
+
+static rt_err_t dlt645_encode_bcd_time(const EventTime *time, uint8_t *buf, uint8_t len)
+{
+    if ((time == RT_NULL) || (buf == RT_NULL) || (len < 6U)) {
+        return -RT_EINVAL;
+    }
+    buf[0] = (((time->year / 10U) % 10U) << 4) | (time->year % 10U);
+    buf[1] = (((time->month / 10U) % 10U) << 4) | (time->month % 10U);
+    buf[2] = (((time->day / 10U) % 10U) << 4) | (time->day % 10U);
+    buf[3] = (((time->hour / 10U) % 10U) << 4) | (time->hour % 10U);
+    buf[4] = (((time->minute / 10U) % 10U) << 4) | (time->minute % 10U);
+    buf[5] = (((time->second / 10U) % 10U) << 4) | (time->second % 10U);
+    return RT_EOK;
+}
+
+extern struct Event_Management_Str Event_Management[EVT_CLASS_MAX_];
+
+/**
+ * @brief 读取开关机控制事件总次数（数据标识 03E60001~03E6000C, 03E600FF）
+ */
+rt_err_t dlt645_read_switch_event_count(const Dlt645PointTypeDef *point, uint32_t id,
+                                        uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint8_t inv_idx;
+    uint16_t *event_data_cnt;
+    uint32_t count;
+    uint8_t i;
+
+    if ((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) || (capacity < 3U)) {
+        return -RT_EINVAL;
+    }
+
+    /* 获取计数数组指针（buf[24] 开始） */
+    event_data_cnt = (uint16_t *)&Event_Management[ETP_PV_INV_ONOFF_CTRL].buf[
+                        sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str)];
+
+    inv_idx = id & 0xFF; /* DI0 */
+
+    if (inv_idx == 0xFF) {
+        /* 全部逆变器：返回12台×3字节BCD */
+        if (capacity < 36U) {
+            return -RT_EINVAL;
+        }
+        for (i = 0; i < EVENT_MAX_INVERTER_NUM; i++) {
+            count = event_data_cnt[i];
+            if (count > 999999U) count = 999999U;
+            dlt645_encode_bcd(count, &data[i * 3], 3U, RT_FALSE);
+        }
+        *data_len = 36U;
+    } else if ((inv_idx >= 0x01) && (inv_idx <= 0x0C)) {
+        /* 单台逆变器 */
+        count = event_data_cnt[inv_idx - 1];
+        if (count > 999999U) count = 999999U;
+        dlt645_encode_bcd(count, data, 3U, RT_FALSE);
+        *data_len = 3U;
+    } else {
+        return -RT_EINVAL;
+    }
+
+    return RT_EOK;
+}
+
+/**
+ * @brief 读取开关机控制事件记录（数据标识 03E60101~03E60132）
+ */
+rt_err_t dlt645_read_switch_event_record(const Dlt645PointTypeDef *point, uint32_t id,
+                                         uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint8_t req_seq;      /* 请求序号：1=上1次(最近), 2=上2次... */
+    uint16_t actual_idx;  /* 环形缓冲区中的实际索引 */
+    struct Event_Digest_Str *p_digest;
+    SwitchEvent_t *p_record;
+    uint8_t *p_base;
+    uint8_t *p;
+    uint8_t i;
+
+    /* 参数检查 */
+    if ((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) || (capacity < 36U)) {
+        return -RT_EINVAL;
+    }
+
+    req_seq = (uint8_t)(id & 0xFF);
+    if ((req_seq < 0x01U) || (req_seq > 0x32U)) {
+        return -RT_EINVAL;
+    }
+
+    /* 解析环形队列 */
+    p_digest = (struct Event_Digest_Str *)Event_Management[ETP_PV_INV_ONOFF_CTRL].buf;
+
+    if (p_digest->eventCnt == 0) {
+        /* 无事件记录，全填 0xFF */
+        rt_memset(data, 0xFF, 36U);
+        *data_len = 36U;
+        return RT_EOK;
+    }
+
+    if (req_seq > p_digest->eventCnt) {
+        /* 请求序号超出已有记录数，填 0xFF */
+        rt_memset(data, 0xFF, 36U);
+        *data_len = 36U;
+        return RT_EOK;
+    }
+
+    uint16_t max_cnt = Event_Management[ETP_PV_INV_ONOFF_CTRL].Event_Max_Cnt;
+    /* 计算环形缓冲区索引 */
+    /* req_seq=1 表示最近一条，即 tailIdx-1 */
+    if (p_digest->tailIdx == 0) {
+        actual_idx = max_cnt - req_seq; /* Event_Max_Cnt = 50 */
+    } else {
+        actual_idx = p_digest->tailIdx - req_seq;
+    }
+    /* 确保不越界 */
+    actual_idx %= EVENT_MAX_DATE_NUM_50;
+
+    /* 定位记录数据 */
+    /* 记录存储起始于 buf[48] (24字节digest/desc + 24字节count) */
+    p_base = &Event_Management[ETP_PV_INV_ONOFF_CTRL].buf[
+                sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str) + 24];
+    p_record = (SwitchEvent_t *)(p_base + actual_idx * sizeof(SwitchEvent_t));
+
+    /* 编码数据（36字节） */
+    p = data;
+    rt_memset(p, 0x00, 36U);
+
+    /* 发生时刻 (6字节 BCD) */
+    if (dlt645_encode_bcd_time(&p_record->start_time, p, 6U) != RT_EOK) {
+        rt_memset(p, 0xFF, 6U);
+    }
+    p += 6;
+
+    /* 结束时刻 (6字节 BCD) */
+    if (dlt645_encode_bcd_time(&p_record->end_time, p, 6U) != RT_EOK) {
+        rt_memset(p, 0xFF, 6U);
+    }
+    p += 6;
+
+    /* 事件类型 (12字节) */
+    for (i = 0; i < EVENT_MAX_INVERTER_NUM; i++) {
+        p[i] = p_record->event_type[i];
+    }
+    p += 12;
+
+    /* 调控结果 (12字节) */
+    for (i = 0; i < EVENT_MAX_INVERTER_NUM; i++) {
+        p[i] = p_record->control_result[i];
+    }
+
+    *data_len = 36U;
+    return RT_EOK;
+}
+
+
+
+
+/**
+ * @brief 读取电压越限事件总次数（数据标识 03E61100）
+ * @note  计数为 uint16_t，转成 3 字节 BCD（XXXXXX 格式，高位补0）
+ */
+rt_err_t dlt645_read_volt_over_limit_count(const Dlt645PointTypeDef *point, uint32_t id,
+                                           uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint16_t *p_cnt;
+    uint32_t count;
+
+    if ((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
+        (capacity < 3U)) {
+        return -RT_EINVAL;
+    }
+
+    /* 获取计数指针：buf[24] 处，uint16_t */
+    p_cnt = (uint16_t *)&Event_Management[ETP_VOLT_OVER_LIMIT].buf[
+                sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str)];
+
+    count = *p_cnt;
+    if (count > 999999U) {
+        count = 999999U;   /* BCD 最大 999999 */
+    }
+
+    /* 编码为 3 字节压缩 BCD */
+    if (dlt645_encode_bcd(count, data, 3U, RT_FALSE) != RT_EOK) {
+        return -RT_EINVAL;
+    }
+
+    *data_len = 3U;
+    return RT_EOK;
+}
+
+/**
+ * @brief 读取电压越限事件记录（数据标识 03E61101~03E61132）
+ * @note  每条记录固定 24 字节：时间(6+6) + 越限电压A/B/C(2 * 3) + 恢复电压A/B/C(2 * 3)
+ */
+rt_err_t dlt645_read_volt_over_limit_record(const Dlt645PointTypeDef *point, uint32_t id,
+                                            uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint8_t req_seq;      /* 请求序号：1=上1次(最近), 2=上2次... */
+    uint16_t actual_idx;  /* 环形缓冲区中的实际索引 */
+    struct Event_Digest_Str *p_digest;
+    VoltageOverLimit_t *p_record;
+    uint8_t *p_base;
+    uint8_t *p;
+
+    if ((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
+        (capacity < 24U)) {
+        return -RT_EINVAL;
+    }
+
+    req_seq = (uint8_t)(id & 0xFF);
+    if ((req_seq < 0x01U) || (req_seq > 0x32U)) {
+        return -RT_EINVAL;
+    }
+
+    /* 解析环形队列摘要 */
+    p_digest = (struct Event_Digest_Str *)Event_Management[ETP_VOLT_OVER_LIMIT].buf;
+
+    if (p_digest->eventCnt == 0) {
+        rt_memset(data, 0xFF, 24U);
+        *data_len = 24U;
+        return RT_EOK;
+    }
+
+    if (req_seq > p_digest->eventCnt) {
+        rt_memset(data, 0xFF, 24U);
+        *data_len = 24U;
+        return RT_EOK;
+    }
+
+    uint16_t max_cnt = Event_Management[ETP_VOLT_OVER_LIMIT].Event_Max_Cnt;
+
+    /* 计算环形缓冲区索引 */
+    if (p_digest->tailIdx == 0) {
+        actual_idx = max_cnt - req_seq;
+    } else {
+        actual_idx = p_digest->tailIdx - req_seq;
+    }
+    actual_idx %= EVENT_MAX_DATE_NUM_50;
+
+    /* 定位记录数据 */
+    p_base = &Event_Management[ETP_VOLT_OVER_LIMIT].buf[
+                sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str) + 2];
+    p_record = (VoltageOverLimit_t *)(p_base + actual_idx * sizeof(VoltageOverLimit_t));
+
+    /* 编码24字节数据 */
+    p = data;
+    rt_memset(p, 0x00, 24U);
+
+    /* 发生时刻 (6字节 BCD) */
+    if (dlt645_encode_bcd_time(&p_record->start_time, p, 6U) != RT_EOK) {
+        rt_memset(p, 0xFF, 6U);
+    }
+    p += 6U;
+
+    /* 结束时刻 (6字节 BCD) */
+    if (dlt645_encode_bcd_time(&p_record->end_time, p, 6U) != RT_EOK) {
+        rt_memset(p, 0xFF, 6U);
+    }
+    p += 6U;
+
+    /* 越限电压 A/B/C (A相正常，B/C相填0xFF) */
+    /* A相：2字节 */
+    p[0] = (uint8_t)(p_record->over_limit_vol_a & 0xFF);
+    p[1] = (uint8_t)((p_record->over_limit_vol_a >> 8) & 0xFF);
+    /* B相：未配置，2字节全FF */
+    p[2] = 0xFF;
+    p[3] = 0xFF;
+    /* C相：未配置，2字节全FF */
+    p[4] = 0xFF;
+    p[5] = 0xFF;
+    p += 6U;
+
+    /* 恢复电压 A/B/C (A相正常，B/C相填0xFF) */
+    /* A相：2字节 */
+    p[0] = (uint8_t)(p_record->recover_vol_a & 0xFF);
+    p[1] = (uint8_t)((p_record->recover_vol_a >> 8) & 0xFF);
+    /* B相：未配置，2字节全FF */
+    p[2] = 0xFF;
+    p[3] = 0xFF;
+    /* C相：未配置，2字节全FF */
+    p[4] = 0xFF;
+    p[5] = 0xFF;
+
+    *data_len = 24U;
+    return RT_EOK;
+}
+

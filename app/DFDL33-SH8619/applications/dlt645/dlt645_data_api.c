@@ -891,10 +891,10 @@ static rt_err_t dlt645_serial_port_to_uart(uint8_t port_number, uint16_t *uart_n
     {
         case 0x00U: *uart_no = UART3_NO; break; /* 04000800对应RS485-I。 */
         case 0x01U: *uart_no = UART6_NO; break; /* 04000801对应RS485-II。 */
-        case 0x02U: *uart_no = UART7_NO; break; /* 04000802对应RJ45-1-I。 */
-        case 0x03U: *uart_no = UART5_NO; break; /* 04000803对应RJ45-1-II。 */
-        case 0x04U: *uart_no = UART4_NO; break; /* 04000804对应RJ45-2-I。 */
-        case 0x05U: *uart_no = UART1_NO; break; /* 04000805对应RJ45-2-II。 */
+        case 0x02U: *uart_no = UART4_NO; break; /* 04000802对应RJ45-1-I，与档案逻辑端口1一致。 */
+        case 0x03U: *uart_no = UART1_NO; break; /* 04000803对应RJ45-1-II，与端口1转发配对一致。 */
+        case 0x04U: *uart_no = UART7_NO; break; /* 04000804对应RJ45-2-I，与档案逻辑端口2一致。 */
+        case 0x05U: *uart_no = UART5_NO; break; /* 04000805对应RJ45-2-II，与端口2转发配对一致。 */
         case 0x06U: *uart_no = UART8_NO; break; /* 04000806对应载波口。 */
         default: return -RT_EINVAL; /* 其他编号包括无线口均不允许通过本组数据标识访问。 */
     }

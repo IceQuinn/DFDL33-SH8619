@@ -34,7 +34,7 @@ GSE8625_CfgTypeDef_Vlast ctu_cfg;
 
 void set_default_para(enum CTU_RESET_CMD Reset_Cmd)
 {
-    // RJ45-2-2
+    // RJ45-1-2（UART1，档案端口1的第二路转发串口）
     ctu_cfg.uart_protocol[UART1_NO]     = MODBUS_MASTER;//通信协议 1=modbus协议,2=dlt645协议
     ctu_cfg.uart_baud[UART1_NO]         = 9600;         //波特率
     ctu_cfg.uart_check[UART1_NO]        = 1;            //校验位 1=8,N,1; 2=8,O,1 3=8,E,1
@@ -43,12 +43,12 @@ void set_default_para(enum CTU_RESET_CMD Reset_Cmd)
     ctu_cfg.uart_baud[UART3_NO]         = 9600;         //波特率
     ctu_cfg.uart_check[UART3_NO]        = 3;            //校验位 1=8,N,1; 2=8,O,1 3=8,E,1
 
-    // RJ45-2-1
+    // RJ45-1-1（UART4，档案端口1的第一路抄读串口）
     ctu_cfg.uart_protocol[UART4_NO]     = MODBUS_MASTER; //通信协议 1=modbus协议,2=dlt645协议
     ctu_cfg.uart_baud[UART4_NO]         = 9600;         //波特率
     ctu_cfg.uart_check[UART4_NO]        = 1;            //校验位 1=8,N,1; 2=8,O,1 3=8,E,1
 
-    // RJ45-1-2
+    // RJ45-2-2（UART5，档案端口2的第二路转发串口）
     ctu_cfg.uart_protocol[UART5_NO]     = MODBUS_MASTER; //通信协议 1=modbus协议,2=dlt645协议
     ctu_cfg.uart_baud[UART5_NO]         = 9600;         //波特率
     ctu_cfg.uart_check[UART5_NO]        = 1;            //校验位 1=8,N,1; 2=8,O,1 3=8,E,1
@@ -58,7 +58,7 @@ void set_default_para(enum CTU_RESET_CMD Reset_Cmd)
     ctu_cfg.uart_baud[UART6_NO]         = 9600;         //波特率
     ctu_cfg.uart_check[UART6_NO]        = 1;            //校验位 1=8,N,1; 2=8,O,1 3=8,E,1
 
-    // RJ45-1-1
+    // RJ45-2-1（UART7，档案端口2的第一路抄读串口）
     ctu_cfg.uart_protocol[UART7_NO]     = MODBUS_MASTER; //通信协议 1=modbus协议,2=dlt645协议
     ctu_cfg.uart_baud[UART7_NO]         = 9600;         //波特率
     ctu_cfg.uart_check[UART7_NO]        = 1;            //校验位 1=8,N,1; 2=8,O,1 3=8,E,1

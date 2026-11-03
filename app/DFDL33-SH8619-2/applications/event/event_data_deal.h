@@ -94,11 +94,11 @@ typedef struct {
     uint8_t   inv_id;
 }CommErrEvent_t;
 
-/* 6、校时事件详细记录 */
-typedef struct {
-    EventTime before_calibration;
-    EventTime after_calibration;
-}TimeCalibrationEvent_t;
+///* 6、校时事件详细记录 */
+//typedef struct {
+//    EventTime before_calibration;
+//    EventTime after_calibration;
+//}TimeCalibrationEvent_t;
 
 
 /* ---- 各类事件数据库 ---- */
@@ -142,29 +142,29 @@ typedef struct {
     CommErrEvent_t comm_err_event_data[EVENT_MAX_DATE_NUM_50];
 } CommErrEvent;
 
-//协议转换单元事件清零事件
-typedef struct {
-    struct Event_Digest_Str event_digest;
-    struct Event_Desc_Str event_desc;
-    uint16_t event_reset_event_cnt;
-    EventTime event_reset_event_data[EVENT_MAX_DATE_NUM_100];
-}EventResetEvent;
-
-//协议转换单元程序升级事件
-typedef struct {
-    struct Event_Digest_Str event_digest;
-    struct Event_Desc_Str event_desc;
-    uint16_t upgrading_event_cnt;
-    uint16_t upgrading_event_data[EVENT_MAX_DATE_NUM_100];
-}UpgradingEvent;
-
-//协议转换单元校时事件
-typedef struct {
-    struct Event_Digest_Str event_digest;
-    struct Event_Desc_Str event_desc;
-    uint16_t calibration_time_cnt;
-    TimeCalibrationEvent_t calibration_time_data[EVENT_MAX_DATE_NUM_100];
-}TimeCalibrationEvent;
+////协议转换单元事件清零事件
+//typedef struct {
+//    struct Event_Digest_Str event_digest;
+//    struct Event_Desc_Str event_desc;
+//    uint16_t event_reset_event_cnt;
+//    EventTime event_reset_event_data[EVENT_MAX_DATE_NUM_100];
+//}EventResetEvent;
+//
+////协议转换单元程序升级事件
+//typedef struct {
+//    struct Event_Digest_Str event_digest;
+//    struct Event_Desc_Str event_desc;
+//    uint16_t upgrading_event_cnt;
+//    uint16_t upgrading_event_data[EVENT_MAX_DATE_NUM_100];
+//}UpgradingEvent;
+//
+////协议转换单元校时事件
+//typedef struct {
+//    struct Event_Digest_Str event_digest;
+//    struct Event_Desc_Str event_desc;
+//    uint16_t calibration_time_cnt;
+//    TimeCalibrationEvent_t calibration_time_data[EVENT_MAX_DATE_NUM_100];
+//}TimeCalibrationEvent;
 
 
 
@@ -177,11 +177,22 @@ enum Event_Class
     ETP_PV_INV_P_PERIOD_CTRL,           // 光伏逆变器有功功率时段控制事件
     ETP_VOLT_OVER_LIMIT,                // 电压越限事件
     ETP_PV_INV_COMM_ERR,                // 光伏逆变器通讯异常事件
-    ETP_PROTO_UNIT_EVENT_CLEAR,         // 协议转换单元事件清零事件
-    ETP_PROTO_UNIT_OTA_UPGRADE,         // 协议转换单元软件在线升级事件
-    ETP_PROTO_UNIT_TIME_CALIB,          // 协议转换单元校时事件
+//    ETP_PROTO_UNIT_EVENT_CLEAR,         // 协议转换单元事件清零事件
+//    ETP_PROTO_UNIT_OTA_UPGRADE,         // 协议转换单元软件在线升级事件
+//    ETP_PROTO_UNIT_TIME_CALIB,          // 协议转换单元校时事件
 
     EVT_CLASS_MAX_,
+};
+
+struct Event_Management_Str
+{
+    uint32_t Event_Flash_Addr_A;    // 事件A地址
+    uint32_t Event_Flash_Addr_B;    // 事件B地址
+    uint32_t Event_Max_Cnt;         // 事件最大数量
+
+    uint8_t  buf[4096]; // 事件数据缓存区
+//    struct   Events_Str Events;     // 事件结构
+    char     *Event_Name;           // 事件描述
 };
 
 void Get_EventTime(EventTime *evt_time);

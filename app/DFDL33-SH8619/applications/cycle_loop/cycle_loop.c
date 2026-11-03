@@ -70,9 +70,9 @@ static Cycle_Loop_Uart_Context_t g_scan_uarts[CYCLE_LOOP_SCAN_PORT_COUNT]; /* �
 
 /* 自动搜索使用固定映射表，扫描取串口号，识别成功后再按串口号查询档案端口。 */
 static const Cycle_Loop_Port_Map_t g_scan_port_map[CYCLE_LOOP_SCAN_PORT_COUNT] = {
-    {UART6_NO, INV_PORT_RS485_2},       /* UART1连接RS485-II。 */
-    {UART4_NO, INV_PORT_RJ45_1},        /* UART3连接RJ45-I。 */
-    {UART7_NO, INV_PORT_RJ45_2},        /* UART5连接RJ45-II。 */
+    {UART6_NO, INV_PORT_RS485_2},       /* 硬件UART6连接RS485-II，对应档案端口3。 */
+    {UART4_NO, INV_PORT_RJ45_1},        /* 硬件UART4连接RJ45-1-1，对应档案端口1。 */
+    {UART7_NO, INV_PORT_RJ45_2},        /* 硬件UART7连接RJ45-2-1，对应档案端口2。 */
 };
 
 /* 根据接收帧携带的端口号查找对应上下文，非扫描端口返回RT_NULL。 */

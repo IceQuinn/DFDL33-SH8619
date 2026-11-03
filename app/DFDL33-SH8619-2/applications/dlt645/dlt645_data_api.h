@@ -209,4 +209,18 @@ rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point,
                                    uint16_t response_capacity,
                                    uint16_t *response_len);
 
+
+/*开关机次数*/
+rt_err_t dlt645_read_switch_event_count(const Dlt645PointTypeDef *point, uint32_t id,
+                                        uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
+rt_err_t dlt645_read_switch_event_record(const Dlt645PointTypeDef *point, uint32_t id,
+                                         uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
+rt_err_t dlt645_read_volt_over_limit_count(const Dlt645PointTypeDef *point, uint32_t id,
+                                           uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
+rt_err_t dlt645_read_volt_over_limit_record(const Dlt645PointTypeDef *point, uint32_t id,
+                                            uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
 #endif /* __DLT645_DATA_API_H__ */
