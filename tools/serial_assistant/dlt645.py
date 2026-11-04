@@ -303,7 +303,10 @@ def parse_frame(frame: bytes, registry: Optional["DataIdentifierRegistry"] = Non
                 else:
                     details.append("后续数据帧缺少帧序号")
                     structure_ok = False
-        if registry and data_identifier and payload and not follow_up and function != 0x12:
+        definition = registry.get(data_identifier) if registry and data_identifier else None
+        strict_response = bool(definition and definition.read_response.get("strict_length")
+                               and direction == "从机→主机" and function == 0x11)
+        if registry and data_identifier and (payload or strict_response) and not follow_up and function != 0x12:
             try:
                 if function == 0x14 and direction == "主机→从机":
                     section = "write_request"
@@ -445,7 +448,7 @@ def _apply_sign_bit(raw: bytearray, field: Mapping[str, Any]) -> bool:
 def decode_field(raw_value: bytes, definition: Mapping[str, Any]) -> Any:
     # The 645 point table uses an all-FF field to mean unavailable/invalid data.
     if raw_value and all(value == 0xFF for value in raw_value):
-        return "--"
+        return str(definition.get("ff_text", "--"))
     kind = str(definition.get("type", "hex")).lower()
     order = _byte_order(definition)
     logical = raw_value[::-1] if order == "little" else raw_value
@@ -466,6 +469,13 @@ def decode_field(raw_value: bytes, definition: Mapping[str, Any]) -> Any:
         if len(pattern) != len(digits):
             raise ValueError(f"字段{definition.get('description', definition.get('name'))}的时间格式长度不匹配")
         parts = {token: digits[index:index + 2] for token, index in (("YY", pattern.find("YY")), ("MM", pattern.find("MM")), ("DD", pattern.find("DD")), ("hh", pattern.find("hh")), ("mm", pattern.find("mm")), ("ss", pattern.find("ss"))) if index >= 0}
+        if definition.get("validate_datetime"):
+            try:
+                datetime(2000 + int(parts.get("YY", "00")), int(parts.get("MM", "01")),
+                         int(parts.get("DD", "01")), int(parts.get("hh", "00")),
+                         int(parts.get("mm", "00")), int(parts.get("ss", "00")))
+            except ValueError as exc:
+                raise ValueError(f"字段{definition.get('description', definition.get('name'))}的日期时间无效：{digits}") from exc
         date = "-".join(parts[token] for token in ("YY", "MM", "DD") if token in parts)
         clock = ":".join(parts[token] for token in ("hh", "mm", "ss") if token in parts)
         return f"{date} {clock}".strip()
@@ -879,14 +889,32 @@ class DataIdentifierRegistry:
         if not definition:
             return [("raw", payload.hex().upper(), "")]
         schema = getattr(definition, section)
+        fields = schema.get("fields", [])
+        expected_length = sum(int(field["length"]) for field in fields)
+        if schema.get("strict_length") and len(payload) != expected_length:
+            raise ValueError(f"数据标识{definition.di}的数据长度为{len(payload)}字节，应为{expected_length}字节")
+        raw_fields: dict[str, bytes] = {}
+        offset = 0
+        for field_def in fields:
+            length = int(field_def["length"])
+            raw_fields[str(field_def["name"])] = payload[offset:offset + length]
+            offset += length
         result: list[tuple[str, str, str]] = []
         offset = 0
-        for field_def in schema.get("fields", []):
+        for field_def in fields:
             length = int(field_def["length"])
             if offset + length > len(payload):
                 raise ValueError(f"数据标识{definition.di}的数据不足，字段{field_def.get('description', field_def['name'])}需要{length}字节")
-            value = decode_field(payload[offset:offset + length], field_def)
-            result.append((str(field_def.get("description", field_def["name"])), str(value), str(field_def.get("unit", ""))))
+            raw_value = payload[offset:offset + length]
+            value = decode_field(raw_value, field_def)
+            unit = str(field_def.get("unit", ""))
+            if unit_from := field_def.get("unit_from"):
+                selector = raw_fields.get(str(unit_from["field"]), b"")
+                selector_value = str(int.from_bytes(selector, "little")) if selector else ""
+                unit = str(unit_from.get("values", {}).get(selector_value, unit_from.get("unknown", "未知单位")))
+            if field_def.get("ff_text") and raw_value and all(byte == 255 for byte in raw_value):
+                unit = ""  # 无此信息不是数值，不附加kW、%或次数单位。
+            result.append((str(field_def.get("description", field_def["name"])), str(value), unit))
             offset += length
         if offset < len(payload):
             result.append(("未定义尾部数据", payload[offset:].hex().upper(), ""))

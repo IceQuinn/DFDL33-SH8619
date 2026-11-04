@@ -25,7 +25,7 @@
       "inverter_reactive_power_percentage_adjustment", "inverter_daily_energy",
       "active_power_schedule", "active_power_percent_schedule", "inverter_archive_count", "inverter_archive"
     ],
-    "event": [],
+    "event": ["event_switch_count", "event_switch_record", "event_active_count", "event_active_record", "event_reactive_count", "event_reactive_record", "event_factor_count", "event_factor_record", "event_schedule_count", "event_schedule_record", "event_voltage_count", "event_voltage_record", "event_communication_count", "event_communication_record"],
     "other": ["device_maintenance", "serial_port_parameter", "protocol_library_count", "protocol_library_slots"]
   },
   "group_data_identifier_order": {
@@ -50,6 +50,191 @@
     "preamble_count": 4
   },
   "schemas": {
+    "event_count": {
+      "strict_length": true,
+      "fields": [
+        {"name": "count", "description": "总次数", "type": "bcd", "length": 3, "byte_order": "little", "ff_text": "无此信息", "unit": "次"}
+      ]
+    },
+    "event_switch_record": {
+      "strict_length": true,
+      "fields": [
+        {"name": "start_time", "description": "事件开始时间", "type": "bcd_datetime", "length": 6, "byte_order": "little", "ff_text": "无此信息", "format": "YYMMDDhhmmss", "validate_datetime": true},
+        {"name": "end_time", "description": "事件结束时间", "type": "bcd_datetime", "length": 6, "byte_order": "little", "ff_text": "无此信息", "format": "YYMMDDhhmmss", "validate_datetime": true},
+        {"name": "inverter1_type", "description": "逆变器1启停类型", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "开", "1": "关"}},
+        {"name": "inverter2_type", "description": "逆变器2启停类型", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "开", "1": "关"}},
+        {"name": "inverter3_type", "description": "逆变器3启停类型", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "开", "1": "关"}},
+        {"name": "inverter4_type", "description": "逆变器4启停类型", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "开", "1": "关"}},
+        {"name": "inverter5_type", "description": "逆变器5启停类型", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "开", "1": "关"}},
+        {"name": "inverter6_type", "description": "逆变器6启停类型", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "开", "1": "关"}},
+        {"name": "inverter7_type", "description": "逆变器7启停类型", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "开", "1": "关"}},
+        {"name": "inverter8_type", "description": "逆变器8启停类型", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "开", "1": "关"}},
+        {"name": "inverter9_type", "description": "逆变器9启停类型", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "开", "1": "关"}},
+        {"name": "inverter10_type", "description": "逆变器10启停类型", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "开", "1": "关"}},
+        {"name": "inverter11_type", "description": "逆变器11启停类型", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "开", "1": "关"}},
+        {"name": "inverter12_type", "description": "逆变器12启停类型", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "开", "1": "关"}},
+        {"name": "inverter1_result", "description": "逆变器1调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter2_result", "description": "逆变器2调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter3_result", "description": "逆变器3调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter4_result", "description": "逆变器4调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter5_result", "description": "逆变器5调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter6_result", "description": "逆变器6调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter7_result", "description": "逆变器7调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter8_result", "description": "逆变器8调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter9_result", "description": "逆变器9调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter10_result", "description": "逆变器10调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter11_result", "description": "逆变器11调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter12_result", "description": "逆变器12调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}}
+      ]
+    },
+    "event_active_record": {
+      "strict_length": true,
+      "fields": [
+        {"name": "start_time", "description": "事件开始时间", "type": "bcd_datetime", "length": 6, "byte_order": "little", "ff_text": "无此信息", "format": "YYMMDDhhmmss", "validate_datetime": true},
+        {"name": "end_time", "description": "事件结束时间", "type": "bcd_datetime", "length": 6, "byte_order": "little", "ff_text": "无此信息", "format": "YYMMDDhhmmss", "validate_datetime": true},
+        {"name": "event_type", "description": "事件类型", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "数值", "1": "百分比"}},
+        {"name": "inverter1_result", "description": "逆变器1调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter2_result", "description": "逆变器2调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter3_result", "description": "逆变器3调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter4_result", "description": "逆变器4调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter5_result", "description": "逆变器5调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter6_result", "description": "逆变器6调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter7_result", "description": "逆变器7调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter8_result", "description": "逆变器8调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter9_result", "description": "逆变器9调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter10_result", "description": "逆变器10调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter11_result", "description": "逆变器11调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter12_result", "description": "逆变器12调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter1_value", "description": "逆变器1调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter2_value", "description": "逆变器2调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter3_value", "description": "逆变器3调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter4_value", "description": "逆变器4调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter5_value", "description": "逆变器5调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter6_value", "description": "逆变器6调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter7_value", "description": "逆变器7调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter8_value", "description": "逆变器8调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter9_value", "description": "逆变器9调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter10_value", "description": "逆变器10调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter11_value", "description": "逆变器11调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter12_value", "description": "逆变器12调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}}
+      ]
+    },
+    "event_reactive_record": {
+      "strict_length": true,
+      "fields": [
+        {"name": "start_time", "description": "事件开始时间", "type": "bcd_datetime", "length": 6, "byte_order": "little", "ff_text": "无此信息", "format": "YYMMDDhhmmss", "validate_datetime": true},
+        {"name": "end_time", "description": "事件结束时间", "type": "bcd_datetime", "length": 6, "byte_order": "little", "ff_text": "无此信息", "format": "YYMMDDhhmmss", "validate_datetime": true},
+        {"name": "event_type", "description": "事件类型", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "数值", "1": "百分比"}},
+        {"name": "inverter1_result", "description": "逆变器1调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter2_result", "description": "逆变器2调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter3_result", "description": "逆变器3调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter4_result", "description": "逆变器4调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter5_result", "description": "逆变器5调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter6_result", "description": "逆变器6调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter7_result", "description": "逆变器7调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter8_result", "description": "逆变器8调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter9_result", "description": "逆变器9调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter10_result", "description": "逆变器10调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter11_result", "description": "逆变器11调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter12_result", "description": "逆变器12调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter1_value", "description": "逆变器1调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kvar", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter2_value", "description": "逆变器2调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kvar", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter3_value", "description": "逆变器3调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kvar", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter4_value", "description": "逆变器4调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kvar", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter5_value", "description": "逆变器5调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kvar", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter6_value", "description": "逆变器6调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kvar", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter7_value", "description": "逆变器7调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kvar", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter8_value", "description": "逆变器8调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kvar", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter9_value", "description": "逆变器9调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kvar", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter10_value", "description": "逆变器10调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kvar", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter11_value", "description": "逆变器11调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kvar", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter12_value", "description": "逆变器12调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kvar", "1": "%"}, "unknown": "未知单位"}}
+      ]
+    },
+    "event_factor_record": {
+      "strict_length": true,
+      "fields": [
+        {"name": "start_time", "description": "事件开始时间", "type": "bcd_datetime", "length": 6, "byte_order": "little", "ff_text": "无此信息", "format": "YYMMDDhhmmss", "validate_datetime": true},
+        {"name": "end_time", "description": "事件结束时间", "type": "bcd_datetime", "length": 6, "byte_order": "little", "ff_text": "无此信息", "format": "YYMMDDhhmmss", "validate_datetime": true},
+        {"name": "inverter1_result", "description": "逆变器1调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter2_result", "description": "逆变器2调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter3_result", "description": "逆变器3调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter4_result", "description": "逆变器4调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter5_result", "description": "逆变器5调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter6_result", "description": "逆变器6调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter7_result", "description": "逆变器7调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter8_result", "description": "逆变器8调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter9_result", "description": "逆变器9调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter10_result", "description": "逆变器10调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter11_result", "description": "逆变器11调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter12_result", "description": "逆变器12调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter1_value", "description": "逆变器1功率因数调节值", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 3, "sign_bit": {"byte": 0, "mask": "80"}, "unit": ""},
+        {"name": "inverter2_value", "description": "逆变器2功率因数调节值", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 3, "sign_bit": {"byte": 0, "mask": "80"}, "unit": ""},
+        {"name": "inverter3_value", "description": "逆变器3功率因数调节值", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 3, "sign_bit": {"byte": 0, "mask": "80"}, "unit": ""},
+        {"name": "inverter4_value", "description": "逆变器4功率因数调节值", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 3, "sign_bit": {"byte": 0, "mask": "80"}, "unit": ""},
+        {"name": "inverter5_value", "description": "逆变器5功率因数调节值", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 3, "sign_bit": {"byte": 0, "mask": "80"}, "unit": ""},
+        {"name": "inverter6_value", "description": "逆变器6功率因数调节值", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 3, "sign_bit": {"byte": 0, "mask": "80"}, "unit": ""},
+        {"name": "inverter7_value", "description": "逆变器7功率因数调节值", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 3, "sign_bit": {"byte": 0, "mask": "80"}, "unit": ""},
+        {"name": "inverter8_value", "description": "逆变器8功率因数调节值", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 3, "sign_bit": {"byte": 0, "mask": "80"}, "unit": ""},
+        {"name": "inverter9_value", "description": "逆变器9功率因数调节值", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 3, "sign_bit": {"byte": 0, "mask": "80"}, "unit": ""},
+        {"name": "inverter10_value", "description": "逆变器10功率因数调节值", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 3, "sign_bit": {"byte": 0, "mask": "80"}, "unit": ""},
+        {"name": "inverter11_value", "description": "逆变器11功率因数调节值", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 3, "sign_bit": {"byte": 0, "mask": "80"}, "unit": ""},
+        {"name": "inverter12_value", "description": "逆变器12功率因数调节值", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 3, "sign_bit": {"byte": 0, "mask": "80"}, "unit": ""}
+      ]
+    },
+    "event_schedule_record": {
+      "strict_length": true,
+      "fields": [
+        {"name": "start_time", "description": "事件开始时间", "type": "bcd_datetime", "length": 6, "byte_order": "little", "ff_text": "无此信息", "format": "YYMMDDhhmmss", "validate_datetime": true},
+        {"name": "end_time", "description": "事件结束时间", "type": "bcd_datetime", "length": 6, "byte_order": "little", "ff_text": "无此信息", "format": "YYMMDDhhmmss", "validate_datetime": true},
+        {"name": "event_type", "description": "事件类型", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "数值", "1": "百分比"}},
+        {"name": "inverter1_result", "description": "逆变器1调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter2_result", "description": "逆变器2调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter3_result", "description": "逆变器3调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter4_result", "description": "逆变器4调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter5_result", "description": "逆变器5调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter6_result", "description": "逆变器6调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter7_result", "description": "逆变器7调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter8_result", "description": "逆变器8调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter9_result", "description": "逆变器9调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter10_result", "description": "逆变器10调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter11_result", "description": "逆变器11调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter12_result", "description": "逆变器12调节结果", "type": "enum", "length": 1, "byte_order": "little", "ff_text": "无此信息", "values": {"0": "成功", "1": "未调", "2": "失败", "3": "不支持", "4": "其他"}},
+        {"name": "inverter1_value", "description": "逆变器1调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter2_value", "description": "逆变器2调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter3_value", "description": "逆变器3调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter4_value", "description": "逆变器4调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter5_value", "description": "逆变器5调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter6_value", "description": "逆变器6调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter7_value", "description": "逆变器7调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter8_value", "description": "逆变器8调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter9_value", "description": "逆变器9调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter10_value", "description": "逆变器10调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter11_value", "description": "逆变器11调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}},
+        {"name": "inverter12_value", "description": "逆变器12调节值", "type": "bcd", "length": 4, "byte_order": "little", "ff_text": "无此信息", "decimals": 4, "sign_bit": {"byte": 0, "mask": "80"}, "unit": "", "unit_from": {"field": "event_type", "values": {"0": "kW", "1": "%"}, "unknown": "未知单位"}}
+      ]
+    },
+    "event_voltage_record": {
+      "strict_length": true,
+      "fields": [
+        {"name": "start_time", "description": "事件开始时间", "type": "bcd_datetime", "length": 6, "byte_order": "little", "ff_text": "无此信息", "format": "YYMMDDhhmmss", "validate_datetime": true},
+        {"name": "end_time", "description": "事件结束时间", "type": "bcd_datetime", "length": 6, "byte_order": "little", "ff_text": "无此信息", "format": "YYMMDDhhmmss", "validate_datetime": true},
+        {"name": "exceed_voltage_a", "description": "A相越限电压", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 1, "unit": "V"},
+        {"name": "exceed_voltage_b", "description": "B相越限电压", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 1, "unit": "V"},
+        {"name": "exceed_voltage_c", "description": "C相越限电压", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 1, "unit": "V"},
+        {"name": "restore_voltage_a", "description": "A相恢复电压", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 1, "unit": "V"},
+        {"name": "restore_voltage_b", "description": "B相恢复电压", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 1, "unit": "V"},
+        {"name": "restore_voltage_c", "description": "C相恢复电压", "type": "bcd", "length": 2, "byte_order": "little", "ff_text": "无此信息", "decimals": 1, "unit": "V"}
+      ]
+    },
+    "event_communication_record": {
+      "strict_length": true,
+      "fields": [
+        {"name": "start_time", "description": "事件开始时间", "type": "bcd_datetime", "length": 6, "byte_order": "little", "ff_text": "无此信息", "format": "YYMMDDhhmmss", "validate_datetime": true},
+        {"name": "end_time", "description": "事件结束时间", "type": "bcd_datetime", "length": 6, "byte_order": "little", "ff_text": "无此信息", "format": "YYMMDDhhmmss", "validate_datetime": true},
+        {"name": "inverter_number", "description": "逆变器号", "type": "uint", "length": 1, "byte_order": "little", "ff_text": "无此信息", "minimum": 1, "maximum": 12}
+      ]
+    },
     "inverter_status": {
       "fields": [
         {
@@ -1253,6 +1438,152 @@
       "access": "read_write",
       "read_schema": "inverter_archive",
       "write_schema": "inverter_archive"
+    },
+    {
+      "id": "event_switch_count",
+      "category": "event",
+      "display": "03 E6 00 xx | 开关机控制事件总次数",
+      "description": "开关机控制事件总次数",
+      "access": "read",
+      "prefix": "03E600",
+      "read_schema": "event_count",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部12台次数块"}, "label_template": "逆变器{decimal}总次数"},
+      "repeat_suffixes": {"FF": 12}
+    },
+    {
+      "id": "event_switch_record",
+      "category": "event",
+      "display": "03 E6 01 xx | 开关机控制事件数据块",
+      "description": "开关机控制事件数据块",
+      "access": "read",
+      "prefix": "03E601",
+      "suffixes": {"range": {"from": "01", "to": "32"}, "label_template": "上{decimal}次记录"},
+      "read_schema": "event_switch_record"
+    },
+    {
+      "id": "event_active_count",
+      "category": "event",
+      "display": "03 E6 02 xx | 有功功率控制事件总次数",
+      "description": "有功功率控制事件总次数",
+      "access": "read",
+      "prefix": "03E602",
+      "read_schema": "event_count",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部12台次数块"}, "label_template": "逆变器{decimal}总次数"},
+      "repeat_suffixes": {"FF": 12}
+    },
+    {
+      "id": "event_active_record",
+      "category": "event",
+      "display": "03 E6 03 xx | 有功功率控制事件数据块",
+      "description": "有功功率控制事件数据块",
+      "access": "read",
+      "prefix": "03E603",
+      "suffixes": {"range": {"from": "01", "to": "32"}, "label_template": "上{decimal}次记录"},
+      "read_schema": "event_active_record"
+    },
+    {
+      "id": "event_reactive_count",
+      "category": "event",
+      "display": "03 E6 04 xx | 无功功率控制事件总次数",
+      "description": "无功功率控制事件总次数",
+      "access": "read",
+      "prefix": "03E604",
+      "read_schema": "event_count",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部12台次数块"}, "label_template": "逆变器{decimal}总次数"},
+      "repeat_suffixes": {"FF": 12}
+    },
+    {
+      "id": "event_reactive_record",
+      "category": "event",
+      "display": "03 E6 05 xx | 无功功率控制事件数据块",
+      "description": "无功功率控制事件数据块",
+      "access": "read",
+      "prefix": "03E605",
+      "suffixes": {"range": {"from": "01", "to": "32"}, "label_template": "上{decimal}次记录"},
+      "read_schema": "event_reactive_record"
+    },
+    {
+      "id": "event_factor_count",
+      "category": "event",
+      "display": "03 E6 06 xx | 功率因数控制事件总次数",
+      "description": "功率因数控制事件总次数",
+      "access": "read",
+      "prefix": "03E606",
+      "read_schema": "event_count",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部12台次数块"}, "label_template": "逆变器{decimal}总次数"},
+      "repeat_suffixes": {"FF": 12}
+    },
+    {
+      "id": "event_factor_record",
+      "category": "event",
+      "display": "03 E6 07 xx | 功率因数控制事件数据块",
+      "description": "功率因数控制事件数据块",
+      "access": "read",
+      "prefix": "03E607",
+      "suffixes": {"range": {"from": "01", "to": "32"}, "label_template": "上{decimal}次记录"},
+      "read_schema": "event_factor_record"
+    },
+    {
+      "id": "event_schedule_count",
+      "category": "event",
+      "display": "03 E6 08 xx | 有功功率时段控制事件总次数",
+      "description": "有功功率时段控制事件总次数",
+      "access": "read",
+      "prefix": "03E608",
+      "read_schema": "event_count",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部12台次数块"}, "label_template": "逆变器{decimal}总次数"},
+      "repeat_suffixes": {"FF": 12}
+    },
+    {
+      "id": "event_schedule_record",
+      "category": "event",
+      "display": "03 E6 09 xx | 有功功率时段控制事件数据块",
+      "description": "有功功率时段控制事件数据块",
+      "access": "read",
+      "prefix": "03E609",
+      "suffixes": {"range": {"from": "01", "to": "32"}, "label_template": "上{decimal}次记录"},
+      "read_schema": "event_schedule_record"
+    },
+    {
+      "id": "event_voltage_count",
+      "category": "event",
+      "display": "03 E6 11 00 | 电压越限事件总次数",
+      "description": "电压越限事件总次数",
+      "access": "read",
+      "prefix": "03E611",
+      "read_schema": "event_count",
+      "suffixes": {"values": ["00"], "labels": {"00": "电压越限总次数"}}
+    },
+    {
+      "id": "event_voltage_record",
+      "category": "event",
+      "display": "03 E6 11 xx | 电压越限事件数据块",
+      "description": "电压越限事件数据块",
+      "access": "read",
+      "prefix": "03E611",
+      "suffixes": {"range": {"from": "01", "to": "32"}, "label_template": "上{decimal}次记录"},
+      "read_schema": "event_voltage_record"
+    },
+    {
+      "id": "event_communication_count",
+      "category": "event",
+      "display": "03 E6 12 xx | 逆变器通信异常事件总次数",
+      "description": "逆变器通信异常事件总次数",
+      "access": "read",
+      "prefix": "03E612",
+      "read_schema": "event_count",
+      "suffixes": {"range": {"from": "01", "to": "0C"}, "values": ["FF"], "labels": {"FF": "全部12台次数块"}, "label_template": "逆变器{decimal}总次数"},
+      "repeat_suffixes": {"FF": 12}
+    },
+    {
+      "id": "event_communication_record",
+      "category": "event",
+      "display": "03 E6 13 xx | 逆变器通信异常事件数据块",
+      "description": "逆变器通信异常事件数据块",
+      "access": "read",
+      "prefix": "03E613",
+      "suffixes": {"range": {"from": "01", "to": "32"}, "label_template": "上{decimal}次记录"},
+      "read_schema": "event_communication_record"
     }
   ]
 }

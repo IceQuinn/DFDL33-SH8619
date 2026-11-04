@@ -558,7 +558,12 @@ class DLT645Tests(unittest.TestCase):
             "inverter_reactive_power_percentage_adjustment", "inverter_daily_energy",
             "active_power_schedule", "active_power_percent_schedule", "inverter_archive_count", "inverter_archive",
         ])
-        self.assertEqual(groups("event"), [])
+        self.assertEqual(groups("event"), [
+            family + '_' + kind
+            for family in ("event_switch", "event_active", "event_reactive", "event_factor",
+                           "event_schedule", "event_voltage", "event_communication")
+            for kind in ("count", "record")
+        ])
         self.assertEqual(groups("standard"), [
             "standard", "converter_realtime", "converter_datetime", "converter_freeze", "converter_curve",
             "meter_parameter", "manufacturer_information",

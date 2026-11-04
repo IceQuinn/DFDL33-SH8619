@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import queue
+import re
 import shutil
 import sys
 import threading
@@ -574,6 +575,21 @@ class SerialAssistant(tk.Tk):
         if not fields:
             ttk.Label(self.dlt_fields_frame, text=f"{definition.description}：没有配置数据字段").grid(row=0, column=0, sticky="w")
             return
+        if definition.category == "event":
+            display_fields = []
+            for field in fields:
+                field = dict(field)  # 仅调整显示分组，不能改变数据字典的线上字段顺序。
+                match = re.match(r"inverter(\d+)_", str(field["name"]))
+                label = str(field.get("description", field["name"]))
+                if match:
+                    device = f"逆变器{match.group(1)}"
+                    field.update(row_group=device, row_description=device,
+                                 column_description=label.removeprefix(device))
+                field["event_display"] = True
+                display_fields.append(field)
+            self._render_dlt_grouped_fields(display_fields, {})
+            self.dlt_fields_canvas.yview_moveto(0.0)
+            return
         if any(field_def.get("row_group") for field_def in fields):  # 协议库使用每个寄存器块占一行的紧凑布局。
             self._render_dlt_grouped_fields(fields, cached_values)
             self.dlt_fields_canvas.yview_moveto(0.0)
@@ -741,6 +757,8 @@ class SerialAssistant(tk.Tk):
         label = str(field_def.get("column_description", field_def.get("description", field_def["name"])))
         name = str(field_def["name"])
         text = str(value)
+        if field_def.get("event_display"):
+            return f"{label}：{text}{unit if text not in ('--', '无此信息') else ''}"
         if text == "--":
             return f"{label}：--"
         if name.endswith("_address"):
@@ -840,6 +858,9 @@ class SerialAssistant(tk.Tk):
                     request_payload = self.dlt_registry.encode(data_identifier, request_values, "read_request")
                 frame = build_read_data(address, data_identifier, preamble, request_payload=request_payload)
             else:
+                definition = self.dlt_registry.get(data_identifier)
+                if definition and definition.access == "read":
+                    raise ValueError(f"{definition.description}为只读数据标识，不能生成写请求")
                 if self.dlt_all_ff_var is not None and self.dlt_all_ff_var.get():
                     payload = self.dlt_registry.encode(data_identifier, {"__all_ff__": True})  # 档案删除必须由配置允许并生成完整36字节FF。
                 elif "__raw__" in self.dlt_field_vars:
@@ -1202,6 +1223,12 @@ class SerialAssistant(tk.Tk):
         definition = self.dlt_registry.get(result.data_identifier) if result.data_identifier else None
         if definition:
             details.append(definition.description)
+        if definition and definition.category == "event" and not result.valid:
+            decoded_values = []
+        if (definition and definition.category == "event" and result.direction == "从机→主机"
+                and result.data_identifier == self._selected_di(silent=True) and not decoded_values):
+            for variable in self.dlt_decoded_vars.values():
+                variable.set("--")  # 失败/分片未完成时不可继续把上次事件显示为本次结果。
         if decoded_values:
             display_value = lambda value, unit: str(value) if value == "--" else f"{value}{unit}"
             details.extend(f"{name}={display_value(value, unit)}" for name, value, unit in decoded_values)
@@ -1236,7 +1263,7 @@ class SerialAssistant(tk.Tk):
         if result.detail:
             details.append(result.detail)
         values = (now, direction_text, len(frame), hex_bytes(frame), address, action, target, data_summary, check, "；".join(details))
-        if not result.valid:
+        if not result.valid or result_detail:
             tags = ("bad",)
         elif result.direction == "从机→主机":
             tags = ("slave",)

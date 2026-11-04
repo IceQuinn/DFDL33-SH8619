@@ -11,11 +11,101 @@ from PIL import Image
 from app import (SerialAssistant, combobox_width, display_column_width, load_settings, resource_path,
                  save_settings, saved_dlt_address)
 from app_version import APP_NAME, APP_VERSION, EXE_NAME
-from dlt645 import DataIdentifierRegistry
+from dlt645 import DataIdentifierRegistry, build_frame, encode_di
 from build_assets import ICON_SIZES, prepare_icon
 
 
 class AppReleaseTests(unittest.TestCase):
+    def test_event_grouped_display_keeps_counts_and_dynamic_units(self):
+        field = {"name": "inverter1_count", "description": "逆变器1总次数",
+                 "column_description": "总次数", "event_display": True}
+        self.assertEqual(SerialAssistant._format_grouped_dlt_value(field, "12", "次"), "总次数：12次")
+        field.update(name="inverter1_value", column_description="调控值")
+        self.assertEqual(SerialAssistant._format_grouped_dlt_value(field, "50", "%"), "调控值：50%")
+        self.assertEqual(SerialAssistant._format_grouped_dlt_value(field, "50", "kW"), "调控值：50kW")
+        self.assertEqual(SerialAssistant._format_grouped_dlt_value(field, "无此信息", "%"), "调控值：无此信息")
+
+    def test_event_response_updates_details_and_bad_length_clears_display(self):
+        registry = DataIdentifierRegistry.load(Path(__file__).with_name("dlt645_data_identifiers.json"))
+        field = registry.get("03E61100").read_response["fields"][0]
+        label = field["description"]
+        value = Mock()
+        window = SimpleNamespace(dlt_registry=registry, dlt_followup_payloads={},
+                                 dlt_pending_writes={}, dlt_row_details={},
+                                 dlt_decoded_vars={label: value}, dlt_decoded_defs={},
+                                 _selected_di=Mock(return_value="03E61100"),
+                                 _cache_dlt_read_values=Mock(), tree=Mock(), _scroll_to_last=Mock())
+        window.tree.insert.return_value = "row"
+        SerialAssistant._add_dlt_frame(window, "RX", build_frame("000000000001", 0x91,
+                                       encode_di("03E61100") + bytes.fromhex("12 00 00")))
+        value.set.assert_called_with("12")
+        self.assertEqual(window.dlt_row_details["row"][0][1:], ("12", "次"))
+        SerialAssistant._add_dlt_frame(window, "RX", build_frame("000000000001", 0x91,
+                                       encode_di("03E61100")))
+        value.set.assert_called_with("--")
+        self.assertEqual(window.tree.insert.call_args.kwargs["tags"], ("bad",))
+
+    def test_event_generate_only_and_block_write(self):
+        registry = DataIdentifierRegistry.load(Path(__file__).with_name("dlt645_data_identifiers.json"))
+        window = SimpleNamespace(dlt_registry=registry, dlt_address_var=Mock(),
+                                 dlt_preamble_var=Mock(), dlt_action_var=Mock(),
+                                 _selected_di=Mock(return_value="03E60332"),
+                                 _set_dlt_generated=Mock(), _send_bytes=Mock())
+        window.dlt_address_var.get.return_value = "000000000001"
+        window.dlt_preamble_var.get.return_value = 4
+        window.dlt_action_var.get.return_value = "读"
+        SerialAssistant.generate_dlt_operation(window, send=False)
+        self.assertTrue(window._set_dlt_generated.called)
+        window._send_bytes.assert_not_called()
+        window._set_dlt_generated.reset_mock()
+        window.dlt_action_var.get.return_value = "写"
+        with patch("app.messagebox.showerror") as error:
+            SerialAssistant.generate_dlt_operation(window, send=True)
+            self.assertIn("只读", error.call_args.args[1])
+        window._send_bytes.assert_not_called()
+        window._set_dlt_generated.assert_not_called()
+
+    def test_event_group_selector_separates_count_and_history(self):
+        registry = DataIdentifierRegistry.load(Path(__file__).with_name("dlt645_data_identifiers.json"))
+        window = SimpleNamespace(dlt_registry=registry, dlt_action_var=Mock(),
+                                 dlt_category_var=Mock(), dlt_group_var=Mock(), dlt_di_var=Mock(),
+                                 dlt_group_combo={}, dlt_di_combo={},
+                                 dlt_category_value_map={"事件类": "event"},
+                                 _dlt_selection_changed=Mock())
+        window.dlt_action_var.get.return_value = "读"
+        window.dlt_category_var.get.return_value = "事件类"
+        window.dlt_group_var.get.return_value = ""
+        window.dlt_di_var.get.return_value = ""
+        for name in ('_available_dlt_definitions', '_selected_category', '_selected_group',
+                     '_selected_di', '_refresh_dlt_items'):
+            setattr(window, name, getattr(SerialAssistant, name).__get__(window))
+        window._dlt_item_label = SerialAssistant._dlt_item_label
+        SerialAssistant._refresh_dlt_groups(window)
+        labels = window.dlt_group_combo['values']
+        self.assertEqual(len(labels), 14)
+        self.assertEqual(labels[:2], ["03 E6 00 xx | 开关机控制事件总次数", "03 E6 01 xx | 开关机控制事件数据块"])
+        self.assertIn("03 E6 11 00 | 电压越限事件总次数", labels)
+        for label in labels:
+            window.dlt_group_var.get.return_value = label
+            window._refresh_dlt_items()
+            selected = list(window.dlt_di_value_map.values())
+            if label.endswith('数据块'):
+                self.assertEqual(len(selected), 50)
+                self.assertEqual([di[-2:] for di in selected], [f'{i:02X}' for i in range(1, 51)])
+            elif label.startswith('03 E6 11 00 |'):
+                self.assertEqual(selected, ['03E61100'])
+            else:
+                self.assertEqual(len(selected), 13)
+                self.assertEqual([di[-2:] for di in selected], [f'{i:02X}' for i in range(1, 13)] + ['FF'])
+
+    def test_event_dictionary_release_and_read_only(self):
+        source = Path(__file__).with_name("dlt645_data_identifiers.json")
+        self.assertEqual(source.read_bytes(), (source.parent / "release" / source.name).read_bytes())
+        registry = DataIdentifierRegistry.load(source)
+        events = [item for item in registry.definitions.values() if item.category == "event"]
+        self.assertEqual(len(events), 429)
+        self.assertTrue(all(item.access == "read" and not item.write_request.get("fields") for item in events))
+
     def test_immediate_control_cache_and_defaults(self):
         registry = DataIdentifierRegistry.load(Path(__file__).with_name("dlt645_data_identifiers.json"))
         window = SimpleNamespace(dlt_registry=registry, dlt_address_var=Mock(),
