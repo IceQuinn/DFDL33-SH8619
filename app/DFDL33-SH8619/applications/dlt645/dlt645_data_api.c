@@ -1399,13 +1399,13 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
     first_archive = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? 0U : (uint8_t)(selector - 1U); /* 选择器已由上层验证。 */
     archive_count = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? INVERTER_ARCHIVE_MAX_COUNT : 1U; /* FF写入必须提供12个一一对应的值。 */
     if((data_len != (uint16_t)(point->data_len * archive_count)) ||
-       (response_capacity < archive_count) ||
+       (response_capacity < INVERTER_ARCHIVE_MAX_COUNT) ||
        (dlt645_point_decimal_places(point, &source_decimals) != RT_EOK)) /* 长度、结果缓存和点表倍率必须完整有效。 */
     {
         return -RT_EINVAL;
     }
     rt_memset(execute, 0, sizeof(execute)); /* 默认所有槽位都不执行，只有完整通过检查后才置位。 */
-    rt_memset(response, DLT645_CONTROL_STATUS_OTHER, archive_count); /* 尚未分类的槽位默认返回04其他问题。 */
+    rt_memset(response, DLT645_CONTROL_STATUS_OTHER, INVERTER_ARCHIVE_MAX_COUNT); /* 单控也清空全部12个槽位，避免残留旧状态。 */
 
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
@@ -1419,25 +1419,25 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
         {
             if(selector == DLT645_VARIABLE_ALL_SELECTOR) /* 全控无档案槽位不关心下发值，按不处理且不影响整帧结果。 */
             {
-                response[archive_offset] = DLT645_CONTROL_STATUS_NOT_CONTROLLED;
+                response[first_archive + archive_offset] = DLT645_CONTROL_STATUS_NOT_CONTROLLED;
             }
             else /* 单控无档案统一映射为02无请求数据，无论调控值是正常值还是FF。 */
             {
-                response[archive_offset] = DLT645_CONTROL_STATUS_NO_ARCHIVE;
+                response[first_archive + archive_offset] = DLT645_CONTROL_STATUS_NO_ARCHIVE;
             }
             continue;
         }
         if(dlt645_field_is_ff(field, point->data_len) == RT_TRUE) /* 有档案且全FF表示不调控。 */
         {
             /* 单控有档案时FF调控值按其他错误01处理；全控时FF是合法的“不控制”语义。 */
-            response[archive_offset] = (selector == DLT645_VARIABLE_ALL_SELECTOR) ?
+            response[first_archive + archive_offset] = (selector == DLT645_VARIABLE_ALL_SELECTOR) ?
                                        DLT645_CONTROL_STATUS_NOT_CONTROLLED : DLT645_CONTROL_STATUS_FAILED;
             continue;
         }
         source_result = dlt645_get_control_source(id, first_archive + archive_offset, &types[archive_offset], &control_reg, &source);
         if(source_result == -RT_ENOSYS) /* 有效档案没有对应控制配置时返回03。 */
         {
-            response[archive_offset] = DLT645_CONTROL_STATUS_UNSUPPORTED;
+            response[first_archive + archive_offset] = DLT645_CONTROL_STATUS_UNSUPPORTED;
             continue;
         }
         if(source_result != RT_EOK) /* 其他映射错误统一返回04，单控最终映射为01。 */
@@ -1459,18 +1459,18 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
     {
         if(execute[archive_offset] == RT_TRUE) /* FF、空档案、非法数值和不支持项都不会进入下行队列。 */
         {
-            response[archive_offset] = dlt645_control_one_value(first_archive + archive_offset,
+            response[first_archive + archive_offset] = dlt645_control_one_value(first_archive + archive_offset,
                                                                  types[archive_offset], values[archive_offset]);
         }
     }
     *response_len = 0U; /* 逐台状态仅用于内部汇总，不放入645应答数据域。 */
     if(selector != DLT645_VARIABLE_ALL_SELECTOR) /* 单控需要区分“无档案”02与“其他错误”01。 */
     {
-        if(response[0] == DLT645_CONTROL_STATUS_SUCCESS) /* 有档案、调控值正常且下发成功。 */
+        if(response[first_archive] == DLT645_CONTROL_STATUS_SUCCESS) /* 有档案、调控值正常且下发成功。 */
         {
             return RT_EOK;
         }
-        if(response[0] == DLT645_CONTROL_STATUS_NO_ARCHIVE) /* 无档案统一返回无请求数据02。 */
+        if(response[first_archive] == DLT645_CONTROL_STATUS_NO_ARCHIVE) /* 无档案统一返回无请求数据02。 */
         {
             return -RT_EEMPTY; /* 分发层将RT_EEMPTY映射为无请求数据02。 */
         }

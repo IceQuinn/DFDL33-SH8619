@@ -809,6 +809,7 @@ void dlt645_ctrl_write_data(uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t
         {
             uint16_t business_len = point->data_len; /* 普通设备点使用点表中配置的单台业务长度。 */
             uint16_t expected_len;                  /* 包含8字节安全字段后的完整写数据长度。 */
+            rt_err_t write_result;                  /* 业务写回调的返回码。 */
 
             if(((point->selector & DLT645_SELECTOR_ALL) != 0U) && ((uint8_t)id == 0xFFU)) /* 聚合写入按12个固定档案槽位扩展业务长度。 */
             {
@@ -817,17 +818,29 @@ void dlt645_ctrl_write_data(uint8_t fun_c, uint32_t id, uint8_t *p_buf, uint16_t
             expected_len = DLT645_WRITE_SECURITY_LEN + business_len;
 
             /* p_buf由解析层完成减0x33，内容为密码、操作者代码和实际写数据。 */
-            if((p_buf != RT_NULL) && (len == expected_len) &&
-               (point->write(point, id, &p_buf[DLT645_WRITE_SECURITY_LEN],
-                             business_len, g_dlt645_point_data,
-                             sizeof(g_dlt645_point_data), &response_len) == RT_EOK)) /* 指针、总长度和业务处理结果有效才正常应答。 */
+            if((p_buf != RT_NULL) && (len == expected_len))
             {
-                err_code = E_D07_W_OK; /* 设备已返回成功结果，回复正常写数据应答。 */
+                write_result = point->write(point, id, &p_buf[DLT645_WRITE_SECURITY_LEN],
+                                            business_len, g_dlt645_point_data,
+                                            sizeof(g_dlt645_point_data), &response_len);
+                if(write_result == RT_EOK)
+                {
+                    err_code = E_D07_W_OK;
+                }
+                else if(write_result == -RT_EEMPTY)
+                {
+                    err_code = E_D07_W_NO_DATA; /* 逆变器档案不存在时回复无请求数据02。 */
+                }
+                else
+                {
+                    err_code = E_D07_W_ERR; /* 报文非法或控制执行失败，回复其他错误01。 */
+                }
             }
             else
             {
-                err_code = E_D07_W_ERR; /* 报文非法或控制执行失败，回复其他错误。 */
+                err_code = E_D07_W_ERR;
             }
+            /* E_D07_W_OK / E_D07_W_ERR 已在上方分支内完成映射。 */
         }
     }
 
