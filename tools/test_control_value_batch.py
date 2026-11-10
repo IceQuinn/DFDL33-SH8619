@@ -27,8 +27,12 @@ typedef struct { uint16_t data_len; int write_min, write_max; } Dlt645PointTypeD
 enum { DLT645_CONTROL_STATUS_SUCCESS, DLT645_CONTROL_STATUS_NOT_CONTROLLED,
        DLT645_CONTROL_STATUS_FAILED, DLT645_CONTROL_STATUS_UNSUPPORTED, DLT645_CONTROL_STATUS_OTHER };
 static int source_errors[12], results[12], sent[12];
+static int archive_valid[12]; /* 模拟档案有效标志，全控时无档案槽位应被直接跳过。 */
 static Inv_CtrlRegBlk_t reg;
 static Inv_RealtimeValue_t value;
+static Inv_Data_t *Inv_Data_Get(int index) {
+    return archive_valid[index] ? &value : RT_NULL;
+}
 static int dlt645_field_is_ff(const uint8_t *p, int n) {
     while(n--) if(*p++ != 255) return 0;
     return 1;
@@ -52,6 +56,7 @@ static int dlt645_control_one_value(int i, int t, int v) {
 static void reset(void) {
     memset(source_errors,0,sizeof(source_errors));
     memset(results,0,sizeof(results)); memset(sent,0,sizeof(sent));
+    for(int i=0;i<12;i++) archive_valid[i]=1; /* 默认全部槽位都有档案。 */
 }
 '''
 
@@ -86,6 +91,21 @@ int main(void) {
         reset(); results[0]=2;
         assert(dlt645_write_control_value(&point,id,data,point.data_len,response,12,&len)!=0);
         assert(sent[0]==1 && len==0);
+        /* 全控新增规则：无档案槽位下发任意值（含非法BCD、超范围）都不处理且不影响整帧结果。 */
+        reset(); memset(data,1,sizeof(data)); archive_valid[3]=0; archive_valid[8]=0;
+        source_errors[3]=RT_ERROR; results[8]=2;
+        assert(dlt645_write_control_value(&point,id,data,point.data_len*12,response,12,&len)==0);
+        assert(!sent[3] && !sent[8] && sent[0] && sent[11] && len==0);
+        reset(); memset(data,0xFA,sizeof(data)); archive_valid[1]=0;
+        assert(dlt645_write_control_value(&point,id,data,point.data_len*12,response,12,&len)!=0);
+        assert(!sent[1]); /* 其余有档案槽位BCD非法仍报错。 */
+        reset(); memset(data,1,sizeof(data)); archive_valid[1]=0;
+        assert(dlt645_write_control_value(&point,id,data,point.data_len*12,response,12,&len)==0);
+        assert(!sent[1] && sent[0] && sent[2] && len==0); /* 无档案槽位不发报文，其余照常下发。 */
+        /* 单台写指向空档案时必须保持原有错误语义。 */
+        reset(); archive_valid[0]=0; id=(id & 0xFFFFFF00U)|1;
+        assert(dlt645_write_control_value(&point,id,data,point.data_len,response,12,&len)!=0);
+        assert(!sent[0] && len==0);
     }
     return 0;
 }

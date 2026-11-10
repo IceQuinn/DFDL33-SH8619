@@ -132,7 +132,8 @@ typedef enum Dlt645ControlStatus
     DLT645_CONTROL_STATUS_NOT_CONTROLLED = 0x01U, /* 写入值为全FF，因此没有执行下行调节。 */
     DLT645_CONTROL_STATUS_FAILED = 0x02U,      /* 下行发送、等待或设备响应阶段失败。 */
     DLT645_CONTROL_STATUS_UNSUPPORTED = 0x03U, /* 当前逆变器协议没有配置该调节功能。 */
-    DLT645_CONTROL_STATUS_OTHER = 0x04U        /* 空档案写数值、数据非法或内部资源异常。 */
+    DLT645_CONTROL_STATUS_OTHER = 0x04U,       /* 数据非法或内部资源异常，单控映射为01其他错误。 */
+    DLT645_CONTROL_STATUS_NO_ARCHIVE = 0x05U   /* 目标槽位没有有效档案，单控映射为02无请求数据。 */
 } Dlt645ControlStatusTypeDef;
 
 /* 计算10的指定次幂，协议配置小数位超过9时返回0表示配置不可转换。 */
@@ -1414,9 +1415,23 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
         int32_t decoded_value;               /* 从符号位BCD解码得到的645定点整数。 */
         rt_err_t source_result;              /* 档案、协议和控制配置查询结果。 */
 
-        if(dlt645_field_is_ff(field, point->data_len) == RT_TRUE) /* 全FF明确表示该槽位不控制，不检查档案是否存在。 */
+        if(Inv_Data_Get(first_archive + archive_offset) == RT_NULL) /* 目标槽位没有有效档案，优先于调控值判断。 */
         {
-            response[archive_offset] = DLT645_CONTROL_STATUS_NOT_CONTROLLED;
+            if(selector == DLT645_VARIABLE_ALL_SELECTOR) /* 全控无档案槽位不关心下发值，按不处理且不影响整帧结果。 */
+            {
+                response[archive_offset] = DLT645_CONTROL_STATUS_NOT_CONTROLLED;
+            }
+            else /* 单控无档案统一映射为02无请求数据，无论调控值是正常值还是FF。 */
+            {
+                response[archive_offset] = DLT645_CONTROL_STATUS_NO_ARCHIVE;
+            }
+            continue;
+        }
+        if(dlt645_field_is_ff(field, point->data_len) == RT_TRUE) /* 有档案且全FF表示不调控。 */
+        {
+            /* 单控有档案时FF调控值按其他错误01处理；全控时FF是合法的“不控制”语义。 */
+            response[archive_offset] = (selector == DLT645_VARIABLE_ALL_SELECTOR) ?
+                                       DLT645_CONTROL_STATUS_NOT_CONTROLLED : DLT645_CONTROL_STATUS_FAILED;
             continue;
         }
         source_result = dlt645_get_control_source(id, first_archive + archive_offset, &types[archive_offset], &control_reg, &source);
@@ -1425,7 +1440,7 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
             response[archive_offset] = DLT645_CONTROL_STATUS_UNSUPPORTED;
             continue;
         }
-        if(source_result != RT_EOK) /* 空档案写数值或其他映射错误统一返回04。 */
+        if(source_result != RT_EOK) /* 其他映射错误统一返回04，单控最终映射为01。 */
         {
             continue;
         }
@@ -1449,6 +1464,19 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
         }
     }
     *response_len = 0U; /* 逐台状态仅用于内部汇总，不放入645应答数据域。 */
+    if(selector != DLT645_VARIABLE_ALL_SELECTOR) /* 单控需要区分“无档案”02与“其他错误”01。 */
+    {
+        if(response[0] == DLT645_CONTROL_STATUS_SUCCESS) /* 有档案、调控值正常且下发成功。 */
+        {
+            return RT_EOK;
+        }
+        if(response[0] == DLT645_CONTROL_STATUS_NO_ARCHIVE) /* 无档案统一返回无请求数据02。 */
+        {
+            return -RT_EEMPTY; /* 分发层将RT_EEMPTY映射为无请求数据02。 */
+        }
+        /* 有档案但FF调控值、协议不支持、数值非法或下发失败，统一返回其他错误01。 */
+        return -RT_ERROR;
+    }
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset) {
         if((response[archive_offset] != DLT645_CONTROL_STATUS_SUCCESS) &&
            (response[archive_offset] != DLT645_CONTROL_STATUS_NOT_CONTROLLED)) {
@@ -1588,13 +1616,19 @@ static rt_err_t dlt645_decode_time_control_block(uint32_t id,
 
         control_reg = dlt645_time_control_reg(archive_index, mode); /* 取得厂家目标小数位用于写值换算。 */
         if((control_reg == RT_NULL) ||
-           (dlt645_bcd_decode_s32(&block[value_offset], value_len, &decoded_value) != RT_EOK) ||
+           (control_reg->reg_addr == INVERTER_PROTOCOL_REGISTER_UNUSED)) /* 协议不支持该控制项时保留时间但没有可下发数值。 */
+        {
+            command->periods[period_index].value_is_ff = RT_TRUE; /* 按不调控处理，避免因厂家能力差异导致整帧报错。 */
+            continue;
+        }
+        if((dlt645_bcd_decode_s32(&block[value_offset], value_len, &decoded_value) != RT_EOK) ||
            ((mode == TIME_CTRL_ACTIVE_POWER_PERCENT) &&
             ((decoded_value < 0) || (decoded_value > DLT645_CONTROL_PERCENT_MAX))) ||
            (dlt645_rescale_value(decoded_value, source_decimals, control_reg->decimal_places,
-                                 &command->periods[period_index].value) != RT_EOK)) /* 配置、BCD、百分比范围和定点换算必须全部有效。 */
+                                 &command->periods[period_index].value) != RT_EOK)) /* BCD或精度换算失败时同样按不调控处理。 */
         {
-            return -RT_EINVAL;
+            command->periods[period_index].value_is_ff = RT_TRUE;
+            continue;
         }
     }
     return RT_EOK;
@@ -1717,8 +1751,10 @@ rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point, uint32_t id,
     uint8_t archive_count;          /* 本次写入包含的固定单台块数量。 */
     uint8_t archive_offset;         /* 当前预检查或提交的相对档案槽位。 */
     Time_Ctrl_Command_t commands[INVERTER_ARCHIVE_MAX_COUNT]; /* 预解析完成且绑定接收当天的逐台命令。 */
-    rt_bool_t has_error = RT_FALSE; /* 任一槽位校验、提交或保存失败时最终返回写异常。 */
+    rt_bool_t has_error = RT_FALSE; /* 任一槽位出现硬性时间或长度错误时最终返回写异常。 */
     rt_bool_t apply[INVERTER_ARCHIVE_MAX_COUNT]; /* RT_TRUE表示当前档案需要更新或停止时段计划。 */
+    rt_err_t plan_result;           /* 当前槽位时段块解码结果。 */
+    Time_Ctrl_Result_t check_result; /* 当前槽位时段计划校验结果。 */
 
     if((point == RT_NULL) || (data == RT_NULL) || (response_len == RT_NULL)) /* 公共写入口的重要指针只检查一次。 */
     {
@@ -1744,25 +1780,28 @@ rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point, uint32_t id,
         rt_bool_t period2_disabled = dlt645_field_is_ff(&block[4], 2U) ||
                                      dlt645_field_is_ff(&block[6], 2U); /* 第2时段采用相同的禁用规则。 */
 
-        if(Inv_Data_Get(archive_index) == RT_NULL) /* 空档案只允许两个时段都处于不调控状态。 */
+        if(Inv_Data_Get(archive_index) == RT_NULL) /* 无档案槽位没有可下发的目标设备。 */
         {
-            if((period1_disabled != RT_TRUE) || (period2_disabled != RT_TRUE)) /* 任一时段时间完整都表示存在对空档案的控制意图。 */
+            /* 单控和群控一致：无档案不关心时段与控制值组合，一律正常应答且不建立计划。 */
+            rt_kprintf("time control archive[%d] empty archive skipped\n", archive_index + 1U);
+            continue;
+        }
+        plan_result = dlt645_decode_time_control_block(id, archive_index, block, &commands[archive_offset]); /* 解析并校验单台时段块。 */
+        if(plan_result != RT_EOK) /* 解码结果为01表示仅时间格式非法，属于必须报错的基础校验。 */
+        {
+            if(plan_result == -RT_ERROR) /* 调控值或协议换算无法成立：记录日志，不建立计划但回复正常。 */
             {
-                has_error = RT_TRUE;
-                rt_kprintf("time control archive[%d] empty archive with enabled period\n", archive_index + 1U);
+                rt_kprintf("time control archive[%d] value unavailable, skipped\n", archive_index + 1U);
+                continue;
             }
-            continue;
-        }
-        if(dlt645_decode_time_control_block(id, archive_index, block, &commands[archive_offset]) != RT_EOK) /* 单台块的时间、FF组合、数值或精度必须合法。 */
-        {
-            has_error = RT_TRUE;
+            has_error = RT_TRUE; /* 报文长度、小时或分钟非法等硬性错误仍回复异常。 */
             rt_kprintf("time control archive[%d] plan check failed, skipped\n", archive_index + 1U);
             continue;
         }
-        if(Time_Ctrl_Check(&commands[archive_offset]) != TIME_CTRL_RESULT_OK) /* 检查同日时间范围、重叠、控制能力和恢复能力。 */
+        check_result = Time_Ctrl_Check(&commands[archive_offset]); /* 检查同日时间范围、重叠和控制能力。 */
+        if(check_result != TIME_CTRL_RESULT_OK) /* 能力不足或无法恢复时只跳过，不再阻断整帧应答。 */
         {
-            has_error = RT_TRUE;
-            rt_kprintf("time control archive[%d] plan check failed, skipped\n", archive_index + 1U);
+            rt_kprintf("time control archive[%d] plan unavailable, skipped\n", archive_index + 1U);
             continue;
         }
         apply[archive_offset] = RT_TRUE; /* 本台校验成功才允许更新，不受其他槽位失败影响。 */
@@ -1894,10 +1933,34 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
         return -RT_EINVAL;
     }
 
+    /* 单控只有一台目标，按“无档案→02、有档案FF或失败→01”直接返回，避免与全控汇总混用。 */
+    if(selector != DLT645_VARIABLE_ALL_SELECTOR)
+    {
+        if(Inv_Data_Get(first_archive) == RT_NULL) /* 无档案：无论调控值是正常值还是FF都回复02无请求数据。 */
+        {
+            return -RT_EEMPTY;
+        }
+        if(data[0] == 0xFFU) /* 有档案但调控值为FF：按其他错误01处理且不下发。 */
+        {
+            return -RT_ERROR;
+        }
+        if((dlt645_bcd_decode_u32(&data[0], point->data_len, &values[0]) != RT_EOK) ||
+           (values[0] < point->write_min) ||
+           (values[0] > point->write_max)) /* 仅允许00开机、01关机。 */
+        {
+            return -RT_ERROR;
+        }
+        return (dlt645_control_run_state(first_archive, values[0]) == RT_EOK) ? RT_EOK : -RT_ERROR; /* 下发失败同样回复01。 */
+    }
+
     rt_memset(execute, 0, sizeof(execute));
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
-        if(data[archive_offset] == 0xFFU) /* FF表示本台不控制，不检查档案也不计为失败。 */
+        if(data[archive_offset] == 0xFFU) /* 全控下FF表示本台不控制，不检查档案也不计为失败。 */
+        {
+            continue;
+        }
+        if(Inv_Data_Get(first_archive + archive_offset) == RT_NULL) /* 全控下无档案槽位不关心下发值，既不校验也不下发。 */
         {
             continue;
         }
@@ -1914,7 +1977,7 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
         if((execute[archive_offset] == RT_TRUE) &&
-           (dlt645_control_run_state(first_archive + archive_offset, values[archive_offset]) != RT_EOK)) /* 无效档案或控制失败不阻塞后续台，最终汇总错误。 */
+           (dlt645_control_run_state(first_archive + archive_offset, values[archive_offset]) != RT_EOK)) /* 控制失败不阻塞后续台，最终汇总错误。 */
         {
             all_success = RT_FALSE;
         }

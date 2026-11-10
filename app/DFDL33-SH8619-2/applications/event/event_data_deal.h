@@ -203,6 +203,16 @@ int32_t Send_Event_Data_To_Cache_By_Type(uint16_t event_class, void *p_act_val);
 
 void Event_Data_Deal_Loop(void *parameter);
 
+void Send_Inv_OnOff_Event_Data(EventTime start_time, EventTime end_time, uint8_t  ctrl_type, uint8_t *ctrl_result);
 
+void Send_PowerEvent_Data(EventTime start_time, EventTime end_time, uint8_t  ctrl_type, uint8_t *ctrl_result, int32_t *ctrl_value);
+
+
+
+void Send_VoltOverLimitEvent_Data(EventTime start_time, EventTime end_time,
+                                  uint16_t over_vol_a, uint16_t over_vol_b, uint16_t over_vol_c,
+                                  uint16_t recover_vol_a, uint16_t recover_vol_b, uint16_t recover_vol_c);
+
+void Send_CommErrEvent_Data(EventTime start_time, EventTime end_time, uint8_t inv_id);
 
 #endif

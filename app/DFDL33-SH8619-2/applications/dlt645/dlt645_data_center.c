@@ -150,10 +150,35 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
     //开关机事件记录
     {0x03E60101U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 36U, 1, 0, 0, dlt645_read_switch_event_record, RT_NULL, "switch event record"},
 
+    //有功功率控制次数
+    {0x03E60201U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 3U,  1, 0, 0, dlt645_read_p_ctrl_event_count,     RT_NULL, "active power ctrl event count"},
+    //有功功率控制事件
+    {0x03E60301U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 73U, 1, 0, 0, dlt645_read_power_ctrl_event_record, RT_NULL, "active power ctrl event record"},
+
+    //无功功率控制次数
+    {0x03E60401U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 3U,  1, 0, 0, dlt645_read_p_ctrl_event_count,     RT_NULL, "reactive power ctrl event count"},
+    //无功功率控制事件
+    {0x03E60501U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 73U, 1, 0, 0, dlt645_read_power_ctrl_event_record, RT_NULL, "reactive power ctrl event record"},
+
+    //功率因数事件次数
+    {0x03E60601U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 3U,  1, 0, 0, dlt645_read_power_factor_count, RT_NULL, "power factor event count"},
+    //功率因数控制事件
+    {0x03E60701U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 48U, 1, 0, 0, dlt645_read_power_factor_record,    RT_NULL, "power factor event record"},
+
+    //有功时段控制次数
+    {0x03E60801U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 3U,  1, 0, 0, dlt645_read_p_ctrl_event_count,     RT_NULL, "power period ctrl event count"},
+    //有功时段控制时间
+    {0x03E60901U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 73U, 1, 0, 0, dlt645_read_power_ctrl_event_record, RT_NULL, "power period ctrl event record"},
+
     //电压越限总次数
     {0x03E61100U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 3U, 1, 0, 0, dlt645_read_volt_over_limit_count, RT_NULL, "voltage over-limit count"},
     //电压越限事件记录
     {0x03E61101U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 24U, 1, 0, 0, dlt645_read_volt_over_limit_record, RT_NULL, "voltage over-limit record"},
+
+    //通信异常事件次数
+    {0x03E61201U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 3U,  1, 0, 0, dlt645_read_comm_err_count,     RT_NULL, "comm error event count"},
+    //通信异常事件记录
+    {0x03E61301U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 13U, 1, 0, 0, dlt645_read_comm_err_record,       RT_NULL, "comm error event record"},
 };
 
 uint8_t BCD2DEC(uint8_t ch)

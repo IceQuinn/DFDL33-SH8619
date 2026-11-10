@@ -1,0 +1,12 @@
+{
+  "contents": [
+    {
+      "parts": [
+        { "text": "Draw a simple red apple on a white background. Return the result as an image." }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "responseModalities": ["TEXT", "IMAGE"]
+  }
+}

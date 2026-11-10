@@ -21,7 +21,13 @@ typedef struct {uint16_t data_len; int write_min,write_max;} Dlt645PointTypeDef;
 #define RT_UNUSED(x) ((void)(x))
 #define rt_memset memset
 static int calls[12], failures[12], decoded[12], received[12];
+static int archive_valid[12]; /* 模拟档案有效标志，全控时无档案槽位应被直接跳过。 */
 static const uint8_t *input;
+typedef int Inv_Data_t;
+static Inv_Data_t storage;
+static Inv_Data_t *Inv_Data_Get(int index) {
+    return archive_valid[index] ? &storage : RT_NULL;
+}
 static int dlt645_bcd_decode_u32(const uint8_t *p, int n, int32_t *v) {
     (void)n; decoded[p-input]++;
     if((*p & 15)>9 || (*p>>4)>9) return 1;
@@ -31,6 +37,7 @@ static int dlt645_control_run_state(int i,int v) {calls[i]++;received[i]=v;retur
 static void reset(void) {
     memset(calls,0,sizeof(calls));memset(failures,0,sizeof(failures));
     memset(decoded,0,sizeof(decoded));memset(received,0,sizeof(received));
+    for(int i=0;i<12;i++) archive_valid[i]=1; /* 默认全部槽位都有档案。 */
 }
 '''
 
@@ -66,6 +73,18 @@ int main(void) {
     assert(dlt645_write_run_state(&p,0x04E60403,data,1,0,0,&len)==0);
     assert(calls[2] && received[2]==1 && !calls[0] && len==0);
     reset();data[0]=2;
+    assert(dlt645_write_run_state(&p,0x04E60403,data,1,0,0,&len)!=0);
+    assert(!calls[2] && len==0);
+    /* 全控新增规则：无档案槽位下发任意值都不处理，645仍返回正常。 */
+    reset(); memset(data,2,12); archive_valid[4]=0; archive_valid[10]=0;
+    assert(dlt645_write_run_state(&p,0x04E604FF,data,12,0,0,&len)==0);
+    assert(!decoded[4] && !decoded[10] && !calls[4] && !calls[10]);
+    assert(calls[0]==0 && len==0); /* 有档案槽位的非法值仍不执行。 */
+    reset(); data[4]=0xFA; archive_valid[4]=0;
+    assert(dlt645_write_run_state(&p,0x04E604FF,data,12,0,0,&len)==0);
+    assert(!decoded[4] && !calls[4] && calls[0] && len==0);
+    /* 单台写指向空档案时必须保持原有错误语义。 */
+    reset(); archive_valid[2]=0; data[0]=1;
     assert(dlt645_write_run_state(&p,0x04E60403,data,1,0,0,&len)!=0);
     assert(!calls[2] && len==0);
     return 0;

@@ -1548,6 +1548,13 @@ rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point, uint32_t id,
     {
         return -RT_EINVAL;
     }
+
+    //开始时间：函数开始时间
+    //调控类型commands.periods[i].mode
+    //调控值commands.periods[i].value
+    //调控结果has_error
+    //结束时间：函数结束时间
+
     RT_UNUSED(response); /* 时段计划写入使用标准无数据写应答。 */
     RT_UNUSED(response_capacity);
     *response_len = 0U; /* 明确通知分发层不要生成逐台状态数据域。 */
@@ -1693,7 +1700,7 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
     {
         return -RT_EINVAL;
     }
-
+    //开始时间
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
         if((dlt645_bcd_decode_u32(&data[archive_offset], point->data_len, &values[archive_offset]) != RT_EOK) ||
@@ -1712,7 +1719,9 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
         }
     }
 
-
+    //控制类型values[archive_offset]
+    //控制结果all_success[]
+    //结束时间
     return (all_success == RT_TRUE) ? RT_EOK : -RT_ERROR; /* 仅全部12台或目标单台成功时正常应答。 */
 }
 
@@ -1723,13 +1732,27 @@ static rt_err_t dlt645_encode_bcd_time(const EventTime *time, uint8_t *buf, uint
     if ((time == RT_NULL) || (buf == RT_NULL) || (len < 6U)) {
         return -RT_EINVAL;
     }
-    buf[0] = (((time->year / 10U) % 10U) << 4) | (time->year % 10U);
-    buf[1] = (((time->month / 10U) % 10U) << 4) | (time->month % 10U);
-    buf[2] = (((time->day / 10U) % 10U) << 4) | (time->day % 10U);
-    buf[3] = (((time->hour / 10U) % 10U) << 4) | (time->hour % 10U);
-    buf[4] = (((time->minute / 10U) % 10U) << 4) | (time->minute % 10U);
-    buf[5] = (((time->second / 10U) % 10U) << 4) | (time->second % 10U);
+    buf[5] = (((time->year / 10U) % 10U) << 4) | (time->year % 10U);
+    buf[4] = (((time->month / 10U) % 10U) << 4) | (time->month % 10U);
+    buf[3] = (((time->day / 10U) % 10U) << 4) | (time->day % 10U);
+    buf[2] = (((time->hour / 10U) % 10U) << 4) | (time->hour % 10U);
+    buf[1] = (((time->minute / 10U) % 10U) << 4) | (time->minute % 10U);
+    buf[0] = (((time->second / 10U) % 10U) << 4) | (time->second % 10U);
     return RT_EOK;
+}
+
+// 16位二进制转BCD
+uint16_t bin_to_bcd(uint16_t bin)
+{
+    uint16_t bcd = 0;
+    uint8_t shift = 0;
+
+    while (bin > 0) {
+        bcd |= (bin % 10) << shift;
+        bin /= 10;
+        shift += 4;
+    }
+    return bcd;
 }
 
 extern struct Event_Management_Str Event_Management[EVT_CLASS_MAX_];
@@ -1745,7 +1768,7 @@ rt_err_t dlt645_read_switch_event_count(const Dlt645PointTypeDef *point, uint32_
     uint32_t count;
     uint8_t i;
 
-    if ((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) || (capacity < 3U)) {
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) || (capacity < 3U)){
         return -RT_EINVAL;
     }
 
@@ -1755,24 +1778,24 @@ rt_err_t dlt645_read_switch_event_count(const Dlt645PointTypeDef *point, uint32_
 
     inv_idx = id & 0xFF; /* DI0 */
 
-    if (inv_idx == 0xFF) {
+    if(inv_idx == 0xFF){
         /* 全部逆变器：返回12台×3字节BCD */
-        if (capacity < 36U) {
+        if(capacity < 36U){
             return -RT_EINVAL;
         }
-        for (i = 0; i < EVENT_MAX_INVERTER_NUM; i++) {
+        for(i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
             count = event_data_cnt[i];
             if (count > 999999U) count = 999999U;
             dlt645_encode_bcd(count, &data[i * 3], 3U, RT_FALSE);
         }
         *data_len = 36U;
-    } else if ((inv_idx >= 0x01) && (inv_idx <= 0x0C)) {
+    }else if((inv_idx >= 0x01) && (inv_idx <= 0x0C)){
         /* 单台逆变器 */
         count = event_data_cnt[inv_idx - 1];
         if (count > 999999U) count = 999999U;
         dlt645_encode_bcd(count, data, 3U, RT_FALSE);
         *data_len = 3U;
-    } else {
+    }else{
         return -RT_EINVAL;
     }
 
@@ -1794,26 +1817,26 @@ rt_err_t dlt645_read_switch_event_record(const Dlt645PointTypeDef *point, uint32
     uint8_t i;
 
     /* 参数检查 */
-    if ((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) || (capacity < 36U)) {
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) || (capacity < 36U)){
         return -RT_EINVAL;
     }
 
     req_seq = (uint8_t)(id & 0xFF);
-    if ((req_seq < 0x01U) || (req_seq > 0x32U)) {
+    if((req_seq < 0x01U) || (req_seq > 0x32U)){
         return -RT_EINVAL;
     }
 
     /* 解析环形队列 */
     p_digest = (struct Event_Digest_Str *)Event_Management[ETP_PV_INV_ONOFF_CTRL].buf;
 
-    if (p_digest->eventCnt == 0) {
+    if(p_digest->eventCnt == 0){
         /* 无事件记录，全填 0xFF */
         rt_memset(data, 0xFF, 36U);
         *data_len = 36U;
         return RT_EOK;
     }
 
-    if (req_seq > p_digest->eventCnt) {
+    if(req_seq > p_digest->eventCnt){
         /* 请求序号超出已有记录数，填 0xFF */
         rt_memset(data, 0xFF, 36U);
         *data_len = 36U;
@@ -1823,9 +1846,9 @@ rt_err_t dlt645_read_switch_event_record(const Dlt645PointTypeDef *point, uint32
     uint16_t max_cnt = Event_Management[ETP_PV_INV_ONOFF_CTRL].Event_Max_Cnt;
     /* 计算环形缓冲区索引 */
     /* req_seq=1 表示最近一条，即 tailIdx-1 */
-    if (p_digest->tailIdx == 0) {
+    if(p_digest->tailIdx == 0){
         actual_idx = max_cnt - req_seq; /* Event_Max_Cnt = 50 */
-    } else {
+    }else{
         actual_idx = p_digest->tailIdx - req_seq;
     }
     /* 确保不越界 */
@@ -1842,25 +1865,25 @@ rt_err_t dlt645_read_switch_event_record(const Dlt645PointTypeDef *point, uint32
     rt_memset(p, 0x00, 36U);
 
     /* 发生时刻 (6字节 BCD) */
-    if (dlt645_encode_bcd_time(&p_record->start_time, p, 6U) != RT_EOK) {
+    if(dlt645_encode_bcd_time(&p_record->start_time, p, 6U) != RT_EOK){
         rt_memset(p, 0xFF, 6U);
     }
     p += 6;
 
     /* 结束时刻 (6字节 BCD) */
-    if (dlt645_encode_bcd_time(&p_record->end_time, p, 6U) != RT_EOK) {
+    if(dlt645_encode_bcd_time(&p_record->end_time, p, 6U) != RT_EOK){
         rt_memset(p, 0xFF, 6U);
     }
     p += 6;
 
     /* 事件类型 (12字节) */
-    for (i = 0; i < EVENT_MAX_INVERTER_NUM; i++) {
+    for(i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
         p[i] = p_record->event_type[i];
     }
     p += 12;
 
     /* 调控结果 (12字节) */
-    for (i = 0; i < EVENT_MAX_INVERTER_NUM; i++) {
+    for(i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
         p[i] = p_record->control_result[i];
     }
 
@@ -1868,8 +1891,423 @@ rt_err_t dlt645_read_switch_event_record(const Dlt645PointTypeDef *point, uint32
     return RT_EOK;
 }
 
+/**
+ * @brief 通用：从 Event_Management 中获取指定事件类的摘要指针
+ */
+static inline struct Event_Digest_Str *
+_get_evt_digest(uint16_t event_class)
+{
+    if(event_class >= EVT_CLASS_MAX_)
+    {
+        return RT_NULL;
+    }
+    return (struct Event_Digest_Str *)Event_Management[event_class].buf;
+}
 
+/**
+ * @brief 通用：计算环形缓冲区中第 req_seq 条记录的实际索引
+ * @param digest  事件摘要
+ * @param req_seq 请求序号（1-based，1=最近一次）
+ * @return 实际数组下标
+ */
+static uint16_t _calc_ring_idx(struct Event_Digest_Str *digest, uint8_t req_seq, uint16_t max_cnt)
+{
+    uint16_t idx;
+    if(digest->tailIdx == 0)
+    {
+        idx = max_cnt - req_seq;
+    }
+    else
+    {
+        idx = digest->tailIdx - req_seq;
+    }
+    return idx % max_cnt;
+}
 
+/**
+ * @brief 通用：检查请求序号合法性，无记录/超序号时填FF并返回RT_EOK
+ * @param digest    事件摘要
+ * @param req_seq   请求序号（1-based，1=最近一次）
+ * @param max_cnt   该类事件的最大存储条数
+ * @param data      输出缓冲区
+ * @param capacity  输出缓冲区大小（填FF时用）
+ * @param data_len  输出数据长度
+ */
+static rt_err_t _check_req_seq(struct Event_Digest_Str *digest, uint8_t req_seq,
+                               uint16_t max_cnt,
+                               uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    /* 范围检查：1 ~ max_cnt */
+    if((req_seq < 0x01U) || (req_seq > max_cnt))
+    {
+        return -RT_EINVAL;
+    }
+
+    /* 无记录 或 序号超过当前已存条数 → 填FF，正常应答 */
+    if((digest->eventCnt == 0) || (req_seq > digest->eventCnt))
+    {
+        rt_memset(data, 0xFF, capacity);
+        *data_len = capacity;
+        return RT_EOK;
+    }
+
+    return RT_EOK;  /* 检查通过，调用者继续处理 */
+}
+
+/* 功率控制事件总次数（DI1=02，DI0=01~0C/FF） */
+rt_err_t dlt645_read_p_ctrl_event_count(const Dlt645PointTypeDef *point, uint32_t id,
+                                        uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint8_t  inv_idx;
+    uint8_t  evt_class;
+    uint8_t *p_cnt_base;
+    uint16_t cnt;
+    uint8_t  i;
+
+    (void)point;  /* 当前未使用 */
+
+    /* ---------- 参数检查 ---------- */
+    inv_idx = id & 0xFF;
+    if((data == RT_NULL) || (data_len == RT_NULL))
+    {
+        return -RT_EINVAL;
+    }
+    if(inv_idx == 0xFF)
+    {
+        if(capacity < (EVENT_MAX_INVERTER_NUM * 3U)) return -RT_EINVAL;
+    }
+    else
+    {
+        if(capacity < 3U) return -RT_EINVAL;
+    }
+
+    /* ---------- 确定事件类型 ---------- */
+    evt_class = ETP_PV_INV_P_CTRL;  /* 默认有功 */
+
+    uint8_t di1 = (id >> 8) & 0xFF;
+    if(di1 == 0x04)
+    {
+        evt_class = ETP_PV_INV_Q_CTRL;
+    }
+    else if (di1 == 0x08)
+    {
+        evt_class = ETP_PV_INV_P_PERIOD_CTRL;
+    }
+
+    /* ---------- 取计数器基址 ---------- */
+    p_cnt_base = &Event_Management[evt_class].buf[
+                   sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str)];
+
+    if(inv_idx == 0xFF)
+    {
+        /* 读所有逆变器计数 */
+        for(i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
+            cnt = (uint16_t)(p_cnt_base[i * 2] | (p_cnt_base[i * 2 + 1] << 8));
+            dlt645_encode_bcd(cnt, &data[i * 3], 3U, RT_FALSE);
+        }
+        *data_len = EVENT_MAX_INVERTER_NUM * 3U;
+    }
+    else if((inv_idx >= 0x01) && (inv_idx <= EVENT_MAX_INVERTER_NUM))
+    {
+        /* 读单个逆变器计数 */
+        uint8_t offset = (inv_idx - 1) * 2;
+        cnt = (uint16_t)(p_cnt_base[offset] | (p_cnt_base[offset + 1] << 8));
+        dlt645_encode_bcd(cnt, data, 3U, RT_FALSE);
+        *data_len = 3U;
+    }
+    else
+    {
+        return -RT_EINVAL;
+    }
+
+    return RT_EOK;
+}
+
+//功率控制事件
+rt_err_t dlt645_read_power_ctrl_event_record(const Dlt645PointTypeDef *point, uint32_t id,
+                                             uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint8_t  req_seq;
+    uint8_t  di1;
+    uint8_t  evt_class;
+    uint16_t actual_idx;
+    uint16_t max_cnt;
+    struct Event_Digest_Str *p_digest;
+    PowerControlEvent_t *p_record;
+    uint8_t *p_base;
+    uint8_t *p;
+    uint8_t  i;
+    rt_err_t ret;
+
+    /* ---------- 参数检查 ---------- */
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) || (capacity < 73U))
+    {
+        return -RT_EINVAL;
+    }
+
+    /* ---------- 解析请求序号和事件子类 ---------- */
+    req_seq = (uint8_t)(id & 0xFF);
+    di1     = (id >> 8) & 0xFF;
+
+    /* 根据 DI1 确定事件类型 */
+    evt_class = ETP_PV_INV_P_CTRL;       /* 默认：有功控制 */
+    if(di1 == 0x04)
+    {
+        evt_class = ETP_PV_INV_Q_CTRL;   /* 无功控制 */
+    }
+    else if(di1 == 0x08)
+    {
+        evt_class = ETP_PV_INV_P_PERIOD_CTRL; /* 有功时段控制 */
+    }
+
+    /* ---------- 获取摘要指针 ---------- */
+    p_digest = _get_evt_digest(evt_class);
+    if(p_digest == RT_NULL)
+    {
+        return -RT_EINVAL;
+    }
+
+    /* ---------- 序号合法性检查 ---------- */
+    max_cnt = Event_Management[evt_class].Event_Max_Cnt;
+
+    ret = _check_req_seq(p_digest, req_seq, max_cnt, data, 73U, data_len);
+    if(ret != RT_EOK)
+    {
+        return ret;  /* 范围非法，返回错误 */
+    }
+    /* 无记录或超序号：_check_req_seq 已填全 FF，直接返回成功 */
+    if((p_digest->eventCnt == 0) || (req_seq > p_digest->eventCnt))
+    {
+        return RT_EOK;
+    }
+
+    /* ---------- 计算环形索引 ---------- */
+    actual_idx = _calc_ring_idx(p_digest, req_seq, max_cnt);
+
+    /* ---------- 定位记录数据基址 ---------- */
+    p_base = &Event_Management[evt_class].buf[
+                sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str) + 24];
+
+    p_record = (PowerControlEvent_t *)(p_base + actual_idx * sizeof(PowerControlEvent_t));
+
+    /* ---------- 组包应答数据（73字节） ---------- */
+    p = data;
+    rt_memset(p, 0x00, 73U);
+
+    /* 发生时刻 (6字节 BCD) */
+    if(dlt645_encode_bcd_time(&p_record->start_time, p, 6U) != RT_EOK)
+    {
+        rt_memset(p, 0xFF, 6U);
+    }
+    p += 6;
+
+    /* 结束时刻 (6字节 BCD) */
+    if(dlt645_encode_bcd_time(&p_record->end_time, p, 6U) != RT_EOK)
+    {
+        rt_memset(p, 0xFF, 6U);
+    }
+    p += 6;
+
+    /* 事件类型 (1字节) */
+    *p++ = p_record->event_type;
+
+    /* 调控结果 (12字节) */
+    for(i = 0; i < EVENT_MAX_INVERTER_NUM; i++)
+    {
+        p[i] = p_record->control_result[i];
+    }
+    p += 12;
+
+    /* 调控值 (12×4=48字节，int32_t 小端) */
+//    for (i = 0; i < EVENT_MAX_INVERTER_NUM; i++) {
+//        p[0] = (uint8_t)(p_record->control_value[i] & 0xFF);
+//        p[1] = (uint8_t)((p_record->control_value[i] >> 8) & 0xFF);
+//        p[2] = (uint8_t)((p_record->control_value[i] >> 16) & 0xFF);
+//        p[3] = (uint8_t)((p_record->control_value[i] >> 24) & 0xFF);
+//        p += 4;
+//    }
+    for(i = 0; i < EVENT_MAX_INVERTER_NUM; i++)
+    {
+        uint8_t *vp = p + i * 4;
+        if(dlt645_encode_bcd(p_record->control_value[i], vp, 4U, RT_TRUE) != RT_EOK)
+        {
+            rt_memset(vp, 0xFF, 4U);
+        }
+    }
+    p += 48;
+
+    *data_len = 73U;
+    return RT_EOK;
+}
+
+/**
+ * @brief 功率因数越限事件总次数读取
+ * @note  数据标识: 0x03E61301, 掩码 0xFFFFFF00
+ *        DI0=0x01~0x0C: 指定逆变器次数 (3字节BCD)
+ *        DI0=0xFF:       所有逆变器次数 (36字节BCD)
+ */
+rt_err_t dlt645_read_power_factor_count(const Dlt645PointTypeDef *point, uint32_t id,
+                                        uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint8_t  sub_idx;
+    uint8_t  evt_class;
+    uint8_t *p_cnt_base;
+    uint16_t cnt;
+    uint8_t  i;
+
+    (void)point;
+
+    /* ---------- 参数检查 ---------- */
+    sub_idx = id & 0xFF;
+    if((data == RT_NULL) || (data_len == RT_NULL))
+    {
+        return -RT_EINVAL;
+    }
+
+    if(sub_idx == 0xFF)
+    {
+        if(capacity < (EVENT_MAX_INVERTER_NUM * 3U)) return -RT_EINVAL;
+    }
+    else
+    {
+        if(capacity < 3U) return -RT_EINVAL;
+    }
+
+    /* ---------- 取计数器基址 ---------- */
+    evt_class = ETP_PV_INV_PF_CTRL;
+    p_cnt_base = &Event_Management[evt_class].buf[
+                   sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str)];
+
+    if(sub_idx == 0xFF)
+    {
+        /* 读所有逆变器 */
+        for(i = 0; i < EVENT_MAX_INVERTER_NUM; i++)
+        {
+            /* uint8_t* 逐字节拼 uint16_t */
+            cnt = (uint16_t)(p_cnt_base[i * 2] | (p_cnt_base[i * 2 + 1] << 8));
+            dlt645_encode_bcd(cnt, &data[i * 3], 3U, RT_FALSE);
+        }
+        *data_len = EVENT_MAX_INVERTER_NUM * 3U;  /* 12×3 = 36字节 */
+    }
+    else if((sub_idx >= 0x01) && (sub_idx <= EVENT_MAX_INVERTER_NUM))
+    {
+        /* 读指定逆变器 */
+        uint8_t offset = (sub_idx - 1) * 2;
+        cnt = (uint16_t)(p_cnt_base[offset] | (p_cnt_base[offset + 1] << 8));
+        dlt645_encode_bcd(cnt, data, 3U, RT_FALSE);
+        *data_len = 3U;
+    }
+    else
+    {
+        return -RT_EINVAL;
+    }
+
+    return RT_EOK;
+}
+
+/**
+ * @brief 功率因数越限事件第N条记录读取
+ * @note  数据标识: 0x03E61302, 掩码 0xFFFFFF00, DI0=seq(1~50)
+ *        输出48字节: 起始时间(6) + 结束时间(6) + 调控结果(12) + 调控值(24)
+ */
+rt_err_t dlt645_read_power_factor_record(const Dlt645PointTypeDef *point, uint32_t id,
+                                         uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint8_t  req_seq;
+    uint16_t actual_idx;
+    uint16_t max_cnt;
+    uint8_t  evt_class;
+    struct Event_Digest_Str *p_digest;
+    PowerFactorEvent_t *p_record;
+    uint8_t *p_base;
+    uint8_t *p;
+    uint8_t  i;
+    rt_err_t ret;
+
+    /* ---------- 参数检查 ---------- */
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) || (capacity < 48U))
+    {
+        return -RT_EINVAL;
+    }
+
+    /* ---------- 解析请求序号 ---------- */
+    req_seq = (uint8_t)(id & 0xFF);
+    evt_class = ETP_PV_INV_PF_CTRL;
+
+    /* ---------- 获取摘要指针 ---------- */
+    p_digest = _get_evt_digest(evt_class);
+    if(p_digest == RT_NULL)
+    {
+        return -RT_EINVAL;
+    }
+
+    /* ---------- 序号合法性检查 ---------- */
+    max_cnt = Event_Management[evt_class].Event_Max_Cnt;
+
+    ret = _check_req_seq(p_digest, req_seq, max_cnt, data, 48U, data_len);
+    if(ret != RT_EOK)
+    {
+        return ret;
+    }
+    if((p_digest->eventCnt == 0) || (req_seq > p_digest->eventCnt))
+    {
+        return RT_EOK;
+    }
+
+    /* ---------- 计算环形索引 ---------- */
+    actual_idx = _calc_ring_idx(p_digest, req_seq, max_cnt);
+
+    /* ---------- 定位记录数据基址 ---------- */
+    /* buf布局: Event_Digest_Str + Event_Desc_Str + pf_event_cnt[12](24字节) + 记录数组 */
+    p_base = &Event_Management[evt_class].buf[
+                sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str) + 24];
+
+    p_record = (PowerFactorEvent_t *)(p_base + actual_idx * sizeof(PowerFactorEvent_t));
+
+    /* ---------- 组包应答数据（48字节） ---------- */
+    p = data;
+    rt_memset(p, 0x00, 48U);
+
+    /* 起始时间 (6字节 BCD) */
+    if(dlt645_encode_bcd_time(&p_record->start_time, p, 6U) != RT_EOK)
+    {
+        rt_memset(p, 0xFF, 6U);
+    }
+    p += 6;
+
+    /* 结束时间 (6字节 BCD) */
+    if(dlt645_encode_bcd_time(&p_record->end_time, p, 6U) != RT_EOK)
+    {
+        rt_memset(p, 0xFF, 6U);
+    }
+    p += 6;
+
+    /* 调控结果 (12字节, 逐台逆变器) */
+    for(i = 0; i < EVENT_MAX_INVERTER_NUM; i++)
+    {
+        p[i] = p_record->control_result[i];
+    }
+    p += 12;
+
+    /* 调控值 (12×2=24字节, int16_t 小端) */
+//    for (i = 0; i < EVENT_MAX_INVERTER_NUM; i++) {
+//        p[0] = (uint8_t)(p_record->inv_values[i] & 0xFF);
+//        p[1] = (uint8_t)((p_record->inv_values[i] >> 8) & 0xFF);
+//        p += 2;
+//    }
+    for(i = 0; i < EVENT_MAX_INVERTER_NUM; i++)
+    {
+        uint8_t *vp = p + i * 2;
+        if(dlt645_encode_bcd((int32_t)p_record->inv_values[i], vp, 2U, RT_TRUE) != RT_EOK)
+        {
+            vp[0] = 0xFF; vp[1] = 0xFF;
+        }
+    }
+    p += 24;
+
+    *data_len = 48U;
+    return RT_EOK;
+}
 
 /**
  * @brief 读取电压越限事件总次数（数据标识 03E61100）
@@ -1881,22 +2319,23 @@ rt_err_t dlt645_read_volt_over_limit_count(const Dlt645PointTypeDef *point, uint
     uint16_t *p_cnt;
     uint32_t count;
 
-    if ((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
-        (capacity < 3U)) {
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) || (capacity < 3U))
+    {
         return -RT_EINVAL;
     }
 
     /* 获取计数指针：buf[24] 处，uint16_t */
-    p_cnt = (uint16_t *)&Event_Management[ETP_VOLT_OVER_LIMIT].buf[
-                sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str)];
+    p_cnt = (uint16_t *)&Event_Management[ETP_VOLT_OVER_LIMIT].buf[sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str)];
 
     count = *p_cnt;
-    if (count > 999999U) {
+    if(count > 999999U)
+    {
         count = 999999U;   /* BCD 最大 999999 */
     }
 
     /* 编码为 3 字节压缩 BCD */
-    if (dlt645_encode_bcd(count, data, 3U, RT_FALSE) != RT_EOK) {
+    if(dlt645_encode_bcd(count, data, 3U, RT_FALSE) != RT_EOK)
+    {
         return -RT_EINVAL;
     }
 
@@ -1918,26 +2357,29 @@ rt_err_t dlt645_read_volt_over_limit_record(const Dlt645PointTypeDef *point, uin
     uint8_t *p_base;
     uint8_t *p;
 
-    if ((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
-        (capacity < 24U)) {
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) || (capacity < 24U))
+    {
         return -RT_EINVAL;
     }
 
     req_seq = (uint8_t)(id & 0xFF);
-    if ((req_seq < 0x01U) || (req_seq > 0x32U)) {
+    if((req_seq < 0x01U) || (req_seq > 0x32U))
+    {
         return -RT_EINVAL;
     }
 
     /* 解析环形队列摘要 */
     p_digest = (struct Event_Digest_Str *)Event_Management[ETP_VOLT_OVER_LIMIT].buf;
 
-    if (p_digest->eventCnt == 0) {
+    if(p_digest->eventCnt == 0)
+    {
         rt_memset(data, 0xFF, 24U);
         *data_len = 24U;
         return RT_EOK;
     }
 
-    if (req_seq > p_digest->eventCnt) {
+    if(req_seq > p_digest->eventCnt)
+    {
         rt_memset(data, 0xFF, 24U);
         *data_len = 24U;
         return RT_EOK;
@@ -1946,16 +2388,18 @@ rt_err_t dlt645_read_volt_over_limit_record(const Dlt645PointTypeDef *point, uin
     uint16_t max_cnt = Event_Management[ETP_VOLT_OVER_LIMIT].Event_Max_Cnt;
 
     /* 计算环形缓冲区索引 */
-    if (p_digest->tailIdx == 0) {
+    if(p_digest->tailIdx == 0)
+    {
         actual_idx = max_cnt - req_seq;
-    } else {
+    }
+    else
+    {
         actual_idx = p_digest->tailIdx - req_seq;
     }
     actual_idx %= EVENT_MAX_DATE_NUM_50;
 
     /* 定位记录数据 */
-    p_base = &Event_Management[ETP_VOLT_OVER_LIMIT].buf[
-                sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str) + 2];
+    p_base = &Event_Management[ETP_VOLT_OVER_LIMIT].buf[sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str) + 2];
     p_record = (VoltageOverLimit_t *)(p_base + actual_idx * sizeof(VoltageOverLimit_t));
 
     /* 编码24字节数据 */
@@ -1963,21 +2407,28 @@ rt_err_t dlt645_read_volt_over_limit_record(const Dlt645PointTypeDef *point, uin
     rt_memset(p, 0x00, 24U);
 
     /* 发生时刻 (6字节 BCD) */
-    if (dlt645_encode_bcd_time(&p_record->start_time, p, 6U) != RT_EOK) {
+    if(dlt645_encode_bcd_time(&p_record->start_time, p, 6U) != RT_EOK)
+    {
         rt_memset(p, 0xFF, 6U);
     }
     p += 6U;
 
     /* 结束时刻 (6字节 BCD) */
-    if (dlt645_encode_bcd_time(&p_record->end_time, p, 6U) != RT_EOK) {
+    if(dlt645_encode_bcd_time(&p_record->end_time, p, 6U) != RT_EOK)
+    {
         rt_memset(p, 0xFF, 6U);
     }
     p += 6U;
 
     /* 越限电压 A/B/C (A相正常，B/C相填0xFF) */
     /* A相：2字节 */
-    p[0] = (uint8_t)(p_record->over_limit_vol_a & 0xFF);
-    p[1] = (uint8_t)((p_record->over_limit_vol_a >> 8) & 0xFF);
+//    uint16_t over_a_bcd = bin_to_bcd(p_record->over_limit_vol_a);
+//    p[0] = (uint8_t)(over_a_bcd & 0xFF);
+//    p[1] = (uint8_t)((over_a_bcd >> 8) & 0xFF);
+    if(dlt645_encode_bcd(p_record->over_limit_vol_a, p, 2U, RT_FALSE) != RT_EOK)
+    {
+        p[0] = 0xFF; p[1] = 0xFF;
+    }
     /* B相：未配置，2字节全FF */
     p[2] = 0xFF;
     p[3] = 0xFF;
@@ -1988,8 +2439,13 @@ rt_err_t dlt645_read_volt_over_limit_record(const Dlt645PointTypeDef *point, uin
 
     /* 恢复电压 A/B/C (A相正常，B/C相填0xFF) */
     /* A相：2字节 */
-    p[0] = (uint8_t)(p_record->recover_vol_a & 0xFF);
-    p[1] = (uint8_t)((p_record->recover_vol_a >> 8) & 0xFF);
+//    uint16_t rec_a_bcd = bin_to_bcd(p_record->recover_vol_a);
+//    p[0] = (uint8_t)(rec_a_bcd & 0xFF);
+//    p[1] = (uint8_t)((rec_a_bcd >> 8) & 0xFF);
+    if(dlt645_encode_bcd(p_record->recover_vol_a, p, 2U, RT_FALSE) != RT_EOK)
+    {
+        p[0] = 0xFF; p[1] = 0xFF;
+    }
     /* B相：未配置，2字节全FF */
     p[2] = 0xFF;
     p[3] = 0xFF;
@@ -1998,6 +2454,151 @@ rt_err_t dlt645_read_volt_over_limit_record(const Dlt645PointTypeDef *point, uin
     p[5] = 0xFF;
 
     *data_len = 24U;
+    return RT_EOK;
+}
+
+/**
+ * @brief 通信异常事件总次数读取
+ * @note  数据标识: 0x03E61501, 掩码 0xFFFFFF00
+ *        DI0=0x01~0x0C: 指定逆变器次数 (3字节BCD)
+ *        DI0=0xFF:       所有逆变器次数 (36字节BCD)
+ */
+rt_err_t dlt645_read_comm_err_count(const Dlt645PointTypeDef *point, uint32_t id,
+                                    uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint8_t  sub_idx;
+    uint8_t  evt_class;
+    uint8_t *p_cnt_base;
+    uint16_t cnt;
+    uint8_t  i;
+
+    (void)point;
+
+    /* ---------- 参数检查 ---------- */
+    sub_idx = id & 0xFF;
+    if((data == RT_NULL) || (data_len == RT_NULL))
+    {
+        return -RT_EINVAL;
+    }
+
+    if(sub_idx == 0xFF)
+    {
+        if(capacity < (EVENT_MAX_INVERTER_NUM * 3U)) return -RT_EINVAL;
+    }
+    else
+    {
+        if(capacity < 3U) return -RT_EINVAL;
+    }
+
+    /* ---------- 取计数器基址 ---------- */
+    evt_class = ETP_PV_INV_COMM_ERR;
+    p_cnt_base = &Event_Management[evt_class].buf[sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str)];
+
+    if(sub_idx == 0xFF)
+    {
+        /* 读所有逆变器 */
+        for(i = 0; i < EVENT_MAX_INVERTER_NUM; i++)
+        {
+            cnt = (uint16_t)(p_cnt_base[i * 2] | (p_cnt_base[i * 2 + 1] << 8));
+            dlt645_encode_bcd(cnt, &data[i * 3], 3U, RT_FALSE);
+        }
+        *data_len = EVENT_MAX_INVERTER_NUM * 3U;  /* 12×3 = 36字节 */
+    }
+    else if((sub_idx >= 0x01) && (sub_idx <= EVENT_MAX_INVERTER_NUM))
+    {
+        /* 读指定逆变器 */
+        uint8_t offset = (sub_idx - 1) * 2;
+        cnt = (uint16_t)(p_cnt_base[offset] | (p_cnt_base[offset + 1] << 8));
+        dlt645_encode_bcd(cnt, data, 3U, RT_FALSE);
+        *data_len = 3U;
+    }
+    else
+    {
+        return -RT_EINVAL;
+    }
+
+    return RT_EOK;
+}
+
+/**
+ * @brief 通信异常事件第N条记录读取
+ * @note  数据标识: 0x03E61502, 掩码 0xFFFFFF00, DI0=seq(1~50)
+ *        输出13字节: 起始时间(6) + 结束时间(6) + 逆变器ID(1)
+ */
+rt_err_t dlt645_read_comm_err_record(const Dlt645PointTypeDef *point, uint32_t id,
+                                     uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint8_t  req_seq;
+    uint16_t actual_idx;
+    uint16_t max_cnt;
+    uint8_t  evt_class;
+    struct Event_Digest_Str *p_digest;
+    CommErrEvent_t *p_record;
+    uint8_t *p_base;
+    uint8_t *p;
+    rt_err_t ret;
+
+    /* ---------- 参数检查 ---------- */
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) || (capacity < 13U))
+    {
+        return -RT_EINVAL;
+    }
+
+    /* ---------- 解析请求序号 ---------- */
+    req_seq = (uint8_t)(id & 0xFF);
+    evt_class = ETP_PV_INV_COMM_ERR;
+
+    /* ---------- 获取摘要指针 ---------- */
+    p_digest = _get_evt_digest(evt_class);
+    if(p_digest == RT_NULL)
+    {
+        return -RT_EINVAL;
+    }
+
+    /* ---------- 序号合法性检查 ---------- */
+    max_cnt = Event_Management[evt_class].Event_Max_Cnt;
+
+    ret = _check_req_seq(p_digest, req_seq, max_cnt, data, 13U, data_len);
+    if(ret != RT_EOK)
+    {
+        return ret;
+    }
+    if((p_digest->eventCnt == 0) || (req_seq > p_digest->eventCnt))
+    {
+        return RT_EOK;
+    }
+
+    /* ---------- 计算环形索引 ---------- */
+    actual_idx = _calc_ring_idx(p_digest, req_seq, max_cnt);
+
+    /* ---------- 定位记录数据基址 ---------- */
+    /* buf布局: Event_Digest_Str + Event_Desc_Str + comm_err_event_cnt[12](24字节) + 记录数组 */
+    p_base = &Event_Management[evt_class].buf[sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str) + 24];
+
+    p_record = (CommErrEvent_t *)(p_base + actual_idx * sizeof(CommErrEvent_t));
+
+    /* ---------- 组包应答数据（13字节） ---------- */
+    p = data;
+    rt_memset(p, 0x00, 13U);
+
+    /* 起始时间 (6字节 BCD) */
+    if(dlt645_encode_bcd_time(&p_record->start_time, p, 6U) != RT_EOK)
+    {
+        rt_memset(p, 0xFF, 6U);
+    }
+    p += 6;
+
+    /* 结束时间 (6字节 BCD) */
+    if(dlt645_encode_bcd_time(&p_record->end_time, p, 6U) != RT_EOK)
+    {
+        rt_memset(p, 0xFF, 6U);
+    }
+    p += 6;
+
+    /* 逆变器ID (1字节) */
+    *p++ = p_record->inv_id;
+
+    *data_len = 13U;
     return RT_EOK;
 }
 

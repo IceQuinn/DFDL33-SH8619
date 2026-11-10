@@ -1,0 +1,25 @@
+#ifndef __VOLTAGE_ACQ_H__
+#define __VOLTAGE_ACQ_H__
+
+#include <rtthread.h>
+#include <rtdevice.h>
+#include <board.h>
+#include "at32f403a_407.h"
+#include <math.h>
+
+#define VOL_IDLE_MS          100
+
+extern uint16_t g_voltage_rms;
+
+uint16_t getvoltage_rms(void);
+
+/* 提交电压校准请求并立即返回，实际校准系数计算与配置保存由采集线程稍后完成。 */
+void voltage_calibration(void);
+
+int  voltage_acq_init(void);
+void start_voltage_sampling(void);
+float calculate_rms(uint16_t *buf, uint8_t len);
+void voltage_acq_thread_entry(void *param);
+
+#endif
+
