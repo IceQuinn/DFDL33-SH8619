@@ -228,10 +228,28 @@ rt_err_t dlt645_read_switch_event_count(const Dlt645PointTypeDef *point, uint32_
 rt_err_t dlt645_read_switch_event_record(const Dlt645PointTypeDef *point, uint32_t id,
                                          uint8_t *data, uint16_t capacity, uint16_t *data_len);
 
+rt_err_t dlt645_read_p_ctrl_event_count(const Dlt645PointTypeDef *point, uint32_t id,
+                                        uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
+rt_err_t dlt645_read_power_ctrl_event_record(const Dlt645PointTypeDef *point, uint32_t id,
+                                             uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
+rt_err_t dlt645_read_power_factor_count(const Dlt645PointTypeDef *point, uint32_t id,
+                                        uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
+rt_err_t dlt645_read_power_factor_record(const Dlt645PointTypeDef *point, uint32_t id,
+                                         uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
 rt_err_t dlt645_read_volt_over_limit_count(const Dlt645PointTypeDef *point, uint32_t id,
                                            uint8_t *data, uint16_t capacity, uint16_t *data_len);
 
 rt_err_t dlt645_read_volt_over_limit_record(const Dlt645PointTypeDef *point, uint32_t id,
                                             uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
+rt_err_t dlt645_read_comm_err_count(const Dlt645PointTypeDef *point, uint32_t id,
+                                    uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
+rt_err_t dlt645_read_comm_err_record(const Dlt645PointTypeDef *point, uint32_t id,
+                                     uint8_t *data, uint16_t capacity, uint16_t *data_len);
 
 #endif /* __DLT645_DATA_API_H__ */
