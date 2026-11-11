@@ -1478,8 +1478,8 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
         return -RT_ERROR;
     }
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset) {
-        if((response[archive_offset] != DLT645_CONTROL_STATUS_SUCCESS) &&
-           (response[archive_offset] != DLT645_CONTROL_STATUS_NOT_CONTROLLED)) {
+        if((response[first_archive + archive_offset] != DLT645_CONTROL_STATUS_SUCCESS) &&
+           (response[first_archive + archive_offset] != DLT645_CONTROL_STATUS_NOT_CONTROLLED)) {
             return -RT_ERROR; /* 全部执行结束后才返回失败，顶层映射为其他错误01。 */
         }
     }
@@ -1922,16 +1922,18 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
     rt_bool_t execute[INVERTER_ARCHIVE_MAX_COUNT]; /* 只有本台值合法才下发，不受其他台非法值影响。 */
     rt_bool_t all_success = RT_TRUE; /* 每个档案控制成功或FF不控制时保持为真。 */
 
-    RT_UNUSED(response); /* 运行状态沿用原有无数据写应答，不生成逐台状态数据域。 */
     RT_UNUSED(response_capacity);
-    *response_len = 0U; /* 明确通知顶层使用原有正常或异常状态应答。 */
+    *response_len = 0U; /* 逐台状态仅内部使用，不放入645应答数据域。 */
 
     first_archive = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? 0U : (uint8_t)(selector - 1U); /* DI0已由上层验证后转换为槽位下标。 */
     archive_count = (selector == DLT645_VARIABLE_ALL_SELECTOR) ? INVERTER_ARCHIVE_MAX_COUNT : 1U; /* FF要求逐个控制全部12个档案。 */
-    if(data_len != (uint16_t)(point->data_len * archive_count)) /* 单台必须1字节，全部控制必须包含12字节。 */
+    if((data_len != (uint16_t)(point->data_len * archive_count)) ||
+       (response == RT_NULL) ||
+       (response_capacity < INVERTER_ARCHIVE_MAX_COUNT)) /* 单台1字节/全部12字节，结果缓存需容纳12个槽位。 */
     {
         return -RT_EINVAL;
     }
+    rt_memset(response, DLT645_CONTROL_STATUS_OTHER, INVERTER_ARCHIVE_MAX_COUNT); /* 单控也清空全部12个槽位，避免残留旧状态。 */
 
     rt_memset(execute, 0, sizeof(execute));
     /* 单控只有一台目标，按无档案→02、有档案FF或失败→01直接返回。 */
@@ -1939,35 +1941,47 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
     {
         if(Inv_Data_Get(first_archive) == RT_NULL) /* 无档案：无论调控值是正常值还是FF都回复02无请求数据。 */
         {
+            response[first_archive] = DLT645_CONTROL_STATUS_NO_ARCHIVE;
             return -RT_EEMPTY;
         }
         if(data[0] == 0xFFU) /* 有档案但调控值为FF：按其他错误01处理且不下发。 */
         {
+            response[first_archive] = DLT645_CONTROL_STATUS_FAILED;
             return -RT_ERROR;
         }
         if((dlt645_bcd_decode_u32(&data[0], point->data_len, &values[0]) != RT_EOK) ||
            (values[0] < point->write_min) ||
            (values[0] > point->write_max)) /* 仅允许00开机、01关机。 */
         {
+            response[first_archive] = DLT645_CONTROL_STATUS_FAILED;
             return -RT_ERROR;
         }
-        return (dlt645_control_run_state(first_archive, values[0]) == RT_EOK) ? RT_EOK : -RT_ERROR; /* 下发失败同样回复01。 */
+        if(dlt645_control_run_state(first_archive, values[0]) != RT_EOK) /* 提交或设备执行失败。 */
+        {
+            response[first_archive] = DLT645_CONTROL_STATUS_FAILED;
+            return -RT_ERROR;
+        }
+        response[first_archive] = DLT645_CONTROL_STATUS_SUCCESS; /* 有档案且下发成功。 */
+        return RT_EOK;
     }
 
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
         if(data[archive_offset] == 0xFFU) /* 全控下FF表示本台不控制，不检查档案也不计为失败。 */
         {
+            response[first_archive + archive_offset] = DLT645_CONTROL_STATUS_NOT_CONTROLLED;
             continue;
         }
         if(Inv_Data_Get(first_archive + archive_offset) == RT_NULL) /* 全控下无档案槽位不关心下发值，既不校验也不下发。 */
         {
+            response[first_archive + archive_offset] = DLT645_CONTROL_STATUS_NOT_CONTROLLED;
             continue;
         }
         if((dlt645_bcd_decode_u32(&data[archive_offset], point->data_len, &values[archive_offset]) != RT_EOK) ||
            (values[archive_offset] < point->write_min) ||
            (values[archive_offset] > point->write_max)) /* 除FF不控制外，仅允许00开机、01关机。 */
         {
+            response[first_archive + archive_offset] = DLT645_CONTROL_STATUS_FAILED;
             all_success = RT_FALSE;
             continue;
         }
@@ -1976,10 +1990,15 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
 
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
-        if((execute[archive_offset] == RT_TRUE) &&
-           (dlt645_control_run_state(first_archive + archive_offset, values[archive_offset]) != RT_EOK)) /* 无效档案或控制失败不阻塞后续台，最终汇总错误。 */
+        if(execute[archive_offset] == RT_TRUE) /* 只有通过预检查的槽位才会实际下发。 */
         {
-            all_success = RT_FALSE;
+            response[first_archive + archive_offset] = (dlt645_control_run_state(first_archive + archive_offset,
+                                                                                 values[archive_offset]) == RT_EOK) ?
+                                                        DLT645_CONTROL_STATUS_SUCCESS : DLT645_CONTROL_STATUS_FAILED; /* 逐台记录下发结果。 */
+            if(response[first_archive + archive_offset] != DLT645_CONTROL_STATUS_SUCCESS) /* 控制失败不阻塞后续台，最终汇总错误。 */
+            {
+                all_success = RT_FALSE;
+            }
         }
     }
 
