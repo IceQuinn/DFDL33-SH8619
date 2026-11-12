@@ -13,6 +13,7 @@ extern "C" {
 
 /* 协议结构体在inverter_protocol_library.h中定义，这里只声明运行时指针类型。 */
 struct Inv_Proto;
+struct Inv_ProtoPreReg;
 
 #define INVERTER_ARCHIVE_MAX_COUNT          12
 #define INVERTER_ARCHIVE_BRAND_WIRE_SIZE    32
@@ -121,6 +122,9 @@ void Inv_Archive_Validate_Protocols(void);
 
 /* 按0～11档案槽位获取对应协议，槽位无效、未匹配或越界时返回NULL。 */
 const struct Inv_Proto *Inv_Archive_Get_Protocol(uint8_t archive_index);
+
+/* 按0～11档案槽位获取绑定的前置协议配置，槽位无效或未绑定时返回NULL。 */
+const struct Inv_ProtoPreReg *Inv_Archive_Get_PreReg(uint8_t archive_index);
 
 /* 指定接入端口存在有效档案时返回1，否则返回0。 */
 uint8_t Inv_Archive_Port_Is_Occupied(uint8_t port);

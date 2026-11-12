@@ -149,30 +149,58 @@ typedef struct Inv_daily_energy_Id{ // 日发电量
     Inv_RegBlk_t daily_energy;   /* 日发电量只读寄存器配置。 */
 }Inv_daily_energy_Id_t;
 // ----------------------------------------------------厂家控制类
+typedef struct Inv_pwr_on_pre_Id {                  /* 开机前置 */
+    Enum_Inv_Mfr_Id_t mfr_id;                       /* 厂家编号。 */
+    Inv_CtrlDefaultRegBlk_t pwr_on_pre;             /* 前置寄存器 + 固定使能值。 */
+} Inv_pwr_on_pre_Id_t;
 typedef struct Inv_pwr_on_Id{ // 逆变器开机控制寄存器
     Enum_Inv_Mfr_Id_t mfr_id;          /* 当前开机控制配置所属厂家编号。 */
     Inv_CtrlDefaultRegBlk_t pwr_on;     /* 开机寄存器及固定默认写入值。 */
 }Inv_pwr_on_Id_t;
+typedef struct Inv_pwr_off_pre_Id {                 /* 关机前置 */
+    Enum_Inv_Mfr_Id_t mfr_id;                       /* 厂家编号。 */
+    Inv_CtrlDefaultRegBlk_t pwr_off_pre;            /* 前置寄存器 + 固定使能值。 */
+} Inv_pwr_off_pre_Id_t;
 typedef struct Inv_pwr_off_Id{ // 逆变器关机控制寄存器
     Enum_Inv_Mfr_Id_t mfr_id;          /* 当前关机控制配置所属厂家编号。 */
     Inv_CtrlDefaultRegBlk_t pwr_off;    /* 关机寄存器及固定默认写入值。 */
 }Inv_pwr_off_Id_t;
+typedef struct Inv_active_pwr_pre_Id {              /* 有功功率数值前置 */
+    Enum_Inv_Mfr_Id_t mfr_id;                       /* 厂家编号。 */
+    Inv_CtrlDefaultRegBlk_t active_pwr_pre;         /* 前置寄存器 + 固定使能值。 */
+} Inv_active_pwr_pre_Id_t;
 typedef struct Inv_active_pwr_ctrl_Id{ // 有功功率数值控制寄存器
     Enum_Inv_Mfr_Id_t mfr_id;        /* 当前有功数值控制配置所属厂家编号。 */
     Inv_CtrlRegBlk_t active_pwr_ctrl; /* 有功功率数值写寄存器配置。 */
 }Inv_active_pwr_ctrl_Id_t;
+typedef struct Inv_reactive_pwr_pre_Id {            /* 无功功率数值前置 */
+    Enum_Inv_Mfr_Id_t mfr_id;                       /* 厂家编号。 */
+    Inv_CtrlDefaultRegBlk_t reactive_pwr_pre;       /* 前置寄存器 + 固定使能值。 */
+} Inv_reactive_pwr_pre_Id_t;
 typedef struct Inv_reactive_pwr_ctrl_Id{ // 无功功率数值控制寄存器
     Enum_Inv_Mfr_Id_t mfr_id;          /* 当前无功数值控制配置所属厂家编号。 */
     Inv_CtrlRegBlk_t reactive_pwr_ctrl; /* 无功功率数值写寄存器配置。 */
 }Inv_reactive_pwr_ctrl_Id_t;
+typedef struct Inv_pwr_factor_pre_Id {              /* 功率因数前置 */
+    Enum_Inv_Mfr_Id_t mfr_id;                       /* 厂家编号。 */
+    Inv_CtrlDefaultRegBlk_t pwr_factor_pre;         /* 前置寄存器 + 固定使能值。 */
+} Inv_pwr_factor_pre_Id_t;
 typedef struct Inv_pwr_factor_ctrl_Id{ // 功率因数控制寄存器
     Enum_Inv_Mfr_Id_t mfr_id;       /* 当前功率因数控制配置所属厂家编号。 */
     Inv_CtrlRegBlk_t pwr_factor_ctrl; /* 功率因数写寄存器配置。 */
 }Inv_pwr_factor_ctrl_Id_t;
+typedef struct Inv_active_pwr_pct_pre_Id {          /* 有功功率百分比前置 */
+    Enum_Inv_Mfr_Id_t mfr_id;                       /* 厂家编号。 */
+    Inv_CtrlDefaultRegBlk_t active_pwr_pct_pre;     /* 前置寄存器 + 固定使能值。 */
+} Inv_active_pwr_pct_pre_Id_t;
 typedef struct Inv_active_pwr_pct_ctrl_Id{ // 有功功率百分比控制寄存器
     Enum_Inv_Mfr_Id_t mfr_id;            /* 当前有功百分比控制配置所属厂家编号。 */
     Inv_CtrlRegBlk_t active_pwr_pct_ctrl; /* 有功功率百分比写寄存器配置。 */
 }Inv_active_pwr_pct_ctrl_Id_t;
+typedef struct Inv_reactive_pwr_pct_pre_Id {        /* 无功功率百分比前置 */
+    Enum_Inv_Mfr_Id_t mfr_id;                       /* 厂家编号。 */
+    Inv_CtrlDefaultRegBlk_t reactive_pwr_pct_pre;   /* 前置寄存器 + 固定使能值。 */
+} Inv_reactive_pwr_pct_pre_Id_t;
 typedef struct Inv_reactive_pwr_pct_ctrl_Id{ // 无功功率百分比控制寄存器
     Enum_Inv_Mfr_Id_t mfr_id;              /* 当前无功百分比控制配置所属厂家编号。 */
     Inv_CtrlRegBlk_t reactive_pwr_pct_ctrl; /* 无功功率百分比写寄存器配置。 */
@@ -689,6 +717,11 @@ Inv_pwr_status_Id_t g_inv_pwr_status[] = {    // 开关机状态
 // --------------------------------------控制类数据------------------------------
 
 
+Inv_pwr_on_pre_Id_t g_inv_pwr_on_pre[] = {    // 逆变器开机前置(使能)寄存器
+    //逆变器ID           寄存器地址   寄存器个数     写功能码  数据类型    字节序        小数位数  预留   使能值
+
+};
+
 Inv_pwr_on_Id_t g_inv_pwr_on[] = {    // 逆变器开机控制寄存器
     //逆变器ID           寄存器地址   寄存器个数     写功能码  数据类型    字节序        小数位数  预留   默认值
     {INV_MFR_SUNGROW_1,   {5005 ,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,      207}},
@@ -718,6 +751,11 @@ Inv_pwr_on_Id_t g_inv_pwr_on[] = {    // 逆变器开机控制寄存器
 
 };
 
+
+Inv_pwr_off_pre_Id_t g_inv_pwr_off_pre[] = {    // 逆变器关机前置(使能)寄存器
+    //逆变器ID           寄存器地址   寄存器个数     写功能码  数据类型    字节序        小数位数  预留   使能值
+
+};
 
 Inv_pwr_off_Id_t g_inv_pwr_off[] = {    // 逆变器关机控制寄存器
     //逆变器ID           寄存器地址   寄存器个数     写功能码  数据类型    字节序        小数位数  预留   默认值
@@ -749,6 +787,11 @@ Inv_pwr_off_Id_t g_inv_pwr_off[] = {    // 逆变器关机控制寄存器
 };
 
 
+Inv_active_pwr_pre_Id_t g_inv_active_pwr_pre[] = {    // 逆变器有功功率数值前置(使能)寄存器
+    //逆变器ID           寄存器地址   寄存器个数     写功能码  数据类型    字节序        小数位数  预留   使能值
+    {INV_MFR_SUNGROW_1,   {5006,       1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0xAA}},
+};
+
 Inv_active_pwr_ctrl_Id_t g_inv_active_pwr_ctrl[] = {    // 逆变器有功功率控制寄存器
     //逆变器ID           寄存器地址   寄存器个数     写功能码  数据类型    字节序        小数位数  预留
     {INV_MFR_SUNGROW_1,   {5038 ,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
@@ -769,6 +812,11 @@ Inv_active_pwr_ctrl_Id_t g_inv_active_pwr_ctrl[] = {    // 逆变器有功功率
 };
 
 
+Inv_reactive_pwr_pre_Id_t g_inv_reactive_pwr_pre[] = {    // 逆变器无功功率数值前置(使能)寄存器
+    //逆变器ID           寄存器地址   寄存器个数     写功能码  数据类型    字节序        小数位数  预留   使能值
+
+};
+
 Inv_reactive_pwr_ctrl_Id_t g_inv_reactive_pwr_ctrl[] = {    // 逆变器无功功率控制寄存器
     //逆变器ID           寄存器地址   寄存器个数     读功能码  数据类型    字节序        小数位数  预留
     {INV_MFR_SUNGROW_1,   {5039 ,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     1,      0}},
@@ -787,6 +835,11 @@ Inv_reactive_pwr_ctrl_Id_t g_inv_reactive_pwr_ctrl[] = {    // 逆变器无功�
     {INV_MFR_AFORE_1,     {1553,         2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
 };
 
+
+Inv_pwr_factor_pre_Id_t g_inv_pwr_factor_pre[] = {    // 逆变器功率因数前置(使能)寄存器
+    //逆变器ID           寄存器地址   寄存器个数     写功能码  数据类型    字节序        小数位数  预留   使能值
+    {INV_MFR_SUNGROW_1,   {5035,       1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0xA1}},
+};
 
 Inv_pwr_factor_ctrl_Id_t g_inv_pwr_factor_ctrl[] = {    // 逆变器功率因数控制寄存器
     //逆变器ID           寄存器地址   寄存器个数     读功能码  数据类型    字节序        小数位数  预留
@@ -813,6 +866,11 @@ Inv_pwr_factor_ctrl_Id_t g_inv_pwr_factor_ctrl[] = {    // 逆变器功率因数
     {INV_MFR_AFORE_1,     {1555,         2,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
 };
 
+
+Inv_active_pwr_pct_pre_Id_t g_inv_active_pwr_pct_pre[] = {    // 逆变器有功功率百分比前置(使能)寄存器
+    //逆变器ID           寄存器地址   寄存器个数     写功能码  数据类型    字节序        小数位数  预留   使能值
+    {INV_MFR_SUNGROW_1,   {5006,       1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0xAA}},
+};
 
 Inv_active_pwr_pct_ctrl_Id_t g_inv_active_pwr_pct_ctrl[] = {    // 有功功率百分比控制寄存器
     //逆变器ID           寄存器地址   寄存器个数     读功能码  数据类型    字节序        小数位数  预留
@@ -843,6 +901,11 @@ Inv_active_pwr_pct_ctrl_Id_t g_inv_active_pwr_pct_ctrl[] = {    // 有功功率�
 };
 
 
+
+Inv_reactive_pwr_pct_pre_Id_t g_inv_reactive_pwr_pct_pre[] = {    // 逆变器无功功率百分比前置(使能)寄存器
+    //逆变器ID           寄存器地址   寄存器个数     写功能码  数据类型    字节序        小数位数  预留   使能值
+    {INV_MFR_SUNGROW_1,   {5035,       1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0xA2}},
+};
 
 Inv_reactive_pwr_pct_ctrl_Id_t g_inv_reactive_pwr_pct_ctrl[] = {    // 无功功率百分比控制寄存器
     //逆变器ID           寄存器地址   寄存器个数     读功能码  数据类型    字节序        小数位数  预留
@@ -922,12 +985,17 @@ static void inv_proto_set_all_points_unused(Inv_Proto_t *protocol)
     protocol->daily_energy.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
 }
 
-/* 按厂家枚举逐项查询各配置表，并组装到RAM协议库的同编号槽位。 */
+/* 按厂家枚举逐项查询各配置表，同时组装RAM协议库和同槽号的前置协议库。
+ * 两个库只在装配阶段共用同一个厂家循环，数据结构与存储完全独立：
+ * 前置库不进入238字节协议结构，协议库读写(04E70100)格式不受影响。 */
 void inv_proto_default_lib_init(void)
 {
     Enum_Inv_Mfr_Id_t mfr_id;
 
     rt_memset(&g_inv_proto_lib, 0, sizeof(g_inv_proto_lib));
+
+    /* 前置库先全部置0xFF；地址0xFFFF表示该厂家该控制点不写前置使能寄存器。 */
+    rt_memset(&g_inv_prereg_lib, 0xFF, sizeof(g_inv_prereg_lib));
 
     for(mfr_id = INV_MFR_SUNGROW_1; mfr_id < INV_MFR_MAX; ++mfr_id) {
         Inv_Proto_t *protocol = &g_inv_proto_lib.proto[(uint16_t)mfr_id];
@@ -980,16 +1048,21 @@ void inv_proto_default_lib_init(void)
 
         INV_COPY_MFR_POINT(protocol->ctrl.pwr_on, g_inv_pwr_on, pwr_on);
         INV_COPY_MFR_POINT(protocol->ctrl.pwr_off, g_inv_pwr_off, pwr_off);
-        INV_COPY_MFR_POINT(protocol->ctrl.active_pwr_ctrl,
-                           g_inv_active_pwr_ctrl, active_pwr_ctrl);
-        INV_COPY_MFR_POINT(protocol->ctrl.reactive_pwr_ctrl,
-                           g_inv_reactive_pwr_ctrl, reactive_pwr_ctrl);
-        INV_COPY_MFR_POINT(protocol->ctrl.pwr_factor_ctrl,
-                           g_inv_pwr_factor_ctrl, pwr_factor_ctrl);
-        INV_COPY_MFR_POINT(protocol->ctrl.active_pwr_pct_ctrl,
-                           g_inv_active_pwr_pct_ctrl, active_pwr_pct_ctrl);
-        INV_COPY_MFR_POINT(protocol->ctrl.reactive_pwr_pct_ctrl,
-                           g_inv_reactive_pwr_pct_ctrl, reactive_pwr_pct_ctrl);
+        INV_COPY_MFR_POINT(protocol->ctrl.active_pwr_ctrl, g_inv_active_pwr_ctrl, active_pwr_ctrl);
+        INV_COPY_MFR_POINT(protocol->ctrl.reactive_pwr_ctrl, g_inv_reactive_pwr_ctrl, reactive_pwr_ctrl);
+        INV_COPY_MFR_POINT(protocol->ctrl.pwr_factor_ctrl, g_inv_pwr_factor_ctrl, pwr_factor_ctrl);
+        INV_COPY_MFR_POINT(protocol->ctrl.active_pwr_pct_ctrl, g_inv_active_pwr_pct_ctrl, active_pwr_pct_ctrl);
+        INV_COPY_MFR_POINT(protocol->ctrl.reactive_pwr_pct_ctrl, g_inv_reactive_pwr_pct_ctrl, reactive_pwr_pct_ctrl);
+
+        /* 同槽号装配7项前置使能寄存器，与上面的控制类在同一轮厂家循环内完成，
+         * 保证前置库槽位和协议库槽位始终一一对应；未配置项保持0xFF。 */
+        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_on_pre, g_inv_pwr_on_pre, pwr_on_pre);
+        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_off_pre, g_inv_pwr_off_pre, pwr_off_pre);
+        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pre, g_inv_active_pwr_pre, active_pwr_pre);
+        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pre, g_inv_reactive_pwr_pre, reactive_pwr_pre);
+        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_factor_pre, g_inv_pwr_factor_pre, pwr_factor_pre);
+        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pct_pre, g_inv_active_pwr_pct_pre, active_pwr_pct_pre);
+        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pct_pre, g_inv_reactive_pwr_pct_pre, reactive_pwr_pct_pre);
 
         g_inv_proto_lib.valid[(uint16_t)mfr_id] = INVERTER_PROTOCOL_VALID;
     }

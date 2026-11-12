@@ -302,8 +302,62 @@ typedef char Inv_ProtoSizeCheck_t[
 typedef char Inv_ProtoLibSizeCheck_t[
     (sizeof(Inv_ProtoLib_t) == INV_PROTO_LIB_SIZE) ? 1 : -1];
 
+/* 前置(使能)寄存器配置：开关机及五类调节控制各自一项，每项8字节，共56字节。
+ * 前置寄存器只保存在独立的前置协议库中，不进入238字节协议结构，
+ * 因此协议库读写(04E70100)的报文格式保持不变。 */
+#pragma pack(1)
+typedef struct Inv_ProtoPreReg
+{
+    /* 开机前置使能寄存器及固定使能值。 */
+    Inv_CtrlDefaultRegBlk_t pwr_on_pre;
+
+    /* 关机前置使能寄存器及固定使能值。 */
+    Inv_CtrlDefaultRegBlk_t pwr_off_pre;
+
+    /* 有功功率数值前置使能寄存器及固定使能值。 */
+    Inv_CtrlDefaultRegBlk_t active_pwr_pre;
+
+    /* 无功功率数值前置使能寄存器及固定使能值。 */
+    Inv_CtrlDefaultRegBlk_t reactive_pwr_pre;
+
+    /* 功率因数前置使能寄存器及固定使能值。 */
+    Inv_CtrlDefaultRegBlk_t pwr_factor_pre;
+
+    /* 有功功率百分比前置使能寄存器及固定使能值。 */
+    Inv_CtrlDefaultRegBlk_t active_pwr_pct_pre;
+
+    /* 无功功率百分比前置使能寄存器及固定使能值。 */
+    Inv_CtrlDefaultRegBlk_t reactive_pwr_pct_pre;
+} Inv_ProtoPreReg_t;
+#pragma pack()
+
+/* 7项前置配置均为8字节固定值写命令块，合计56字节。 */
+#define INV_PROTO_PREREG_SIZE                       56
+typedef char Inv_ProtoPreRegSizeCheck_t[
+    (sizeof(Inv_ProtoPreReg_t) == INV_PROTO_PREREG_SIZE) ? 1 : -1];
+
+/* 前置协议库与协议库槽位一一对应，下标0～99对应协议槽位1～100。 */
+#pragma pack(1)
+typedef struct Inv_PreRegLib
+{
+    /* AB区校验头；首版不持久化时保持全FF，不参与运行。 */
+    rcd_head head;
+
+    /* 100条协议各自的前置使能配置，地址0xFFFF表示该控制点无前置写。 */
+    Inv_ProtoPreReg_t prereg[INVERTER_PROTOCOL_LIBRARY_COUNT];
+} Inv_PreRegLib_t;
+#pragma pack()
+
+/* AB头6字节和100条56字节前置配置，共6+100×56=5606字节。 */
+#define INV_PREREG_LIB_SIZE                         5606
+typedef char Inv_PreRegLibSizeCheck_t[
+    (sizeof(Inv_PreRegLib_t) == INV_PREREG_LIB_SIZE) ? 1 : -1];
+
 /* 全局逆变器协议库，数组下标范围为0~99，前4项分别对应阳光、华为、固德威和锦浪。 */
 extern Inv_ProtoLib_t g_inv_proto_lib;
+
+/* 全局前置协议库，槽位下标与协议库完全一致，内容不参与协议库读写。 */
+extern Inv_PreRegLib_t g_inv_prereg_lib;
 
 /* 统计RAM协议库中有效槽位数量，返回范围为0～100。 */
 uint8_t Inv_Proto_Valid_Count(void);
@@ -314,7 +368,7 @@ rt_err_t Inv_Proto_Read_Wire(uint16_t proto_number, uint8_t *wire_data, uint16_t
 /* 校验并临时覆盖1～100槽位的238字节协议；全FF、重复厂家版本或非法结构返回错误。 */
 rt_err_t Inv_Proto_Write_Wire(uint16_t proto_number, const uint8_t *wire_data, uint16_t data_len);
 
-/* 按厂家枚举轮询各分项配置表，重新组装RAM中的默认协议库。 */
+/* 按厂家枚举轮询各分项配置表，在同一厂家循环内重建RAM中的默认协议库和同槽号前置协议库。 */
 void inv_proto_default_lib_init(void);
 
 /* 按1~100的序号获取协议；有效和无效协议均返回对应指针，越界返回NULL。 */
@@ -325,6 +379,9 @@ void Inv_Proto_Print(uint16_t count);
 
 /* 从Flash加载协议库，数据无效或版本不匹配时恢复4条默认协议。 */
 void Inv_Proto_Init(void);
+
+/* 按1～100协议序号取得前置配置，越界返回NULL。 */
+const Inv_ProtoPreReg_t *Inv_PreReg_Get(uint16_t proto_number);
 
 #ifdef __cplusplus
 }

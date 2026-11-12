@@ -10,6 +10,8 @@
 
 Inv_ProtoLib_t g_inv_proto_lib = {0};               /* 保存有效标志和最多100条厂家协议配置。 */
 
+Inv_PreRegLib_t g_inv_prereg_lib;                   /* 保存100条协议各自的前置使能寄存器配置。 */
+
 /* 判断协议厂家字段是否包含至少一个可显示ASCII字符，避免全零、全FF或乱码协议进入运行库。 */
 static rt_bool_t inv_proto_manufacturer_valid(const char *manufacturer)
 {
@@ -175,7 +177,7 @@ rt_err_t Inv_Proto_Write_Wire(uint16_t proto_number, const uint8_t *wire_data, u
 /* 清空协议库，装载内置默认协议，并保存到Flash A/B区。 */
 void Inv_Proto_Default_Init(void)
 {
-    inv_proto_default_lib_init(); /* 按厂家编号从各分项配置表重新组装默认协议库。 */
+    inv_proto_default_lib_init(); /* 同一厂家循环内同时重建协议库和同槽号前置库。 */
 
     AB_save(flash_write, /* 将重建后的默认协议库同时保存到Flash A/B区。 */
             PROTO_LIB_ADDR_A,
@@ -210,4 +212,13 @@ void Inv_Proto_Init(void)
         Inv_Proto_Default_Init(); /* 持久化数据不可用时按分项配置表重建默认协议。 */
     }
 #endif
+}
+
+/* 按1起始协议序号返回前置配置，调用方只读，越界返回RT_NULL。 */
+const Inv_ProtoPreReg_t *Inv_PreReg_Get(uint16_t proto_number)
+{
+    if((proto_number == 0U) || (proto_number > INVERTER_PROTOCOL_LIBRARY_COUNT)) {
+        return RT_NULL;
+    }
+    return &g_inv_prereg_lib.prereg[proto_number - 1U];
 }

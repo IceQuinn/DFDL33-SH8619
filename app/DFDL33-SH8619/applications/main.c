@@ -99,9 +99,9 @@ int main(void)
 
     Dlt645_Init();              /* 初始化645协议库。 */
 
-    Inv_Proto_Init();           /* 协议库必须先于档案库初始化。 */
+    Inv_Proto_Init();           /* 协议库及同槽前置库必须先于档案库初始化。 */
 
-    Inv_Archive_Init();         /* 装载档案并建立运行时协议指针。 */
+    Inv_Archive_Init();         /* 装载档案并建立运行时协议指针和前置库指针。 */
 
     Time_Ctrl_Runtime_Init();   /* 必须在线程启动前调用且只调用一次。 */
 
