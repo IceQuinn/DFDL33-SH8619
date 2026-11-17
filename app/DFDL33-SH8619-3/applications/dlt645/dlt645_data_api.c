@@ -39,6 +39,7 @@
 #define DLT645_REALTIME_READ_TIMEOUT_MS   55000U /* 为主站60秒超时保留5秒组帧和发送余量。 */
 #define DLT645_CONTROL_WAIT_TICKS          3000  /* 单台控制最多等待3秒，FF逐台执行仍可控制在60秒内。 */
 #define DLT645_CONTROL_VALUE_NONE  0xFFU /* 逐台调控值记录中表示本台未参与本次控制或值非法。 */
+#define DLT645_CONTROL_VALUE_NONE_S32  INT32_MIN /* 五类调节逐台调控值记录中表示本台未参与本次控制或值非法。 */
 #define DLT645_CONTROL_PERCENT_MAX (INV_CONTROL_PERCENT_MAX * 10) /* XXX.X格式下110.0%的定点上限，FF执行目标仍为100%。 */
 
 /* 对单台或DI0=FF的全部档案顺序执行实时读，失败及未完成点保持无效。 */
@@ -1409,6 +1410,11 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
     {
         return -RT_EINVAL;
     }
+
+    uint8_t ctrl_type = 0xff;
+    EventTime start_time;
+    Get_EventTime(&start_time);
+
     rt_memset(response, DLT645_CONTROL_STATUS_NOT_CONTROLLED, INVERTER_ARCHIVE_MAX_COUNT); /* 默认不控制，单控未涉及的槽位也保持此值，避免残留旧状态。 */
     for(archive_offset = 0U; archive_offset < INVERTER_ARCHIVE_MAX_COUNT; ++archive_offset)
     {
@@ -1451,6 +1457,7 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
 
         /* 3 协议不支持：单控回其他错误，全控只记本台不支持且不计入成功台数。 */
         source_result = dlt645_get_control_source(id, slot, &type, &control_reg, &source);
+        ctrl_type = type;
         if(source_result == -RT_ENOSYS)
         {
             response[slot] = DLT645_CONTROL_STATUS_UNSUPPORTED;
@@ -1501,6 +1508,10 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
         }
     }
     *response_len = 0U; /* 逐台状态仅内部使用，不放入645应答数据域。 */
+
+    EventTime end_time;
+    Get_EventTime(&end_time);
+    Send_PowerEvent_Data(start_time, end_time, ctrl_type, response, values);
 
     /* TODO: 在此调用事件记录，携带 response[]（逐台状态）与 values[]（逐台调控值）。 */
 
@@ -1803,6 +1814,10 @@ rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point, uint32_t id,
     {
         return -RT_EINVAL;
     }
+
+    EventTime start_time;
+    Get_EventTime(&start_time);
+
     rt_memset(apply, 0, sizeof(apply)); /* 空档案配全FF允许跳过，不修改任何邮箱。 */
     rt_memset(response, DLT645_CONTROL_STATUS_NOT_CONTROLLED, INVERTER_ARCHIVE_MAX_COUNT); /* 默认不控制，单控未涉及的槽位也保持此值。 */
     for(archive_offset = 0U; archive_offset < INVERTER_ARCHIVE_MAX_COUNT; ++archive_offset)
@@ -1894,12 +1909,16 @@ rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point, uint32_t id,
             }
         }
     }
+
     if((archive_count > 1U) && (Time_Ctrl_Init_Batch_End() != RT_EOK)) {
         has_error = RT_TRUE;
         rt_kprintf("time control batch save failed\n");
     }
 
     /* TODO: 在此调用事件记录，携带 response[]（逐台状态）与 values[]（逐台调控值）。 */
+    EventTime end_time;
+    Get_EventTime(&end_time);
+    Send_PowerTimeControlEvent_Data(start_time, end_time, commands[first_archive].periods[0].mode, response, values);
 
     if(single == RT_TRUE) /* 单控只有一台，按循环内累积的结论应答。 */
     {
@@ -2015,6 +2034,10 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
     {
         return -RT_EINVAL;
     }
+
+    EventTime start_time;
+    Get_EventTime(&start_time);
+
     rt_memset(response, DLT645_CONTROL_STATUS_NOT_CONTROLLED, INVERTER_ARCHIVE_MAX_COUNT); /* 默认不控制，单控未涉及的槽位也保持此值，避免残留旧状态。 */
     rt_memset(values, 0xFF, sizeof(values)); /* 12个槽位全部初始化为未参与本次控制。 */
 
@@ -2073,6 +2096,10 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
             single_result = -RT_ERROR; /* 单控下发失败，不提前返回。 */
         }
     }
+
+    EventTime end_time;
+    Get_EventTime(&end_time);
+    Send_Inv_OnOff_Event_Data(start_time, end_time, values, response);
 
     /* TODO: 在此调用事件记录，携带 response[]（逐台状态）与 values[]（逐台调控值）。 */
 
@@ -2204,17 +2231,7 @@ rt_err_t dlt645_read_switch_event_record(const Dlt645PointTypeDef *point, uint32
 
     uint16_t max_cnt = Event_Management[ETP_PV_INV_ONOFF_CTRL].Event_Max_Cnt;
     /* 计算环形缓冲区索引 */
-    /* req_seq=1 表示最近一条，即 tailIdx-1 */
-    if(p_digest->tailIdx == 0)
-    {
-        actual_idx = max_cnt - req_seq; /* Event_Max_Cnt = 50 */
-    }
-    else
-    {
-        actual_idx = p_digest->tailIdx - req_seq;
-    }
-    /* 确保不越界 */
-    actual_idx %= EVENT_MAX_DATE_NUM_50;
+    actual_idx = (p_digest->tailIdx + max_cnt - req_seq) % max_cnt;
 
     /* 定位记录数据 */
     /* 记录存储起始于 buf[48] (24字节digest/desc + 24字节count) */
@@ -2269,25 +2286,6 @@ static inline struct Event_Digest_Str *_get_evt_digest(uint16_t event_class)
     return (struct Event_Digest_Str *)Event_Management[event_class].buf;
 }
 
-/**
- * @brief 通用：计算环形缓冲区中第 req_seq 条记录的实际索引
- * @param digest  事件摘要
- * @param req_seq 请求序号（1-based，1=最近一次）
- * @return 实际数组下标
- */
-static uint16_t _calc_ring_idx(struct Event_Digest_Str *digest, uint8_t req_seq, uint16_t max_cnt)
-{
-    uint16_t idx;
-    if(digest->tailIdx == 0)
-    {
-        idx = max_cnt - req_seq;
-    }
-    else
-    {
-        idx = digest->tailIdx - req_seq;
-    }
-    return idx % max_cnt;
-}
 
 /**
  * @brief 通用：检查请求序号合法性，无记录/超序号时填FF并返回RT_EOK
@@ -2347,16 +2345,22 @@ rt_err_t dlt645_read_p_ctrl_event_count(const Dlt645PointTypeDef *point, uint32_
     }
 
     /* ---------- 确定事件类型 ---------- */
-    evt_class = ETP_PV_INV_P_CTRL;  /* 默认有功 */
 
     uint8_t di1 = (id >> 8) & 0xFF;
-    if(di1 == 0x04)
-    {
-        evt_class = ETP_PV_INV_Q_CTRL;
-    }
-    else if (di1 == 0x08)
-    {
-        evt_class = ETP_PV_INV_P_PERIOD_CTRL;
+
+    rt_kprintf("[%s] id=0x%08X di1=0x%02X", __func__, id, (id >> 8) & 0xFF);
+    switch (di1) {
+        case 0x02:  /* 有功控制次数 */
+            evt_class = ETP_PV_INV_P_CTRL;
+            break;
+        case 0x04:  /* 无功控制次数 */
+            evt_class = ETP_PV_INV_Q_CTRL;
+            break;
+        case 0x08:  /* 有功时段控制次数 */
+            evt_class = ETP_PV_INV_P_PERIOD_CTRL;
+            break;
+        default:
+            return -RT_EINVAL;  /* 非法 DI1，直接报错 */
     }
 
     /* ---------- 取计数器基址 ---------- */
@@ -2414,15 +2418,18 @@ rt_err_t dlt645_read_power_ctrl_event_record(const Dlt645PointTypeDef *point, ui
     req_seq = (uint8_t)(id & 0xFF);
     di1     = (id >> 8) & 0xFF;
 
-    /* 根据 DI1 确定事件类型 */
-    evt_class = ETP_PV_INV_P_CTRL;       /* 默认：有功控制 */
-    if(di1 == 0x04)
-    {
-        evt_class = ETP_PV_INV_Q_CTRL;   /* 无功控制 */
-    }
-    else if(di1 == 0x08)
-    {
-        evt_class = ETP_PV_INV_P_PERIOD_CTRL; /* 有功时段控制 */
+    switch (di1) {
+        case 0x03:  /* 有功控制记录 */
+            evt_class = ETP_PV_INV_P_CTRL;
+            break;
+        case 0x05:  /* 无功控制记录 */
+            evt_class = ETP_PV_INV_Q_CTRL;
+            break;
+        case 0x09:  /* 有功时段控制记录 */
+            evt_class = ETP_PV_INV_P_PERIOD_CTRL;
+            break;
+        default:
+            return -RT_EINVAL;  /* 非法 DI1，直接报错（之前是静默走默认，坑就在这） */
     }
 
     /* ---------- 获取摘要指针 ---------- */
@@ -2447,7 +2454,7 @@ rt_err_t dlt645_read_power_ctrl_event_record(const Dlt645PointTypeDef *point, ui
     }
 
     /* ---------- 计算环形索引 ---------- */
-    actual_idx = _calc_ring_idx(p_digest, req_seq, max_cnt);
+    actual_idx = (p_digest->tailIdx + max_cnt - req_seq) % max_cnt;
 
     /* ---------- 定位记录数据基址 ---------- */
     p_base = &Event_Management[evt_class].buf[
@@ -2613,7 +2620,7 @@ rt_err_t dlt645_read_power_factor_record(const Dlt645PointTypeDef *point, uint32
     }
 
     /* ---------- 计算环形索引 ---------- */
-    actual_idx = _calc_ring_idx(p_digest, req_seq, max_cnt);
+    actual_idx = (p_digest->tailIdx + max_cnt - req_seq) % max_cnt;
 
     /* ---------- 定位记录数据基址 ---------- */
     /* buf布局: Event_Digest_Str + Event_Desc_Str + pf_event_cnt[12](24字节) + 记录数组 */
@@ -2743,15 +2750,7 @@ rt_err_t dlt645_read_volt_over_limit_record(const Dlt645PointTypeDef *point, uin
     uint16_t max_cnt = Event_Management[ETP_VOLT_OVER_LIMIT].Event_Max_Cnt;
 
     /* 计算环形缓冲区索引 */
-    if(p_digest->tailIdx == 0)
-    {
-        actual_idx = max_cnt - req_seq;
-    }
-    else
-    {
-        actual_idx = p_digest->tailIdx - req_seq;
-    }
-    actual_idx %= EVENT_MAX_DATE_NUM_50;
+    actual_idx = (p_digest->tailIdx + max_cnt - req_seq) % max_cnt;
 
     /* 定位记录数据 */
     p_base = &Event_Management[ETP_VOLT_OVER_LIMIT].buf[
@@ -2919,7 +2918,7 @@ rt_err_t dlt645_read_comm_err_record(const Dlt645PointTypeDef *point, uint32_t i
     }
 
     /* ---------- 计算环形索引 ---------- */
-    actual_idx = _calc_ring_idx(p_digest, req_seq, max_cnt);
+    actual_idx = (p_digest->tailIdx + max_cnt - req_seq) % max_cnt;
 
     /* ---------- 定位记录数据基址 ---------- */
     /* buf布局: Event_Digest_Str + Event_Desc_Str + comm_err_event_cnt[12](24字节) + 记录数组 */

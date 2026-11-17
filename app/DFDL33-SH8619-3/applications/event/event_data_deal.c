@@ -6,6 +6,7 @@
 #include <time.h>
 
 #include "inv_data.h"
+#include <stdlib.h>
 
 #define EVENT_DATA_VER              1
 
@@ -23,9 +24,6 @@ struct Event_Management_Str Event_Management[EVT_CLASS_MAX_] =
     {.Event_Flash_Addr_A = FLASH_PV_INV_P_PERIOD_CTRL_EVENT_A_ADDR,     .Event_Flash_Addr_B = FLASH_PV_INV_P_PERIOD_CTRL_EVENT_B_ADDR,      .Event_Max_Cnt = EVENT_MAX_DATE_NUM_50,  .buf = {0}, .Event_Name = "PV_INV_P_PERIOD_CTRL_EVENT"},
     {.Event_Flash_Addr_A = FLASH_VOLT_OVER_LIMIT_EVENT_A_ADDR,          .Event_Flash_Addr_B = FLASH_VOLT_OVER_LIMIT_EVENT_B_ADDR,           .Event_Max_Cnt = EVENT_MAX_DATE_NUM_50,  .buf = {0}, .Event_Name = "VOLT_OVER_LIMIT_EVENT"},
     {.Event_Flash_Addr_A = FLASH_PV_INV_COMM_ERR_EVENT_A_ADDR,          .Event_Flash_Addr_B = FLASH_PV_INV_COMM_ERR_EVENT_B_ADDR,           .Event_Max_Cnt = EVENT_MAX_DATE_NUM_50,  .buf = {0}, .Event_Name = "PV_INV_COMM_ERR_EVENT"},
-//    {.Event_Flash_Addr_A = FLASH_PROTO_UNIT_EVENT_CLEAR_EVENT_A_ADDR,   .Event_Flash_Addr_B = FLASH_PROTO_UNIT_EVENT_CLEAR_EVENT_B_ADDR,    .Event_Max_Cnt = EVENT_MAX_DATE_NUM_100, .buf = {0}, .Event_Name = "Event Reset Event"},
-//    {.Event_Flash_Addr_A = FLASH_PROTO_UNIT_OTA_UPGRADE_EVENT_A_ADDR,   .Event_Flash_Addr_B = FLASH_PROTO_UNIT_OTA_UPGRADE_EVENT_B_ADDR,    .Event_Max_Cnt = EVENT_MAX_DATE_NUM_100, .buf = {0}, .Event_Name = "Upgrading Event"},
-//    {.Event_Flash_Addr_A = FLASH_PROTO_UNIT_TIME_CALIB_EVENT_A_ADDR,    .Event_Flash_Addr_B = FLASH_PROTO_UNIT_TIME_CALIB_EVENT_A_ADDR,     .Event_Max_Cnt = EVENT_MAX_DATE_NUM_100, .buf = {0}, .Event_Name = "Time Calibration Event"},
 };
 
 uint8_t Events_Cache_Date[EVENTS_CACHE_NUM_MAX][ONE_EVENT_RECORD_SIZE];// 事件
@@ -90,15 +88,14 @@ int32_t Event_Data_Cache_Init(void)
     return RT_EOK;
 }
 
-
 void Show_Event_Data(uint8_t event_class, void *p_evt_data)
 {
-    if (p_evt_data == NULL) {
+    if(p_evt_data == NULL){
         LOG_W("Show_Event: p_evt_data is NULL");
         return;
     }
 
-    if (event_class >= EVT_CLASS_MAX_) {
+    if(event_class >= EVT_CLASS_MAX_){
         LOG_W("Show_Event: invalid event_class=%d", event_class);
         return;
     }
@@ -106,10 +103,10 @@ void Show_Event_Data(uint8_t event_class, void *p_evt_data)
     LOG_I("=== %s (class=%d) ===",
           Event_Management[event_class].Event_Name, event_class);
 
-    switch (event_class) {
-
+    switch(event_class)
+    {
         /* ---------- 电压越限 ---------- */
-        case ETP_VOLT_OVER_LIMIT: {
+        case ETP_VOLT_OVER_LIMIT:{
             VoltageOverLimit_t *p = (VoltageOverLimit_t *)p_evt_data;
             LOG_I("Start: 20%02d-%02d-%02d %02d:%02d:%02d",
                   p->start_time.year, p->start_time.month, p->start_time.day,
@@ -129,48 +126,178 @@ void Show_Event_Data(uint8_t event_class, void *p_evt_data)
         /* ---------- 功率控制类 ---------- */
         case ETP_PV_INV_P_CTRL:
         case ETP_PV_INV_Q_CTRL:
-        case ETP_PV_INV_P_PERIOD_CTRL: {
+        case ETP_PV_INV_P_PERIOD_CTRL:{
             PowerControlEvent_t *p = (PowerControlEvent_t *)p_evt_data;
             LOG_I("Start Time  : 20%02d-%02d-%02d %02d:%02d:%02d",
                   p->start_time.year, p->start_time.month, p->start_time.day,
                   p->start_time.hour, p->start_time.minute, p->start_time.second);
-            LOG_I("End Time  : 20%02d-%02d-%02d %02d:%02d:%02d",
+            LOG_I("End Time    : 20%02d-%02d-%02d %02d:%02d:%02d",
                   p->end_time.year, p->end_time.month, p->end_time.day,
                   p->end_time.hour, p->end_time.minute, p->end_time.second);
             LOG_I("Ctrl Type : type=%-3d", p->event_type);
+
+            /* 逆变器编号行 */
+            rt_kprintf("Inv   :");
+            for(int i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
+                rt_kprintf(" %d\t", i+1);
+            }
+            rt_kprintf("\n");
+
+            /* 调控结果行（文字映射） */
+            rt_kprintf("Result:");
+            for(int i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
+                if(p->control_result[i] == 0){
+                    rt_kprintf("成功\t");
+                }else if (p->control_result[i] == 1){
+                    rt_kprintf("未调控\t ");
+                }else if (p->control_result[i] == 2){
+                    rt_kprintf("失败\t");
+                }else if (p->control_result[i] == 3){
+                    rt_kprintf("不支持\t");
+                }else if (p->control_result[i] == 4){
+                    rt_kprintf("其它\t");
+                }else if (p->control_result[i] == 5){
+                    rt_kprintf("无档案\t");
+                }else{
+                    rt_kprintf("%d\t", p->control_result[i]);
+                }
+            }
+            rt_kprintf("\n");
+
+            /* 调控值行（无效值显示 --） */
+            rt_kprintf("Value :");
+            for(int i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
+                if(p->control_value[i] == INT32_MIN){
+                    rt_kprintf(" --\t");
+                }else{
+                    rt_kprintf("%d\t", p->control_value[i]);
+                }
+            }
+            rt_kprintf("\n");
             break;
         }
 
         /* ---------- 功率因数 ---------- */
-        case ETP_PV_INV_PF_CTRL: {
+        case ETP_PV_INV_PF_CTRL:{
             PowerFactorEvent_t *p = (PowerFactorEvent_t *)p_evt_data;
             LOG_I("Start Time  : 20%02d-%02d-%02d %02d:%02d:%02d",
                   p->start_time.year, p->start_time.month, p->start_time.day,
                   p->start_time.hour, p->start_time.minute, p->start_time.second);
-            LOG_I("End Time  : 20%02d-%02d-%02d %02d:%02d:%02d",
+            LOG_I("End Time    : 20%02d-%02d-%02d %02d:%02d:%02d",
                   p->end_time.year, p->end_time.month, p->end_time.day,
                   p->end_time.hour, p->end_time.minute, p->end_time.second);
-//            LOG_I("PF    : %-6d (0.001)", p->pf_value);
+
+            /* 逆变器编号行 */
+            rt_kprintf("Inv   :");
+            for(int i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
+                rt_kprintf(" %d\t", i+1);
+            }
+            rt_kprintf("\n");
+
+            /* 调控结果行 */
+            rt_kprintf("Result:");
+            for(int i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
+                if(p->control_result[i] == 0){
+                    rt_kprintf("成功\t");
+                }else if(p->control_result[i] == 1){
+                    rt_kprintf("未调控\t");
+                }else if(p->control_result[i] == 2){
+                    rt_kprintf("失败\t");
+                }else if(p->control_result[i] == 3){
+                    rt_kprintf("不支持\t");
+                }else if(p->control_result[i] == 4){
+                    rt_kprintf("其它\t");
+                }else if(p->control_result[i] == 5){
+                    rt_kprintf("无档案\t");
+                }else{
+                    rt_kprintf("%d\t", p->control_result[i]);
+                }
+            }
+            rt_kprintf("\n");
+
+            /* 调控值行（无效值显示 --） */
+            rt_kprintf("Value :");
+            for(int i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
+                if(p->inv_values[i] == INT32_MIN){
+                    rt_kprintf(" --\t");
+                }else{
+                    rt_kprintf("%d\t", p->inv_values[i]);
+                }
+            }
+            rt_kprintf("\n");
+            break;
+        }
+
+        /* ---------- 开关机控制 ---------- */
+        case ETP_PV_INV_ONOFF_CTRL:{
+            SwitchEvent_t *p = (SwitchEvent_t *)p_evt_data;
+            LOG_I("Start Time  : 20%02d-%02d-%02d %02d:%02d:%02d",
+                  p->start_time.year, p->start_time.month, p->start_time.day,
+                  p->start_time.hour, p->start_time.minute, p->start_time.second);
+            LOG_I("End Time    : 20%02d-%02d-%02d %02d:%02d:%02d",
+                  p->end_time.year, p->end_time.month, p->end_time.day,
+                  p->end_time.hour, p->end_time.minute, p->end_time.second);
+
+            /* 逆变器编号行 */
+            rt_kprintf("Inv   :");
+            for(int i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
+                rt_kprintf("%d\t", i+1);
+            }
+            rt_kprintf("\n");
+
+            /* 开关机类型行 */
+            rt_kprintf("Type  :");
+            for(int i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
+                if(p->event_type[i] == 0){
+                    rt_kprintf("ON\t");
+                }else if (p->event_type[i] == 1){
+                    rt_kprintf("OFF\t");
+                }else{
+                    rt_kprintf("--\t");
+                }
+            }
+            rt_kprintf("\n");
+
+            /* 调控结果行 */
+            rt_kprintf("Result:");
+            for(int i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
+                if(p->control_result[i] == 0){
+                    rt_kprintf("成功\t");
+                }else if(p->control_result[i] == 1){
+                    rt_kprintf("未调控\t");
+                }else if(p->control_result[i] == 2){
+                    rt_kprintf("失败\t");
+                }else if(p->control_result[i] == 3){
+                    rt_kprintf("不支持\t");
+                }else if(p->control_result[i] == 4){
+                    rt_kprintf("其它\t");
+                }else if(p->control_result[i] == 5){
+                    rt_kprintf("无档案\t");
+                } else {
+                    rt_kprintf("%d\t", p->control_result[i]);
+                }
+            }
+            rt_kprintf("\n");
             break;
         }
 
         /* ---------- 通信异常 ---------- */
-        case ETP_PV_INV_COMM_ERR: {
+        case ETP_PV_INV_COMM_ERR:{
             CommErrEvent_t *p = (CommErrEvent_t *)p_evt_data;
             LOG_I("Start Time  : 20%02d-%02d-%02d %02d:%02d:%02d",
                   p->start_time.year, p->start_time.month, p->start_time.day,
                   p->start_time.hour, p->start_time.minute, p->start_time.second);
-            LOG_I("End Time  : 20%02d-%02d-%02d %02d:%02d:%02d",
+            LOG_I("End Time    : 20%02d-%02d-%02d %02d:%02d:%02d",
                   p->end_time.year, p->end_time.month, p->end_time.day,
                   p->end_time.hour, p->end_time.minute, p->end_time.second);
-            LOG_I("PV Inverter Id  : %d", p->inv_id);
+            LOG_I("PV Inverter Id  : %d", p->inv_id + 1);
             break;
         }
 
-        /* ---------- 默认：十六进制 dump ---------- */
-        default: {
+        /* ---------- 默认：十六进制 ---------- */
+        default:{
             LOG_I("Data  :");
-            for (int i = 0; i < 24; i++) {
+            for(int i = 0; i < 24; i++){
                 LOG_I(" %02X", ((uint8_t *)p_evt_data)[i]);
             }
             break;
@@ -178,20 +305,166 @@ void Show_Event_Data(uint8_t event_class, void *p_evt_data)
     }
 }
 
-// void save_data_by_class(uint8_t event_class, uint8_t *p_data, uint16_t data_len)
-// {
-//     if(MAX_EVENT == p_Events->EvtDetail.eventCnt)
-//     {
-//         p_Events->EvtDetail.tailIdx = (p_Events->EvtDetail.tailIdx + 1) % MAX_EVENT;
-//         p_Events->EvtDetail.headIdx = (p_Events->EvtDetail.headIdx + 1) % MAX_EVENT;
-//     }
-//     else {
-//         p_Events->EvtDetail.tailIdx = (p_Events->EvtDetail.tailIdx + 1) % MAX_EVENT;
-//         p_Events->EvtDetail.eventCnt++;
-//     }
+/**
+ * @brief 打印各类事件保存的总记录条数
+ */
+void Show_Event_Total_Count(void)
+{
+    rt_mutex_take(&event_mgmt_mutex, RT_WAITING_FOREVER);
 
-//     rt_memcpy(p_Events->buf, p_data, data_len);
-// }
+    LOG_I("========== Event Total Count ==========");
+
+    for(uint8_t cls = 0; cls < EVT_CLASS_MAX_; cls++)
+    {
+        struct Event_Digest_Str *p_digest = (struct Event_Digest_Str *)Event_Management[cls].buf;
+
+        LOG_I("%-30s : %d / %d",
+              Event_Management[cls].Event_Name,
+              p_digest->eventCnt,
+              Event_Management[cls].Event_Max_Cnt);
+    }
+
+    LOG_I("======================================");
+
+    rt_mutex_release(&event_mgmt_mutex);
+}
+MSH_CMD_EXPORT(Show_Event_Total_Count, Show event total count);
+
+/**
+ * @brief 按事件类型由新到旧打印该类型的所有记录
+ * @param event_class 事件类型枚举值
+ */
+void Show_Event_Records_By_Type(uint8_t event_class)
+{
+    struct Event_Digest_Str *p_digest;
+    uint8_t *p_base;
+    uint16_t max_cnt;
+    uint16_t actual_idx;
+    uint16_t seq;
+
+    if (event_class >= EVT_CLASS_MAX_)
+    {
+        LOG_W("Invalid event_class=%d, max=%d", event_class, EVT_CLASS_MAX_);
+        return;
+    }
+
+    rt_mutex_take(&event_mgmt_mutex, RT_WAITING_FOREVER);
+
+    p_digest = (struct Event_Digest_Str *)Event_Management[event_class].buf;
+    max_cnt  = Event_Management[event_class].Event_Max_Cnt;
+
+    /* ---------- 标题 ---------- */
+    rt_kprintf("========== %s ==========\n",
+               Event_Management[event_class].Event_Name);
+    rt_kprintf("事件总次数：%d\n", p_digest->eventCnt);
+
+    if(p_digest->eventCnt == 0)
+    {
+        rt_kprintf("(无记录)\n");
+        rt_kprintf("===================================================\n");
+        rt_mutex_release(&event_mgmt_mutex);
+        return;
+    }
+
+    /* ---------- 表头 ---------- */
+    rt_kprintf("序号\t开始时间\t\t结束时间\n");
+
+    /* ---------- 记录基址 ---------- */
+    p_base = &Event_Management[event_class].buf[
+                sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str) + 24];
+
+    /* ---------- 由新到旧遍历 ---------- */
+    for(seq = 1; seq <= p_digest->eventCnt; seq++)
+    {
+        actual_idx = (p_digest->tailIdx + max_cnt - seq) % max_cnt;
+
+        switch(event_class)
+        {
+            case ETP_PV_INV_ONOFF_CTRL:{
+                SwitchEvent_t *p = (SwitchEvent_t *)(p_base + actual_idx * sizeof(SwitchEvent_t));
+                rt_kprintf("%d\t20%02d-%02d-%02d %02d:%02d:%02d\t20%02d-%02d-%02d %02d:%02d:%02d\n",
+                           seq,
+                           p->start_time.year, p->start_time.month, p->start_time.day,
+                           p->start_time.hour, p->start_time.minute, p->start_time.second,
+                           p->end_time.year, p->end_time.month, p->end_time.day,
+                           p->end_time.hour, p->end_time.minute, p->end_time.second);
+                break;
+            }
+            case ETP_PV_INV_P_CTRL:
+            case ETP_PV_INV_Q_CTRL:
+            case ETP_PV_INV_P_PERIOD_CTRL:{
+                PowerControlEvent_t *p = (PowerControlEvent_t *)(p_base + actual_idx * sizeof(PowerControlEvent_t));
+                rt_kprintf("%d\t20%02d-%02d-%02d %02d:%02d:%02d\t20%02d-%02d-%02d %02d:%02d:%02d\n",
+                           seq,
+                           p->start_time.year, p->start_time.month, p->start_time.day,
+                           p->start_time.hour, p->start_time.minute, p->start_time.second,
+                           p->end_time.year, p->end_time.month, p->end_time.day,
+                           p->end_time.hour, p->end_time.minute, p->end_time.second);
+                break;
+            }
+            case ETP_PV_INV_PF_CTRL:{
+                PowerFactorEvent_t *p = (PowerFactorEvent_t *)(p_base + actual_idx * sizeof(PowerFactorEvent_t));
+                rt_kprintf("%d\t20%02d-%02d-%02d %02d:%02d:%02d\t20%02d-%02d-%02d %02d:%02d:%02d\n",
+                           seq,
+                           p->start_time.year, p->start_time.month, p->start_time.day,
+                           p->start_time.hour, p->start_time.minute, p->start_time.second,
+                           p->end_time.year, p->end_time.month, p->end_time.day,
+                           p->end_time.hour, p->end_time.minute, p->end_time.second);
+                break;
+            }
+            case ETP_VOLT_OVER_LIMIT:{
+                VoltageOverLimit_t *p = (VoltageOverLimit_t *)(p_base + actual_idx * sizeof(VoltageOverLimit_t));
+                rt_kprintf("%d\t20%02d-%02d-%02d %02d:%02d:%02d\t20%02d-%02d-%02d %02d:%02d:%02d\n",
+                           seq,
+                           p->start_time.year, p->start_time.month, p->start_time.day,
+                           p->start_time.hour, p->start_time.minute, p->start_time.second,
+                           p->end_time.year, p->end_time.month, p->end_time.day,
+                           p->end_time.hour, p->end_time.minute, p->end_time.second);
+                break;
+            }
+            case ETP_PV_INV_COMM_ERR:{
+                CommErrEvent_t *p = (CommErrEvent_t *)(p_base + actual_idx * sizeof(CommErrEvent_t));
+                rt_kprintf("%d\t20%02d-%02d-%02d %02d:%02d:%02d\t20%02d-%02d-%02d %02d:%02d:%02d\n",
+                           seq,
+                           p->start_time.year, p->start_time.month, p->start_time.day,
+                           p->start_time.hour, p->start_time.minute, p->start_time.second,
+                           p->end_time.year, p->end_time.month, p->end_time.day,
+                           p->end_time.hour, p->end_time.minute, p->end_time.second);
+                break;
+            }
+            default:
+                rt_kprintf("%d\t(unknown)\n", seq);
+                break;
+        }
+    }
+
+    rt_kprintf("===================================================\n");
+
+    rt_mutex_release(&event_mgmt_mutex);
+}
+
+static int show_event_data_by_type(int argc, char **argv)
+{
+    uint8_t cls;
+
+    if(argc != 2)
+    {
+        rt_kprintf("Usage: show_event_data_by_type <event_class>\n");
+        rt_kprintf("event_class=0 逆变器开关机控制事件\n");
+        rt_kprintf("event_class=1 逆变器有功控制事件\n");
+        rt_kprintf("event_class=2 逆变器无功控制事件\n");
+        rt_kprintf("event_class=3 逆变器功率因数控制事件\n");
+        rt_kprintf("event_class=4 逆变器有功时段控制事件\n");
+        rt_kprintf("event_class=5 装置电压越限事件\n");
+        rt_kprintf("event_class=6 逆变器通信异常事件\n");
+        return -1;
+    }
+
+    cls = (uint8_t)atoi(argv[1]);
+    Show_Event_Records_By_Type(cls);
+    return 0;
+}
+MSH_CMD_EXPORT(show_event_data_by_type, Show event data by type [0~6]);
 
 void Save_Event_Data(uint8_t *p_Event_Date)
 {
@@ -205,8 +478,6 @@ void Save_Event_Data(uint8_t *p_Event_Date)
 
     struct Event_Management_Str *p_Event_Management = &Event_Management[event_class];
 
-//    uint16_t eventCnt = p_evt_digest->eventCnt;  // flash中一共有多少条记录
-//    uint16_t headIdx = p_evt_digest->headIdx;   // flash记录中，第一条记录的启动偏移
     uint16_t tailIdx = p_evt_digest->tailIdx;   // flash记录中，最后一条记录的启动偏移
     uint8_t *p_save_addr = NULL;
     uint32_t size = 0;
@@ -239,22 +510,8 @@ void Save_Event_Data(uint8_t *p_Event_Date)
         size = sizeof(CommErrEvent_t);
         p_save_addr = &p_buf[24 + tailIdx * size]; // 事件数据缓存区
     }
-//    else if(event_class == ETP_PROTO_UNIT_EVENT_CLEAR){
-//        size = sizeof(EventTime);
-//        p_save_addr = &p_buf[2 + tailIdx * size]; // 事件数据缓存区
-//    }
-//    else if(event_class == ETP_PROTO_UNIT_OTA_UPGRADE){
-//        size = sizeof(uint16_t);
-//        p_save_addr = &p_buf[2 + tailIdx * size]; // 事件数据缓存区
-//    }
-//    else if(event_class == ETP_PROTO_UNIT_TIME_CALIB){
-//        size = sizeof(TimeCalibrationEvent_t);
-//        p_save_addr = &p_buf[2 + tailIdx * size]; // 事件数据缓存区
-//    }
-
 
     rt_memcpy(p_save_addr, &p_Event_Date[1], size);
-
 
     if(p_Event_Management->Event_Max_Cnt == p_evt_digest->eventCnt)
     {
@@ -280,11 +537,11 @@ void Save_Event_Data_To_Flash(uint8_t event_class)
             Event_Management[event_class].Event_Name);
 }
 
-int32_t Clear_Event_Data(uint8_t  event_class)
+uint8_t Clear_Event_Data(uint8_t  event_class)
 {
     if(event_class >= EVT_CLASS_MAX_)
     {
-        return -RT_EINVAL;
+        return RT_EINVAL;
     }
 
     rt_mutex_take(&event_mgmt_mutex, RT_WAITING_FOREVER);
@@ -304,6 +561,18 @@ int32_t Clear_Event_Data(uint8_t  event_class)
 
     return RT_EOK;
 }
+
+void Clear_All_Event_Data(void)
+{
+    for(uint8_t i = ETP_PV_INV_ONOFF_CTRL; i < EVT_CLASS_MAX_; i++)
+    {
+        if(RT_EOK != Clear_Event_Data(i))
+        {
+            rt_kprintf("Clear Event Data Failed, Event Id: %d", i);
+        }
+    }
+}
+MSH_CMD_EXPORT(Clear_All_Event_Data, Clear All Event Data);
 
 /* 事件初始化 */
 void Event_Data_Init(void)
@@ -381,19 +650,9 @@ void Event_Data_Deal_Loop(void *parameter)
 
 //开关机
 void Send_Inv_OnOff_Event_Data(EventTime start_time, EventTime end_time,
-                               uint8_t ctrl_type, uint8_t *ctrl_result)
+                               uint8_t *ctrl_type, uint8_t *ctrl_result)
 {
     uint16_t event = ETP_PV_INV_ONOFF_CTRL;
-    uint8_t  event_type = 0;
-
-    if(ctrl_type == INV_CONTROL_POWER_ON)
-    {
-        event_type = 0;
-    }
-    else if(ctrl_type == INV_CONTROL_POWER_OFF)
-    {
-        event_type = 1;
-    }
 
     /* ---------- 计数器指针 ---------- */
     uint16_t *p_cnt = (uint16_t *)&Event_Management[event].buf[
@@ -407,11 +666,11 @@ void Send_Inv_OnOff_Event_Data(EventTime start_time, EventTime end_time,
 
     for(int i = 0; i < INVERTER_ARCHIVE_MAX_COUNT; ++i)
     {
-        SwitchEvent.event_type[i]      = event_type;
+        SwitchEvent.event_type[i]      = ctrl_type[i];
         SwitchEvent.control_result[i]  = ctrl_result[i];
 
         /* 参与了控制的才递增次数 */
-        if (ctrl_result[i] != 0)
+        if (ctrl_result[i] != 1)
         {
             if (p_cnt[i] < Event_Management[event].Event_Max_Cnt)
             {
@@ -428,6 +687,12 @@ void Send_PowerEvent_Data(EventTime start_time, EventTime end_time,
 {
     uint16_t event = 0;
     uint8_t  event_type = 0;
+
+    if(0xff == ctrl_type)
+    {
+        rt_kprintf("Control type exception!The event is invalid.\n");
+        return ;
+    }
 
     if(ctrl_type == INV_CONTROL_ACTIVE_POWER)
     {
@@ -449,7 +714,7 @@ void Send_PowerEvent_Data(EventTime start_time, EventTime end_time,
         event = ETP_PV_INV_Q_CTRL;
         event_type = 1;
     }
-    else
+    else if(ctrl_type == INV_CONTROL_POWER_FACTOR)
     {
         event = ETP_PV_INV_PF_CTRL;
     }
@@ -473,7 +738,7 @@ void Send_PowerEvent_Data(EventTime start_time, EventTime end_time,
             PowerFactorEvent.inv_values[i]     = (int16_t)ctrl_value[i];
 
             /* 参与了控制的才递增次数 */
-            if(ctrl_result[i] != 0)
+            if(ctrl_result[i] != 1) //未调控不递增控制次数，其余递增
             {
                 if(p_cnt[i] < Event_Management[event].Event_Max_Cnt)
                 {
@@ -483,7 +748,7 @@ void Send_PowerEvent_Data(EventTime start_time, EventTime end_time,
         }
         Send_Event_Data_To_Cache_By_Type(event, &PowerFactorEvent);
     }
-    /* ---------- 有功/无功/时段控制 ---------- */
+    /* ---------- 有功/无功 ---------- */
     else
     {
         PowerControlEvent_t PowerControlEvent;
@@ -499,7 +764,7 @@ void Send_PowerEvent_Data(EventTime start_time, EventTime end_time,
             PowerControlEvent.control_value[i]  = ctrl_value[i];
 
             /* 参与了控制的才递增次数 */
-            if(ctrl_result[i] != 0)
+            if(ctrl_result[i] != 1)
             {
                 if(p_cnt[i] < Event_Management[event].Event_Max_Cnt)
                 {
@@ -511,39 +776,38 @@ void Send_PowerEvent_Data(EventTime start_time, EventTime end_time,
     }
 }
 
-////校时
-//void Send_TimeCalibrationEvent_Data(EventTime before_calibration_time, EventTime after_calibration_time)
-//{
-//    TimeCalibrationEvent_t TimeCalibrationEvent;
-//
-//    TimeCalibrationEvent.before_calibration = before_calibration_time;
-//    TimeCalibrationEvent.after_calibration  = after_calibration_time;
-//
-//    uint8_t *p = &Event_Management[ETP_PROTO_UNIT_TIME_CALIB].buf[sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str)];
-//
-//    (*p)++;
-//    Send_Event_Data_To_Cache_By_Type(ETP_PROTO_UNIT_TIME_CALIB, &TimeCalibrationEvent);
-//}
+void Send_PowerTimeControlEvent_Data(EventTime start_time, EventTime end_time,
+                          uint8_t ctrl_type, uint8_t *ctrl_result, int32_t *ctrl_value)
+{
+    uint16_t event = ETP_PV_INV_P_PERIOD_CTRL;
 
-////升级
-//void Send_UpgradeEvent_Data(uint16_t upgrade_version)
-//{
-//    uint16_t upgrade_data = upgrade_version;
-//
-//    uint8_t *p = &Event_Management[ETP_PROTO_UNIT_OTA_UPGRADE].buf[sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str)];
-//    (*p)++;
-//    Send_Event_Data_To_Cache_By_Type(ETP_PROTO_UNIT_OTA_UPGRADE, &upgrade_data);
-//}
+    /* ---------- 计数器指针 ---------- */
+    uint16_t *p_cnt = (uint16_t *)&Event_Management[event].buf[
+                        sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str)];
 
-////事件清零
-//void Send_EventResetEvent_Data(EventTime event_reset_time)
-//{
-//    EventTime event_reset_event_data = event_reset_time;
-//
-//    uint8_t *p = &Event_Management[ETP_PROTO_UNIT_EVENT_CLEAR].buf[sizeof(struct Event_Digest_Str) + sizeof(struct Event_Desc_Str)];
-//    (*p)++;
-//    Send_Event_Data_To_Cache_By_Type(ETP_PROTO_UNIT_EVENT_CLEAR, &event_reset_event_data);
-//}
+    PowerControlEvent_t PowerControlEvent;
+    rt_memset(&PowerControlEvent, 0, sizeof(PowerControlEvent_t));
+
+    PowerControlEvent.start_time = start_time;
+    PowerControlEvent.end_time   = end_time;
+    PowerControlEvent.event_type = ctrl_type;
+
+    for(int i = 0; i < INVERTER_ARCHIVE_MAX_COUNT; ++i)
+    {
+        PowerControlEvent.control_result[i] = ctrl_result[i];
+        PowerControlEvent.control_value[i]  = ctrl_value[i];
+
+        /* 参与了控制的才递增次数 */
+        if(ctrl_result[i] != 1)
+        {
+            if(p_cnt[i] < Event_Management[event].Event_Max_Cnt)
+            {
+                p_cnt[i]++;
+            }
+        }
+    }
+    Send_Event_Data_To_Cache_By_Type(event, &PowerControlEvent);
+}
 
 
 /* 电压越限事件发送 */

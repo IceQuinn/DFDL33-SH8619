@@ -19,6 +19,7 @@
 #include "sys.h"
 #include "uart_def.h"
 #include "user_rtc.h"
+#include "event_data_deal.h"
 
 #define INV_DATA_PORT_COUNT                3U
 #define INV_DATA_PERIODIC_POINT_COUNT     18U
@@ -1746,6 +1747,11 @@ static void inv_data_handle_response(Inv_Data_Port_Context_t *context)
         show_arr(frame_name, frame, frame_len);
         rt_kprintf("%s uart[%d] archive[%d] data[%s] reply rejected: %s, exception[%d]\n", get_char_time(), inv_data_uart_no(context), context->active_archive_index + 1, context->active.read.points[0].name, modbus_m_parse_result_text(result), exception_code);
         inv_data_invalidate_active_point(context);
+
+        //通信异常事件发送
+        EventTime event_time;
+        Get_EventTime(&event_time);
+        Send_CommErrEvent_Data(event_time, event_time, context->active_archive_index);
      }
 
     inv_data_finish_active_point(context);
@@ -1863,12 +1869,22 @@ static void inv_control_handle_response(Inv_Data_Port_Context_t *context)
     else if(parse_result == MODBUS_M_PARSE_EXCEPTION) {
         control_result = INV_CONTROL_RESULT_DEVICE_EXCEPTION;
         rt_kprintf("%s uart[%d] archive[%d] control[%s] device exception[%d]\n", get_char_time(), inv_data_uart_no(context), context->active_archive_index + 1, context->active.control.name, exception_code);
+
+        //通信异常事件发送
+        EventTime event_time;
+        Get_EventTime(&event_time);
+        Send_CommErrEvent_Data(event_time, event_time, context->active_archive_index);
     }
     /* 已收到但不能匹配本次写请求的报文直接结束，不再继续计算超时。 */
     else {
         control_result = INV_CONTROL_RESULT_RESPONSE_INVALID;
         inv_control_invalidate_cached_value(context); /* 写请求可能已经执行，旧控制值不能继续视为有效。 */
         rt_kprintf("%s uart[%d] archive[%d] control[%s] reply rejected: %s\n", get_char_time(), inv_data_uart_no(context), context->active_archive_index + 1, context->active.control.name, modbus_m_parse_result_text(parse_result));
+
+        //通信异常事件发送
+        EventTime event_time;
+        Get_EventTime(&event_time);
+        Send_CommErrEvent_Data(event_time, event_time, context->active_archive_index);
     }
 
     inv_control_push_result(&context->active.control.request, control_result, exception_code);
@@ -1923,6 +1939,11 @@ static void inv_data_process_port(Inv_Data_Port_Context_t *context, rt_tick_t no
                 inv_data_invalidate_active_point(context);
                 inv_data_finish_active_point(context);
             }
+
+            //通信异常事件发送
+            EventTime event_time;
+            Get_EventTime(&event_time);
+            Send_CommErrEvent_Data(event_time, event_time, context->active_archive_index);
         }
         return;
     }
