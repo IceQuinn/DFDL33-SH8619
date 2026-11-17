@@ -25,7 +25,7 @@
 #define TIME_CTRL_RESTORE_RETRY_MS         60000U
 
 /* 最终结果正常会在1秒内生成，额外留出队列调度余量。 */
-#define TIME_CTRL_RESULT_WAIT_MS             3000U
+#define TIME_CTRL_RESULT_WAIT_MS             4000U
 
 /* 恢复额定输出时使用的有功百分比。 */
 #define TIME_CTRL_RESTORE_PERCENT            100

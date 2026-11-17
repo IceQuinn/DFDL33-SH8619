@@ -37,7 +37,7 @@
 #define DLT645_POLL_INTERVAL_MAX          3600U /* 全局周期抄读间隔最大允许3600秒。 */
 #define DLT645_FIRMWARE_VERSION_LEN         32U /* 04800001厂家软件版本号固定占32字节ASCII。 */
 #define DLT645_REALTIME_READ_TIMEOUT_MS   55000U /* 为主站60秒超时保留5秒组帧和发送余量。 */
-#define DLT645_CONTROL_WAIT_TICKS          3000  /* 单台控制最多等待3秒，FF逐台执行仍可控制在60秒内。 */
+#define DLT645_CONTROL_WAIT_TICKS          4000  /* 单台控制最多等待4秒（前置使能+实际控制两帧），FF逐台执行仍可控制在60秒内。 */
 #define DLT645_CONTROL_VALUE_NONE  0xFFU /* 逐台调控值记录中表示本台未参与本次控制或值非法。 */
 #define DLT645_CONTROL_VALUE_NONE_S32  INT32_MIN /* 五类调节逐台调控值记录中表示本台未参与本次控制或值非法。 */
 #define DLT645_CONTROL_PERCENT_MAX (INV_CONTROL_PERCENT_MAX * 10) /* XXX.X格式下110.0%的定点上限，FF执行目标仍为100%。 */

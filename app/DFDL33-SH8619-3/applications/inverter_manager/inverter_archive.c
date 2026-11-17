@@ -13,6 +13,9 @@ Inv_ArchiveLib_t g_inv_archive_lib; /* 保存档案头、有效数量、12个有
 /* 协议指针只在RAM中使用，不能随档案库写入Flash。 */
 const struct Inv_Proto *g_inv_archive_proto[INVERTER_ARCHIVE_MAX_COUNT]; /* 每个有效档案匹配到的运行时协议地址。 */
 
+/* 前置协议指针与协议指针一一对应，指向协议同槽号的前置配置，同样不写入Flash。 */
+static const struct Inv_ProtoPreReg *g_inv_archive_prereg[INVERTER_ARCHIVE_MAX_COUNT];
+
 /* 将固定32字节厂家名称转换为以'\0'结束的可打印字符串。 */
 void Inv_Archive_Copy_Mfr_Name(char output[INVERTER_ARCHIVE_BRAND_WIRE_SIZE + 1],
                                const char input[INVERTER_ARCHIVE_BRAND_WIRE_SIZE])
@@ -80,6 +83,25 @@ static const Inv_Proto_t *inv_archive_find_protocol(const Inv_MfrInfo_t *mfr_inf
     return RT_NULL;
 }
 
+/* 同步档案的协议指针和前置库指针；协议为空时两个指针一起清空。 */
+static void inv_archive_bind_runtime(uint8_t archive_index, const Inv_Proto_t *protocol)
+{
+    uint16_t prereg_index; /* 由协议地址换算得到的前置库槽位下标。 */
+
+    g_inv_archive_proto[archive_index] = protocol;
+    g_inv_archive_prereg[archive_index] = RT_NULL;
+
+    if(protocol == RT_NULL) {
+        return;
+    }
+
+    /* 协议指针来自全局协议库时才能换算槽位，越界时只保留协议绑定。 */
+    prereg_index = (uint16_t)(protocol - g_inv_proto_lib.proto);
+    if(prereg_index < INVERTER_PROTOCOL_LIBRARY_COUNT) {
+        g_inv_archive_prereg[archive_index] = &g_inv_prereg_lib.prereg[prereg_index];
+    }
+}
+
 /* 重新统计有效档案数，并将不包含运行时协议指针的档案库保存到Flash A/B区。 */
 void Inv_Archive_Save(void)
 {
@@ -115,7 +137,7 @@ int8_t Inv_Archive_Add(const Inv_Archive_t *archive)
             /* 同一接入端口和Modbus地址代表同一设备，重新识别时更新原档案。 */
             if((stored_archive->port == archive->port) && (stored_archive->mb_addr == archive->mb_addr)) {
                 rt_memcpy(stored_archive, archive, sizeof(*stored_archive));
-                g_inv_archive_proto[index] = inv_archive_find_protocol(&stored_archive->mfr_info);
+                inv_archive_bind_runtime(index, inv_archive_find_protocol(&stored_archive->mfr_info));
                 Inv_Archive_Save(); /* 更新已有设备后立即同步Flash A/B区。 */
                 return (int8_t)index;
             }
@@ -134,7 +156,7 @@ int8_t Inv_Archive_Add(const Inv_Archive_t *archive)
     /* 先复制完整档案再置有效标志，避免其他读取者看到只填写了一部分的有效档案。 */
     rt_memcpy(&g_inv_archive_lib.archives[empty_index], archive, sizeof(g_inv_archive_lib.archives[empty_index]));
     g_inv_archive_lib.valid[empty_index] = INVERTER_ARCHIVE_VALID;
-    g_inv_archive_proto[empty_index] = inv_archive_find_protocol(&g_inv_archive_lib.archives[empty_index].mfr_info);
+    inv_archive_bind_runtime(empty_index, inv_archive_find_protocol(&g_inv_archive_lib.archives[empty_index].mfr_info));
     Inv_Archive_Save(); /* 新档案及其有效标志设置完整后持久化。 */
     return (int8_t)empty_index;
 }
@@ -198,7 +220,7 @@ int8_t Inv_Archive_Set(uint8_t archive_index, const Inv_Archive_t *archive)
     rt_enter_critical(); /* 防止任务切换发生在档案内容、有效标志和协议指针更新到一半时。 */
     rt_memcpy(&g_inv_archive_lib.archives[archive_index], archive, sizeof(*archive)); /* 完整替换DI0指定的固定档案槽位。 */
     g_inv_archive_lib.valid[archive_index] = INVERTER_ARCHIVE_VALID; /* 完整档案复制完成后再将槽位置为有效。 */
-    g_inv_archive_proto[archive_index] = protocol; /* 同步厂家协议指针，重启前也不保留旧协议引用。 */
+    inv_archive_bind_runtime(archive_index, protocol); /* 同步协议指针和前置库指针，重启前也不保留旧引用。 */
     rt_exit_critical();
 
     Time_Ctrl_Archive_Change_End(); /* 档案切换完成后才允许新时段命令受理和执行。 */
@@ -221,7 +243,8 @@ int8_t Inv_Archive_Delete(uint8_t archive_index)
     rt_memset(&empty_archive, 0, sizeof(empty_archive)); /* 无效档案的持久化内容统一使用全零。 */
     archive_changed = ((g_inv_archive_lib.valid[archive_index] != INVERTER_ARCHIVE_INVALID) ||
                        (rt_memcmp(&g_inv_archive_lib.archives[archive_index], &empty_archive, sizeof(empty_archive)) != 0) ||
-                       (g_inv_archive_proto[archive_index] != RT_NULL)) ? RT_TRUE : RT_FALSE; /* 已完全清空的槽位无需重复擦写Flash。 */
+                       (g_inv_archive_proto[archive_index] != RT_NULL) ||
+                       (g_inv_archive_prereg[archive_index] != RT_NULL)) ? RT_TRUE : RT_FALSE; /* 已完全清空的槽位无需重复擦写Flash。 */
 
     if(Time_Ctrl_Archive_Change_Begin(archive_index) != RT_EOK) {
         return INVERTER_ARCHIVE_ADD_FAILED; /* 即使重复删除空槽，也先清理可能残留的时段计划。 */
@@ -254,7 +277,7 @@ void Inv_Archive_Validate_Protocols(void)
 
         /* 无效档案不参与协议匹配，同时清除可能残留的运行时指针。 */
         if(g_inv_archive_lib.valid[i] != INVERTER_ARCHIVE_VALID) {
-            g_inv_archive_proto[i] = RT_NULL;
+            inv_archive_bind_runtime(i, RT_NULL);
             continue;
         }
 
@@ -264,12 +287,12 @@ void Inv_Archive_Validate_Protocols(void)
         if(protocol == RT_NULL) {
             rt_kprintf("[%08d] archive[%d] addr[%d] port[%d] disabled: matching protocol not found\n", rt_tick_get(), i + 1, archive->mb_addr, archive->port);
             g_inv_archive_lib.valid[i] = INVERTER_ARCHIVE_INVALID;
-            g_inv_archive_proto[i] = RT_NULL;
+            inv_archive_bind_runtime(i, RT_NULL);
             archive_changed = 1;
             continue;
         }
 
-        g_inv_archive_proto[i] = protocol; /* 保存协议对象地址，周期抄读时无需再次遍历协议库。 */
+        inv_archive_bind_runtime(i, protocol); /* 保存协议和前置库对象地址，周期抄读和控制无需再次遍历协议库。 */
         ++valid_count;
     }
 
@@ -297,6 +320,18 @@ const struct Inv_Proto *Inv_Archive_Get_Protocol(uint8_t archive_index)
     return g_inv_archive_proto[archive_index];
 }
 
+/* 按档案槽位获取已绑定的前置协议配置；无效档案或未绑定前置库时返回RT_NULL。 */
+const struct Inv_ProtoPreReg *Inv_Archive_Get_PreReg(uint8_t archive_index)
+{
+    /* 下标越界或档案无效时禁止返回前置配置指针。 */
+    if((archive_index >= INVERTER_ARCHIVE_MAX_COUNT) ||
+       (g_inv_archive_lib.valid[archive_index] != INVERTER_ARCHIVE_VALID)) {
+        return RT_NULL;
+    }
+
+    return g_inv_archive_prereg[archive_index];
+}
+
 /* 查询指定端口是否已被任意一个有效档案占用。 */
 uint8_t Inv_Archive_Port_Is_Occupied(uint8_t port)
 {
@@ -316,6 +351,7 @@ void Inv_Archive_Default_Init(void)
 {
     rt_memset(&g_inv_archive_lib, 0, sizeof(g_inv_archive_lib)); /* 清除全部持久化档案数据。 */
     rt_memset(g_inv_archive_proto, 0, sizeof(g_inv_archive_proto)); /* 清除全部运行时协议指针。 */
+    rt_memset(g_inv_archive_prereg, 0, sizeof(g_inv_archive_prereg)); /* 清除全部运行时前置库指针。 */
     Inv_Archive_Save(); /* 将清空后的默认档案库写入Flash。 */
 }
 MSH_CMD_EXPORT(Inv_Archive_Default_Init, Inv_Archive_Default_Init);
@@ -326,6 +362,7 @@ void Inv_Archive_Init(void)
     int32_t check_sta; /* Flash A/B区校验和恢复接口的返回状态。 */
 
     rt_memset(g_inv_archive_proto, 0, sizeof(g_inv_archive_proto)); /* Flash不保存指针，上电时必须重新建立。 */
+    rt_memset(g_inv_archive_prereg, 0, sizeof(g_inv_archive_prereg)); /* 前置库指针同样只在RAM中重建。 */
     check_sta = AB_check(flash_read,          // 读接口
                          flash_write,         // 写接口
                          ARCH_LIB_ADDR_A,     // A区地址
