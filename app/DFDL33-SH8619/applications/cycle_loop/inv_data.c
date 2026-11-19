@@ -405,7 +405,7 @@ static void inv_data_copy_read_config(Inv_Data_Point_Config_t *point, const Inv_
     rt_memcpy(&local_reg, reg, sizeof(local_reg)); /* 通过字节复制安全取得协议库配置。 */
     point->reg_addr = local_reg.reg_addr;
     point->reg_count = local_reg.reg_cnt;
-    point->function_code = local_reg.read_func_code;
+    point->function_code = local_reg.func_code;
     point->data_type = local_reg.data_type;
     point->byte_order = local_reg.byte_order;
     point->decimal_places = local_reg.decimal_places;
@@ -578,7 +578,7 @@ static Inv_Control_Result_t inv_control_get_active(const Inv_Control_Request_t *
 
         active->reg_addr = ctrl_reg.reg_addr;
         active->reg_count = ctrl_reg.reg_cnt;
-        active->function_code = ctrl_reg.write_func_code;
+        active->function_code = ctrl_reg.func_code;
         active->data_type = ctrl_reg.data_type;
         active->byte_order = ctrl_reg.byte_order;
         active->decimal_places = ctrl_reg.decimal_places;

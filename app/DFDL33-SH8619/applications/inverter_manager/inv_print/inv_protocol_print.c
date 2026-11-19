@@ -92,7 +92,7 @@ static void inv_proto_print_read_table_header(const char *section_name)
 static void inv_proto_print_reg(const char *name, const Inv_RegBlk_t *reg)
 {
     /* 将寄存器数值字段和类型、字节序文本组合成一行输出。 */
-    rt_kprintf("[%08d] %-20s %-10d %-7d %-8d %-14s %-12s %-7d\n", rt_tick_get(), name, reg->reg_addr, reg->reg_cnt, reg->read_func_code, inv_proto_data_type_name(reg->data_type), inv_proto_byte_order_name(reg->data_type, reg->byte_order), reg->decimal_places);
+    rt_kprintf("[%08d] %-20s %-10d %-7d %-8d %-14s %-12s %-7d\n", rt_tick_get(), name, reg->reg_addr, reg->reg_cnt, reg->func_code, inv_proto_data_type_name(reg->data_type), inv_proto_byte_order_name(reg->data_type, reg->byte_order), reg->decimal_places);
 }
 
 /* 打印控制类寄存器表头。 */
@@ -106,7 +106,7 @@ static void inv_proto_print_ctrl_table_header(const char *section_name)
 static void inv_proto_print_ctrl_reg(const char *name, const Inv_CtrlRegBlk_t *reg)
 {
     /* 打印数值类控制寄存器，不包含开关机固定默认值。 */
-    rt_kprintf("[%08d] %-20s %-10d %-7d %-8d %-14s %-12s %-7d\n", rt_tick_get(), name, reg->reg_addr, reg->reg_cnt, reg->write_func_code, inv_proto_data_type_name(reg->data_type), inv_proto_byte_order_name(reg->data_type, reg->byte_order), reg->decimal_places);
+    rt_kprintf("[%08d] %-20s %-10d %-7d %-8d %-14s %-12s %-7d\n", rt_tick_get(), name, reg->reg_addr, reg->reg_cnt, reg->func_code, inv_proto_data_type_name(reg->data_type), inv_proto_byte_order_name(reg->data_type, reg->byte_order), reg->decimal_places);
 }
 
 /* 打印开机或关机固定控制寄存器及其默认写入值。 */

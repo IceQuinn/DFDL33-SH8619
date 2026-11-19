@@ -37,7 +37,7 @@ static rt_bool_t inv_proto_manufacturer_valid(const char *manufacturer)
 /* 检查6字节寄存器描述的公共字段，FFFF地址表示厂家不支持该数据点并直接允许。 */
 static rt_bool_t inv_proto_register_valid(const Inv_RegBlk_t *block, rt_bool_t is_write)
 {
-    uint8_t function_code = ((const uint8_t *)block)[3]; /* 读写描述第4字节均为Modbus功能码，按公共线布局读取。 */
+    uint8_t function_code = block->func_code; /* 读写寄存器描述已统一为同一结构，第4字节字段即为本次需要校验的功能码。 */
 
     if(block->reg_addr == INVERTER_PROTOCOL_REGISTER_UNUSED) /* 未支持寄存器不参与其余字段校验。 */
     {
@@ -60,7 +60,7 @@ static rt_bool_t inv_proto_content_valid(const Inv_Proto_t *proto)
 {
     const Inv_RegBlk_t *data_blocks = (const Inv_RegBlk_t *)&proto->data; /* 数据类连续包含18个同布局只读寄存器块。 */
     const Inv_RegBlk_t *param_blocks = (const Inv_RegBlk_t *)&proto->param; /* 参数类连续包含5个同布局只读寄存器块。 */
-    const Inv_CtrlRegBlk_t *ctrl_blocks = &proto->ctrl.active_pwr_ctrl; /* 普通控制类从有功功率控制开始连续排列5项。 */
+    const Inv_CtrlRegBlk_t *ctrl_blocks = &proto->ctrl.active_pwr_ctrl; /* 普通控制类从有功功率控制开始连续排列5项，该类型与Inv_RegBlk_t布局相同。 */
     uint16_t index; /* 当前校验的同类寄存器描述下标。 */
 
     if((inv_proto_manufacturer_valid(proto->mfr_info.name) == RT_FALSE) ||

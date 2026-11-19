@@ -47,18 +47,22 @@ typedef enum Type_Byte
     Type_Byte_DCBA = 3
 } Type_Byte_t;
 
-/* 数据类和参数类使用的只读Modbus RTU寄存器描述，不保存实时数据。 */
+/* 变量类、参数类和控制类共用的Modbus RTU寄存器描述，不保存实时数据。
+ * 同一个结构既用于只读抄读点，也用于可写控制点，读写语义由使用位置决定：
+ * 变量类/参数类的第4字节为读功能码(0x03读保持/0x04读输入)；
+ * 控制类5个调节点的第4字节为写功能码(0x06写单个/0x10写多个)。
+ * 读写寄存器个数为1～16，控制类写入时0x06只允许1个寄存器。 */
 #pragma pack(1)
 typedef struct Inv_RegBlk
 {
     /* Modbus RTU请求报文中直接使用的16位寄存器地址，不保存40001等其他表示形式，也不在使用时执行地址转换。 */
     uint16_t reg_addr;
 
-    /* 连续读取的16位Modbus寄存器个数。 */
+    /* 连续读写的16位Modbus寄存器个数。 */
     uint8_t reg_cnt;
 
-    /* Modbus RTU读寄存器功能码，例如0x03表示读保持寄存器、0x04表示读输入寄存器；0表示未配置读功能。 */
-    uint8_t read_func_code;
+    /* Modbus RTU功能码：只读点表示读功能码0x03/0x04；控制点表示写功能码0x06/0x10；0表示未配置。 */
+    uint8_t func_code;
 
     /* 数据类型占bit0～bit3，使用user_comm.h中的TYPE_*值，取值范围0～15。 */
     uint16_t data_type : 4;
@@ -73,38 +77,16 @@ typedef struct Inv_RegBlk
     uint16_t reserved : 4;
 } Inv_RegBlk_t;
 
-/* 只读寄存器块由地址2字节、寄存器个数1字节、读功能码1字节和数据格式2字节组成，共6字节。 */
+/* 统一寄存器块由地址2字节、寄存器个数1字节、功能码1字节和数据格式2字节组成，共6字节。 */
 #define INV_REG_BLK_SIZE                            6
 typedef char Inv_RegBlkSizeCheck_t[
     (sizeof(Inv_RegBlk_t) == INV_REG_BLK_SIZE) ? 1 : -1];
 
-/* 控制类使用的普通Modbus RTU写寄存器描述，写入值由调用方提供。 */
-typedef struct Inv_CtrlRegBlk
-{
-    /* Modbus RTU请求报文中直接使用的16位寄存器地址，不保存其他地址表示形式。 */
-    uint16_t reg_addr;
+/* 控制类5个调节点与变量类使用完全相同的寄存器描述结构，写入值由调用方提供。
+ * 保留该别名是为了让控制类代码继续使用控制语义的类型名，布局与Inv_RegBlk_t完全相同。 */
+typedef Inv_RegBlk_t Inv_CtrlRegBlk_t;
 
-    /* 连续写入的16位Modbus寄存器个数。 */
-    uint8_t reg_cnt;
-
-    /* Modbus RTU写寄存器功能码，例如0x06表示写单个寄存器、0x10表示写多个寄存器；0表示未配置写入。 */
-    uint8_t write_func_code;
-
-    /* 数据类型占bit0～bit3，取值范围0～15。 */
-    uint16_t data_type : 4;
-
-    /* 字节序占bit4～bit7，取值范围0～15。 */
-    uint16_t byte_order : 4;
-
-    /* 小数位数占bit8～bit11，取值范围0～15。 */
-    uint16_t decimal_places : 4;
-
-    /* bit12～bit15预留。 */
-    uint16_t reserved : 4;
-
-} Inv_CtrlRegBlk_t;
-
-/* 普通控制寄存器块由地址2字节、寄存器个数1字节、写功能码1字节和数据格式2字节组成，共6字节。 */
+/* 普通控制寄存器块与统一寄存器块同为6字节，第4字节为写功能码0x06/0x10。 */
 #define INV_CTRL_REG_BLK_SIZE                       6
 typedef char Inv_CtrlRegBlkSizeCheck_t[
     (sizeof(Inv_CtrlRegBlk_t) == INV_CTRL_REG_BLK_SIZE) ? 1 : -1];
