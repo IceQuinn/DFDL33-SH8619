@@ -330,11 +330,11 @@ static rt_bool_t time_ctrl_get_control_config(uint8_t archive_index,
         return RT_FALSE;
     }
 
-    /* 数值控读取普通有功功率控制寄存器配置。 */
+    /* 数值控只需写寄存器配置，读取普通有功功率写寄存器配置。 */
     if(mode == TIME_CTRL_ACTIVE_POWER_VALUE) {
         rt_memcpy(control, &protocol->ctrl.active_pwr_ctrl, sizeof(*control));
     }
-    /* 百分比控读取有功功率百分比控制寄存器配置。 */
+    /* 百分比控只需写寄存器配置，读取有功功率百分比写寄存器配置。 */
     else if(mode == TIME_CTRL_ACTIVE_POWER_PERCENT) {
         rt_memcpy(control, &protocol->ctrl.active_pwr_pct_ctrl, sizeof(*control));
     }

@@ -98,15 +98,15 @@ static void inv_proto_print_reg(const char *name, const Inv_RegBlk_t *reg)
 /* 打印控制类寄存器表头。 */
 static void inv_proto_print_ctrl_table_header(const char *section_name)
 {
-    /* 控制表头使用write_fc区分只读寄存器表的read_fc。 */
-    rt_kprintf("[%08d] %-20s %-10s %-7s %-8s %-14s %-12s %-7s\n", rt_tick_get(), section_name, "address", "count", "write_fc", "type", "order", "decimal");
+    /* 控制类同时存在写、读两套寄存器配置，表头同时给出write_fc和read_fc。 */
+    rt_kprintf("[%08d] %-20s %-10s %-7s %-8s %-8s %-14s %-12s %-7s\n", rt_tick_get(), section_name, "address", "count", "write_fc", "read_fc", "type", "order", "decimal");
 }
 
-/* 打印不带默认值的控制寄存器配置。 */
-static void inv_proto_print_ctrl_reg(const char *name, const Inv_CtrlRegBlk_t *reg)
+/* 打印不带默认值的控制类写寄存器和读寄存器配置。 */
+static void inv_proto_print_ctrl_reg(const char *name, const Inv_CtrlRegBlk_t *reg, const Inv_ReadRegBlk_t *read_reg)
 {
-    /* 打印数值类控制寄存器，不包含开关机固定默认值。 */
-    rt_kprintf("[%08d] %-20s %-10d %-7d %-8d %-14s %-12s %-7d\n", rt_tick_get(), name, reg->reg_addr, reg->reg_cnt, reg->func_code, inv_proto_data_type_name(reg->data_type), inv_proto_byte_order_name(reg->data_type, reg->byte_order), reg->decimal_places);
+    /* 一行同时打印写寄存器和读寄存器，不包含开关机固定默认值。 */
+    rt_kprintf("[%08d] %-20s %-10d %-7d %-8d %-8d %-14s %-12s %-7d\n", rt_tick_get(), name, reg->reg_addr, reg->reg_cnt, reg->func_code, read_reg->func_code, inv_proto_data_type_name(reg->data_type), inv_proto_byte_order_name(reg->data_type, reg->byte_order), reg->decimal_places);
 }
 
 /* 打印开机或关机固定控制寄存器及其默认写入值。 */
@@ -185,11 +185,11 @@ static void inv_proto_print_one(uint16_t proto_number, uint16_t valid_number, co
     inv_proto_print_ctrl_table_header("[control]");
     inv_proto_print_default_ctrl_reg("power_on", &proto->ctrl.pwr_on);
     inv_proto_print_default_ctrl_reg("power_off", &proto->ctrl.pwr_off);
-    inv_proto_print_ctrl_reg("active_pwr_value", &proto->ctrl.active_pwr_ctrl);
-    inv_proto_print_ctrl_reg("reactive_pwr_value", &proto->ctrl.reactive_pwr_ctrl);
-    inv_proto_print_ctrl_reg("power_factor", &proto->ctrl.pwr_factor_ctrl);
-    inv_proto_print_ctrl_reg("active_pwr_pct", &proto->ctrl.active_pwr_pct_ctrl);
-    inv_proto_print_ctrl_reg("reactive_pwr_pct", &proto->ctrl.reactive_pwr_pct_ctrl);
+    inv_proto_print_ctrl_reg("active_pwr_value", &proto->ctrl.active_pwr_ctrl, &proto->ctrl.active_pwr_read);
+    inv_proto_print_ctrl_reg("reactive_pwr_value", &proto->ctrl.reactive_pwr_ctrl, &proto->ctrl.reactive_pwr_read);
+    inv_proto_print_ctrl_reg("power_factor", &proto->ctrl.pwr_factor_ctrl, &proto->ctrl.pwr_factor_read);
+    inv_proto_print_ctrl_reg("active_pwr_pct", &proto->ctrl.active_pwr_pct_ctrl, &proto->ctrl.active_pwr_pct_read);
+    inv_proto_print_ctrl_reg("reactive_pwr_pct", &proto->ctrl.reactive_pwr_pct_ctrl, &proto->ctrl.reactive_pwr_pct_read);
 
     inv_proto_print_read_table_header("[daily]");
     inv_proto_print_reg("daily_energy", &proto->daily_energy);

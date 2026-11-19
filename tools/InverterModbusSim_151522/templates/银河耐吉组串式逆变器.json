@@ -3,7 +3,7 @@
   "templateName": "银河耐吉组串式逆变器",
   "addressOffset": 0,
   "writeFunctionCode": 0,
-  "undefinedAddressMode": 0,
+  "undefinedAddressMode": 1,
   "registers": [
     {
       "name": "机器容量",
@@ -865,7 +865,7 @@
     },
     {
       "name": "DSP软件版本",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 4000,
       "byteOrder": "ABCD",
@@ -878,7 +878,7 @@
     },
     {
       "name": "DSP升级年",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 4001,
       "byteOrder": "ABCD",
@@ -891,7 +891,7 @@
     },
     {
       "name": "DSP升级月",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 4002,
       "byteOrder": "ABCD",
@@ -904,7 +904,7 @@
     },
     {
       "name": "DSP升级日",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 4003,
       "byteOrder": "ABCD",
@@ -917,7 +917,7 @@
     },
     {
       "name": "ARM软件版本",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 4004,
       "byteOrder": "ABCD",
@@ -930,7 +930,7 @@
     },
     {
       "name": "ARM升级年",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 4005,
       "byteOrder": "ABCD",
@@ -943,7 +943,7 @@
     },
     {
       "name": "ARM升级月",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 4006,
       "byteOrder": "ABCD",
@@ -956,7 +956,7 @@
     },
     {
       "name": "ARM升级日",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 4007,
       "byteOrder": "ABCD",
@@ -969,7 +969,7 @@
     },
     {
       "name": "年",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 4008,
       "byteOrder": "ABCD",
@@ -982,7 +982,7 @@
     },
     {
       "name": "月",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 4009,
       "byteOrder": "ABCD",
@@ -995,7 +995,7 @@
     },
     {
       "name": "日",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 4010,
       "byteOrder": "ABCD",
@@ -1008,7 +1008,7 @@
     },
     {
       "name": "时",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 4011,
       "byteOrder": "ABCD",
@@ -1021,7 +1021,7 @@
     },
     {
       "name": "分",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 4012,
       "byteOrder": "ABCD",
@@ -1034,7 +1034,7 @@
     },
     {
       "name": "秒",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 4013,
       "byteOrder": "ABCD",
@@ -1047,7 +1047,7 @@
     },
     {
       "name": "周",
-      "fc": 3,
+      "fc": 4,
       "dataType": "uint16",
       "regAddr": 4014,
       "byteOrder": "ABCD",

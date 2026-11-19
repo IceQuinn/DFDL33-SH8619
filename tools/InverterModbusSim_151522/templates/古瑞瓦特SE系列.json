@@ -342,6 +342,32 @@
       "value": 5000.0,
       "notes": "[合并H/L→32位] 单位:0.1KWH; 总发电量高位 | 单位:0.1KWH; 总发电量低位（5000.0kWh）",
       "selected": true
+    },
+    {
+      "fc": 4,
+      "name": "Epv_total",
+      "dataType": "uint32",
+      "regAddr": 56,
+      "byteOrder": "ABCD",
+      "scale": 10.0,
+      "access": "RO",
+      "formula": "$value",
+      "value": 5000.0,
+      "notes": "[合并H/L→32位] 单位:0.1kWh; 总的发电量高位 | 单位:0.1kWh; PV总的发电量（5000.0kWh）",
+      "selected": true
+    },
+    {
+      "fc": 4,
+      "name": "Rac",
+      "dataType": "uint32",
+      "regAddr": 58,
+      "byteOrder": "ABCD",
+      "scale": 10.0,
+      "access": "RO",
+      "formula": "$value",
+      "value": 0.0,
+      "notes": "[合并H/L→32位] 单位:0.1Var; AC无功功率高位 | 单位:0.1Var; AC无功功率（0.0Var）",
+      "selected": true
     }
   ]
 }

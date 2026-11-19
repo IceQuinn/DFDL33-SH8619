@@ -411,15 +411,17 @@ static void inv_data_copy_read_config(Inv_Data_Point_Config_t *point, const Inv_
     point->decimal_places = local_reg.decimal_places;
 }
 
-/* 将普通控制寄存器转换为03功能码读保持寄存器配置。 */
-static void inv_data_copy_ctrl_config(Inv_Data_Point_Config_t *point, const Inv_CtrlRegBlk_t *reg)
+/* 将五类控制点的读寄存器配置复制为统一抄读配置。
+ * 地址、个数、功能码、数据类型、字节序和小数位全部取协议库中的读寄存器配置，
+ * 不再固定使用03功能码；读寄存器地址为0xFFFF时该控制点不支持回读，由可读性检查拒绝。 */
+static void inv_data_copy_ctrl_config(Inv_Data_Point_Config_t *point, const Inv_ReadRegBlk_t *reg)
 {
-    Inv_CtrlRegBlk_t local_reg; /* 普通控制寄存器配置的对齐副本。 */
+    Inv_ReadRegBlk_t local_reg; /* 读寄存器配置的对齐副本。 */
 
     rt_memcpy(&local_reg, reg, sizeof(local_reg));
     point->reg_addr = local_reg.reg_addr;
     point->reg_count = local_reg.reg_cnt;
-    point->function_code = MODBUS_FUNC_READ_HOLDING;
+    point->function_code = local_reg.func_code;
     point->data_type = local_reg.data_type;
     point->byte_order = local_reg.byte_order;
     point->decimal_places = local_reg.decimal_places;
@@ -543,7 +545,7 @@ static Inv_Control_Result_t inv_control_get_active(const Inv_Control_Request_t *
     }
     /* 其他控制项使用调用方提供的定点整数值。 */
     else {
-        /* 根据控制类型选择对应寄存器配置和实时数据回读目标。 */
+        /* 根据控制类型选择对应的写寄存器配置和实时数据回读目标，回读由读寄存器配置决定。 */
         switch(request->type) {
         case INV_CONTROL_ACTIVE_POWER:
             rt_memcpy(&ctrl_reg, &protocol->ctrl.active_pwr_ctrl, sizeof(ctrl_reg));
@@ -569,6 +571,7 @@ static Inv_Control_Result_t inv_control_get_active(const Inv_Control_Request_t *
             active->name = "active_power_percent";
             break;
 
+        /* 无匹配类型时按无功功率百分比写入，保持原控制分支的默认行为。 */
         default:
             rt_memcpy(&ctrl_reg, &protocol->ctrl.reactive_pwr_pct_ctrl, sizeof(ctrl_reg));
             active->target = &g_inv_data[request->archive_index].ctrl.reactive_pwr_pct_ctrl;
@@ -720,31 +723,31 @@ static rt_bool_t inv_data_get_point(uint8_t archive_index,
         /* 开机和关机是纯写命令，不加入周期轮询点。 */
         switch(point_index) {
         case 23U:
-            inv_data_copy_ctrl_config(point, &protocol->ctrl.active_pwr_ctrl);
+            inv_data_copy_ctrl_config(point, &protocol->ctrl.active_pwr_read);
             point->number_target = &data->ctrl.active_pwr_ctrl;
             point->name = "active_pwr_ctrl";
             break;
 
         case 24U:
-            inv_data_copy_ctrl_config(point, &protocol->ctrl.reactive_pwr_ctrl);
+            inv_data_copy_ctrl_config(point, &protocol->ctrl.reactive_pwr_read);
             point->number_target = &data->ctrl.reactive_pwr_ctrl;
             point->name = "reactive_pwr_ctrl";
             break;
 
         case 25U:
-            inv_data_copy_ctrl_config(point, &protocol->ctrl.pwr_factor_ctrl);
+            inv_data_copy_ctrl_config(point, &protocol->ctrl.pwr_factor_read);
             point->number_target = &data->ctrl.pwr_factor_ctrl;
             point->name = "power_factor_ctrl";
             break;
 
         case 26U:
-            inv_data_copy_ctrl_config(point, &protocol->ctrl.active_pwr_pct_ctrl);
+            inv_data_copy_ctrl_config(point, &protocol->ctrl.active_pwr_pct_read);
             point->number_target = &data->ctrl.active_pwr_pct_ctrl;
             point->name = "active_pwr_pct_ctrl";
             break;
 
         default:
-            inv_data_copy_ctrl_config(point, &protocol->ctrl.reactive_pwr_pct_ctrl);
+            inv_data_copy_ctrl_config(point, &protocol->ctrl.reactive_pwr_pct_read);
             point->number_target = &data->ctrl.reactive_pwr_pct_ctrl;
             point->name = "reactive_pwr_pct_ctrl";
             break;
@@ -755,6 +758,14 @@ static rt_bool_t inv_data_get_point(uint8_t archive_index,
         inv_data_copy_read_config(point, &protocol->daily_energy);
         point->number_target = &data->daily_energy;
         point->name = "daily_energy";
+    }
+
+    /* 控制类回读只按读寄存器配置抄读，读寄存器配置不是03/04时将地址置0xFFFF明确按不支持处理。 */
+    if((point_index >= 23U) && (point_index < 28U) &&
+       ((point->reg_addr == INVERTER_PROTOCOL_REGISTER_UNUSED) ||
+        ((point->function_code != MODBUS_FUNC_READ_HOLDING) &&
+         (point->function_code != MODBUS_FUNC_READ_INPUT)))) {
+        point->reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
     }
 
     return RT_TRUE;
@@ -773,7 +784,7 @@ static rt_bool_t inv_data_point_is_readable(const Inv_Data_Point_Config_t *point
         return RT_FALSE;
     }
 
-    /* 数据类和参数类只允许03或04功能码，控制类已经统一转换为03功能码。 */
+    /* 数据类和控制类使用协议库中配置的03或04读功能码，参数类同样只允许这两类读功能码。 */
     if((point->function_code != MODBUS_FUNC_READ_HOLDING) &&
        (point->function_code != MODBUS_FUNC_READ_INPUT)) {
         return RT_FALSE;

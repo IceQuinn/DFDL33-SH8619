@@ -55,12 +55,13 @@ static rt_bool_t inv_proto_register_valid(const Inv_RegBlk_t *block, rt_bool_t i
     return (function_code == 0x03U) || (function_code == 0x04U); /* 采集点只接受保持寄存器或输入寄存器读功能码。 */
 }
 
-/* 对238字节协议的厂家、版本、特征、数据、参数和控制描述执行写入前完整校验。 */
+/* 对268字节协议的厂家、版本、特征、数据、参数和控制描述执行写入前完整校验。 */
 static rt_bool_t inv_proto_content_valid(const Inv_Proto_t *proto)
 {
     const Inv_RegBlk_t *data_blocks = (const Inv_RegBlk_t *)&proto->data; /* 数据类连续包含18个同布局只读寄存器块。 */
     const Inv_RegBlk_t *param_blocks = (const Inv_RegBlk_t *)&proto->param; /* 参数类连续包含5个同布局只读寄存器块。 */
-    const Inv_CtrlRegBlk_t *ctrl_blocks = &proto->ctrl.active_pwr_ctrl; /* 普通控制类从有功功率控制开始连续排列5项，该类型与Inv_RegBlk_t布局相同。 */
+    const Inv_CtrlRegBlk_t *ctrl_writes = &proto->ctrl.active_pwr_ctrl; /* 5个写寄存器配置从有功功率数值写寄存器开始按下标2步进排列。 */
+    const Inv_ReadRegBlk_t *ctrl_reads = &proto->ctrl.active_pwr_read; /* 5个读寄存器配置从有功功率数值读寄存器开始按下标2步进排列。 */
     uint16_t index; /* 当前校验的同类寄存器描述下标。 */
 
     if((inv_proto_manufacturer_valid(proto->mfr_info.name) == RT_FALSE) ||
@@ -92,9 +93,12 @@ static rt_bool_t inv_proto_content_valid(const Inv_Proto_t *proto)
     {
         return RT_FALSE;
     }
-    for(index = 0U; index < 5U; ++index)
+    for(index = 0U; index < INV_PROTO_CTRL_REG_COUNT; ++index)
     {
-        if(inv_proto_register_valid((const Inv_RegBlk_t *)&ctrl_blocks[index], RT_TRUE) == RT_FALSE) /* 五个调节控制点必须逐项合法或明确为FFFF。 */
+        /* 五个调节控制点的写配置和读配置必须逐项合法或明确为FFFF，写配置只接受06/10，读配置只接受03/04。
+         * 写配置与读配置在控制类中交替排列，因此按2个寄存器块为步长依次定位第index组。 */
+        if((inv_proto_register_valid(&ctrl_writes[2U * index], RT_TRUE) == RT_FALSE) ||
+           (inv_proto_register_valid(&ctrl_reads[2U * index], RT_FALSE) == RT_FALSE))
         {
             return RT_FALSE;
         }
