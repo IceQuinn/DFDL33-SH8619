@@ -149,6 +149,8 @@ struct Event_Management_Str
 
 void Get_EventTime(EventTime *evt_time);
 
+void Clear_All_Event_Data(void);
+
 void Event_Data_Init(void);
 
 int32_t Send_Event_Data_To_Cache_By_Type(uint16_t event_class, void *p_act_val);
