@@ -308,37 +308,60 @@ typedef char Inv_ProtoSizeCheck_t[
 typedef char Inv_ProtoLibSizeCheck_t[
     (sizeof(Inv_ProtoLib_t) == INV_PROTO_LIB_SIZE) ? 1 : -1];
 
-/* 前置(使能)寄存器配置：开关机及五类调节控制各自一项，每项8字节，共56字节。
+/* 单个控制点最多支持的前置使能寄存器条数，用于配置数据表定义。 */
+#define INV_PROTO_PREREG_MAX_COUNT                  8
+
+/* 前置(使能)寄存器配置：开关机及五类调节控制各自一组。
+ * 每组保存“首条配置指针 + 条数 + 步长”，指针指向各前置数据表中该厂家的
+ * 首条配置成员。前置数据表的元素结构为{厂家ID, 前置配置}，厂家ID占1字节，
+ * 因此相邻两条同名成员的间隔(步长)等于该元素结构的大小，并不恒等于
+ * sizeof(Inv_CtrlDefaultRegBlk_t)，必须按步长逐个寻址，不能直接做数组下标。
+ * 数据表内同厂家的多条配置必须连续排列。
  * 前置寄存器只保存在独立的前置协议库中，不进入268字节协议结构，
- * 因此协议库读写(04E70100)的报文格式保持不变。 */
+ * 因此协议库读写(04E70100)的报文格式保持不变。
+ * 未配置时指针为RT_NULL且个数为0，由inv_proto_default_lib_init()清零后保持。 */
 #pragma pack(1)
 typedef struct Inv_ProtoPreReg
 {
-    /* 开机前置使能寄存器及固定使能值。 */
-    Inv_CtrlDefaultRegBlk_t pwr_on_pre;
+    /* 开机前置使能寄存器首条配置、条数及相邻两条成员之间的步长。 */
+    const Inv_CtrlDefaultRegBlk_t *pwr_on_pre;
+    uint8_t pwr_on_pre_cnt;
+    uint16_t pwr_on_pre_stride;
 
-    /* 关机前置使能寄存器及固定使能值。 */
-    Inv_CtrlDefaultRegBlk_t pwr_off_pre;
+    /* 关机前置使能寄存器首条配置、条数及相邻两条成员之间的步长。 */
+    const Inv_CtrlDefaultRegBlk_t *pwr_off_pre;
+    uint8_t pwr_off_pre_cnt;
+    uint16_t pwr_off_pre_stride;
 
-    /* 有功功率数值前置使能寄存器及固定使能值。 */
-    Inv_CtrlDefaultRegBlk_t active_pwr_pre;
+    /* 有功功率数值前置使能寄存器首条配置、条数及相邻两条成员之间的步长。 */
+    const Inv_CtrlDefaultRegBlk_t *active_pwr_pre;
+    uint8_t active_pwr_pre_cnt;
+    uint16_t active_pwr_pre_stride;
 
-    /* 无功功率数值前置使能寄存器及固定使能值。 */
-    Inv_CtrlDefaultRegBlk_t reactive_pwr_pre;
+    /* 无功功率数值前置使能寄存器首条配置、条数及相邻两条成员之间的步长。 */
+    const Inv_CtrlDefaultRegBlk_t *reactive_pwr_pre;
+    uint8_t reactive_pwr_pre_cnt;
+    uint16_t reactive_pwr_pre_stride;
 
-    /* 功率因数前置使能寄存器及固定使能值。 */
-    Inv_CtrlDefaultRegBlk_t pwr_factor_pre;
+    /* 功率因数前置使能寄存器首条配置、条数及相邻两条成员之间的步长。 */
+    const Inv_CtrlDefaultRegBlk_t *pwr_factor_pre;
+    uint8_t pwr_factor_pre_cnt;
+    uint16_t pwr_factor_pre_stride;
 
-    /* 有功功率百分比前置使能寄存器及固定使能值。 */
-    Inv_CtrlDefaultRegBlk_t active_pwr_pct_pre;
+    /* 有功功率百分比前置使能寄存器首条配置、条数及相邻两条成员之间的步长。 */
+    const Inv_CtrlDefaultRegBlk_t *active_pwr_pct_pre;
+    uint8_t active_pwr_pct_pre_cnt;
+    uint16_t active_pwr_pct_pre_stride;
 
-    /* 无功功率百分比前置使能寄存器及固定使能值。 */
-    Inv_CtrlDefaultRegBlk_t reactive_pwr_pct_pre;
+    /* 无功功率百分比前置使能寄存器首条配置、条数及相邻两条成员之间的步长。 */
+    const Inv_CtrlDefaultRegBlk_t *reactive_pwr_pct_pre;
+    uint8_t reactive_pwr_pct_pre_cnt;
+    uint16_t reactive_pwr_pct_pre_stride;
 } Inv_ProtoPreReg_t;
 #pragma pack()
 
-/* 7项前置配置均为8字节固定值写命令块，合计56字节。 */
-#define INV_PROTO_PREREG_SIZE                       56
+/* 7组前置配置均为4字节指针加1字节个数加2字节步长，按1字节对齐合计7×7=49字节。 */
+#define INV_PROTO_PREREG_SIZE                       49
 typedef char Inv_ProtoPreRegSizeCheck_t[
     (sizeof(Inv_ProtoPreReg_t) == INV_PROTO_PREREG_SIZE) ? 1 : -1];
 
@@ -346,23 +369,23 @@ typedef char Inv_ProtoPreRegSizeCheck_t[
 #pragma pack(1)
 typedef struct Inv_PreRegLib
 {
-    /* AB区校验头；首版不持久化时保持全FF，不参与运行。 */
+    /* AB区校验头；首版不持久化时保持全0，不参与运行。 */
     rcd_head head;
 
-    /* 100条协议各自的前置使能配置，地址0xFFFF表示该控制点无前置写。 */
+    /* 100条协议各自的前置使能配置指针和条数。 */
     Inv_ProtoPreReg_t prereg[INVERTER_PROTOCOL_LIBRARY_COUNT];
 } Inv_PreRegLib_t;
 #pragma pack()
 
-/* AB头6字节和100条56字节前置配置，共6+100×56=5606字节。 */
-#define INV_PREREG_LIB_SIZE                         5606
+/* AB头6字节和100条49字节前置配置，共6+100×49=4906字节。 */
+#define INV_PREREG_LIB_SIZE                         4906
 typedef char Inv_PreRegLibSizeCheck_t[
     (sizeof(Inv_PreRegLib_t) == INV_PREREG_LIB_SIZE) ? 1 : -1];
 
 /* 全局逆变器协议库，数组下标范围为0~99，前4项分别对应阳光、华为、固德威和锦浪。 */
 extern Inv_ProtoLib_t g_inv_proto_lib;
 
-/* 全局前置协议库，槽位下标与协议库完全一致，内容不参与协议库读写。 */
+/* 全局前置协议库，槽位下标与协议库完全一致。每槽只存前置配置指针和条数，不存配置副本，内容不参与协议库读写。 */
 extern Inv_PreRegLib_t g_inv_prereg_lib;
 
 /* 统计RAM协议库中有效槽位数量，返回范围为0～100。 */

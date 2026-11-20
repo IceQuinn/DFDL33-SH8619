@@ -1039,6 +1039,98 @@ Inv_reactive_pwr_pct_ctrl_Id_t g_inv_reactive_pwr_pct_ctrl[] = {    // 无功功
         }                                                                              \
     } while(0)
 
+/* 在前置数据表中查找目标厂家的首条配置，并统计连续回一厂家的条数。
+ * 同厂家的多条前置必须在表内连续排列，否则只统计到第一段连续区域。
+ * 没有匹配项时指针保持清零之后的RT_NULL，个数保持 0。 */
+#define INV_BIND_MFR_PREREG(ptr_target, cnt_target, stride_target, table, member)        \
+    do {                                                                                 \
+        uint16_t table_index;                                                            \
+        uint16_t run_index;                                                              \
+        (ptr_target) = RT_NULL;                                                          \
+        (cnt_target) = 0U;                                                               \
+        (stride_target) = (uint16_t)sizeof((table)[0]);                                  \
+        for(table_index = 0U; table_index < INV_ARRAY_COUNT(table); ++table_index) {     \
+            if((table)[table_index].mfr_id == mfr_id) {                                  \
+                run_index = table_index;                                                 \
+                while((run_index < INV_ARRAY_COUNT(table)) &&                            \
+                      ((table)[run_index].mfr_id == mfr_id)) {                           \
+                    ++run_index;                                                         \
+                }                                                                        \
+                (ptr_target) = &(table)[table_index].member;                             \
+                (cnt_target) = (uint8_t)(run_index - table_index);                       \
+                break;                                                                   \
+            }                                                                            \
+        }                                                                                \
+    } while(0)
+
+/* 取前置数据表第row行记录的厂家编号，按行结构步长定位，避免把字段指针当数组基址。
+ * 前置数据表的行结构为{厂家编号, 前置配置}，相邻两行的同一字段间隔等于行结构大小，
+ * 并不等于sizeof(Enum_Inv_Mfr_Id_t)，因此必须按步长寻址。 */
+static Enum_Inv_Mfr_Id_t inv_prereg_row_mfr(const uint8_t *base, uint16_t step, uint16_t row)
+{
+    Enum_Inv_Mfr_Id_t mfr;
+    rt_memcpy(&mfr, base + ((uint32_t)row * (uint32_t)step), sizeof(mfr));
+    return mfr;
+}
+
+/* 校验单张前置数据表中同一厂家的配置是否连续排列。
+ * 同一厂家一旦被其他厂家隔开，后续再次出现即为不连续，装配时只会绑定第一段。
+ * 发现不连续时通过break_row返回重复出现的行号，便于现场快速定位配置错误。 */
+static rt_bool_t inv_prereg_table_contiguous(const uint8_t *base, uint16_t step,
+                                             uint16_t row_count, uint16_t *break_row)
+{
+    uint16_t row_index;
+
+    for(row_index = 1U; row_index < row_count; ++row_index) {
+        Enum_Inv_Mfr_Id_t current = inv_prereg_row_mfr(base, step, row_index);
+        Enum_Inv_Mfr_Id_t previous = inv_prereg_row_mfr(base, step, (uint16_t)(row_index - 1U));
+        uint16_t prev_index;
+
+        /* 与上一行同厂家说明仍在连续区域内。 */
+        if(current == previous) {
+            continue;
+        }
+        /* 当前厂家在前面已经出现过，说明同厂家的配置被其他厂家隔开了。 */
+        for(prev_index = 0U; prev_index < (uint16_t)(row_index - 1U); ++prev_index) {
+            if(inv_prereg_row_mfr(base, step, prev_index) == current) {
+                *break_row = row_index;
+                return RT_FALSE;
+            }
+        }
+    }
+    return RT_TRUE;
+}
+
+/* 对7张前置数据表依次执行连续性自检。 */
+static void inv_prereg_check_tables(void)
+{
+#define INV_PREREG_CHECK_TABLE(table)                                                        \
+    do {                                                                                     \
+        uint16_t break_row = 0U;                                                             \
+        const uint8_t *base = (const uint8_t *)&(table)[0];                                  \
+                                                                                             \
+        if(inv_prereg_table_contiguous(base, (uint16_t)sizeof(table[0]),                     \
+                                       (uint16_t)INV_ARRAY_COUNT(table),                     \
+                                       &break_row) == RT_FALSE) {                            \
+            rt_kprintf("[prereg] " #table                                                    \
+                       ": mfr[%d] rows are not contiguous after row %d, "                    \
+                       "only the first block takes effect\n",                               \
+                       (int)inv_prereg_row_mfr(base, (uint16_t)sizeof(table[0]), break_row), \
+                       (int)break_row);                                                      \
+        }                                                                                    \
+    } while(0)
+
+    INV_PREREG_CHECK_TABLE(g_inv_pwr_on_pre);
+    INV_PREREG_CHECK_TABLE(g_inv_pwr_off_pre);
+    INV_PREREG_CHECK_TABLE(g_inv_active_pwr_pre);
+    INV_PREREG_CHECK_TABLE(g_inv_reactive_pwr_pre);
+    INV_PREREG_CHECK_TABLE(g_inv_pwr_factor_pre);
+    INV_PREREG_CHECK_TABLE(g_inv_active_pwr_pct_pre);
+    INV_PREREG_CHECK_TABLE(g_inv_reactive_pwr_pct_pre);
+
+#undef INV_PREREG_CHECK_TABLE
+}
+
 /* 将一条协议的全部可选点初始化为不支持。地址字段为16位，因此全0xFF表示为0xFFFF。 */
 static void inv_proto_set_all_points_unused(Inv_Proto_t *protocol)
 {
@@ -1091,8 +1183,9 @@ void inv_proto_default_lib_init(void)
 
     rt_memset(&g_inv_proto_lib, 0, sizeof(g_inv_proto_lib));
 
-    /* 前置库先全部置0xFF；地址0xFFFF表示该厂家该控制点不写前置使能寄存器。 */
-    rt_memset(&g_inv_prereg_lib, 0xFF, sizeof(g_inv_prereg_lib));
+    /* 前置库先全部清零：未配置厂家的指针保持为空、个数为0。
+     * 这里不能填0xFF，否则指针会变成非法地址0xFFFFFFFF，误引用会直接硬重启。 */
+    rt_memset(&g_inv_prereg_lib, 0, sizeof(g_inv_prereg_lib));
 
     for(mfr_id = INV_MFR_SUNGROW_1; mfr_id < INV_MFR_MAX; ++mfr_id) {
         Inv_Proto_t *protocol = &g_inv_proto_lib.proto[(uint16_t)mfr_id];
@@ -1157,18 +1250,42 @@ void inv_proto_default_lib_init(void)
         INV_COPY_MFR_POINT(protocol->ctrl.reactive_pwr_pct_read, g_inv_reactive_pwr_pct_ctrl, reactive_pwr_pct_read);
 
         /* 同槽号装配7项前置使能寄存器，与上面的控制类在同一轮厂家循环内完成，
-         * 保证前置库槽位和协议库槽位始终一一对应；未配置项保持0xFF。 */
-        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_on_pre, g_inv_pwr_on_pre, pwr_on_pre);
-        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_off_pre, g_inv_pwr_off_pre, pwr_off_pre);
-        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pre, g_inv_active_pwr_pre, active_pwr_pre);
-        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pre, g_inv_reactive_pwr_pre, reactive_pwr_pre);
-        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_factor_pre, g_inv_pwr_factor_pre, pwr_factor_pre);
-        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pct_pre, g_inv_active_pwr_pct_pre, active_pwr_pct_pre);
-        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pct_pre, g_inv_reactive_pwr_pct_pre, reactive_pwr_pct_pre);
+         * 保证前置库槽位和协议库槽位始终一一对应；未配置项指针为空、个数为0。 */
+        INV_BIND_MFR_PREREG(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_on_pre,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_on_pre_cnt,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_on_pre_stride,
+                            g_inv_pwr_on_pre, pwr_on_pre);
+        INV_BIND_MFR_PREREG(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_off_pre,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_off_pre_cnt,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_off_pre_stride,
+                            g_inv_pwr_off_pre, pwr_off_pre);
+        INV_BIND_MFR_PREREG(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pre,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pre_cnt,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pre_stride,
+                            g_inv_active_pwr_pre, active_pwr_pre);
+        INV_BIND_MFR_PREREG(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pre,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pre_cnt,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pre_stride,
+                            g_inv_reactive_pwr_pre, reactive_pwr_pre);
+        INV_BIND_MFR_PREREG(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_factor_pre,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_factor_pre_cnt,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_factor_pre_stride,
+                            g_inv_pwr_factor_pre, pwr_factor_pre);
+        INV_BIND_MFR_PREREG(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pct_pre,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pct_pre_cnt,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pct_pre_stride,
+                            g_inv_active_pwr_pct_pre, active_pwr_pct_pre);
+        INV_BIND_MFR_PREREG(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pct_pre,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pct_pre_cnt,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pct_pre_stride,
+                            g_inv_reactive_pwr_pct_pre, reactive_pwr_pct_pre);
 
         g_inv_proto_lib.valid[(uint16_t)mfr_id] = INVERTER_PROTOCOL_VALID;
     }
+
+    inv_prereg_check_tables();
 }
 
 #undef INV_COPY_MFR_POINT
+#undef INV_BIND_MFR_PREREG
 #undef INV_ARRAY_COUNT
