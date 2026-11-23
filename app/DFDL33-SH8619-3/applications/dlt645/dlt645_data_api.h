@@ -175,10 +175,10 @@ rt_err_t dlt645_write_archive(const Dlt645PointTypeDef *point,
 /* 读取RAM中有效协议库总数，固定返回一字节无符号整数。 */
 rt_err_t dlt645_read_protocol_count(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
 
-/* 读取DI0指定的238字节协议库槽位，无效槽位返回全FF。 */
+/* 读取DI0指定的268字节协议库槽位，无效槽位返回全FF。 */
 rt_err_t dlt645_read_protocol(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
 
-/* 临时写入DI0指定的238字节协议库槽位，重启后恢复默认协议库。 */
+/* 临时写入DI0指定的268字节协议库槽位，重启后恢复默认协议库。 */
 rt_err_t dlt645_write_protocol(const Dlt645PointTypeDef *point, uint32_t id, const uint8_t *data, uint16_t data_len, uint8_t *response, uint16_t response_capacity, uint16_t *response_len);
 
 /* 从实时数据中心读取指定逆变器运行状态并编码为规范规定的单字节BCD。 */

@@ -330,11 +330,11 @@ static rt_bool_t time_ctrl_get_control_config(uint8_t archive_index,
         return RT_FALSE;
     }
 
-    /* 数值控读取普通有功功率控制寄存器配置。 */
+    /* 数值控读取有功功率写寄存器配置。 */
     if(mode == TIME_CTRL_ACTIVE_POWER_VALUE) {
         rt_memcpy(control, &protocol->ctrl.active_pwr_ctrl, sizeof(*control));
     }
-    /* 百分比控读取有功功率百分比控制寄存器配置。 */
+    /* 百分比控读取有功功率百分比写寄存器配置。 */
     else if(mode == TIME_CTRL_ACTIVE_POWER_PERCENT) {
         rt_memcpy(control, &protocol->ctrl.active_pwr_pct_ctrl, sizeof(*control));
     }
@@ -346,17 +346,17 @@ static rt_bool_t time_ctrl_get_control_config(uint8_t archive_index,
     /* 地址、数量或功能码任一不合法时该协议不支持对应控制方式。 */
     if((control->reg_addr == INVERTER_PROTOCOL_REGISTER_UNUSED) ||
        (control->reg_cnt == 0U) || (control->reg_cnt > TIME_CTRL_CONTROL_REG_MAX) ||
-       ((control->write_func_code != MODBUS_FUNC_WRITE_SINGLE) &&
-        (control->write_func_code != MODBUS_FUNC_WRITE_MULTIPLE))) {
+       ((control->func_code != MODBUS_FUNC_WRITE_SINGLE) &&
+        (control->func_code != MODBUS_FUNC_WRITE_MULTIPLE))) {
         return RT_FALSE;
     }
     /* 06功能码只能写入一个16位寄存器。 */
-    if((control->write_func_code == MODBUS_FUNC_WRITE_SINGLE) &&
+    if((control->func_code == MODBUS_FUNC_WRITE_SINGLE) &&
        (control->reg_cnt != 1U)) {
         return RT_FALSE;
     }
     /* 10功能码的寄存器数量不能超过Modbus协议上限。 */
-    if((control->write_func_code == MODBUS_FUNC_WRITE_MULTIPLE) &&
+    if((control->func_code == MODBUS_FUNC_WRITE_MULTIPLE) &&
        (control->reg_cnt > MODBUS_WRITE_REG_MAX)) {
         return RT_FALSE;
     }

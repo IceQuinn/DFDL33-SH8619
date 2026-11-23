@@ -174,6 +174,7 @@ typedef struct Inv_active_pwr_pre_Id {              /* 有功功率数值前置 
 typedef struct Inv_active_pwr_ctrl_Id{ // 有功功率数值控制寄存器
     Enum_Inv_Mfr_Id_t mfr_id;        /* 当前有功数值控制配置所属厂家编号。 */
     Inv_CtrlRegBlk_t active_pwr_ctrl; /* 有功功率数值写寄存器配置。 */
+    Inv_ReadRegBlk_t active_pwr_read; /* 有功功率数值读寄存器配置。 */
 }Inv_active_pwr_ctrl_Id_t;
 typedef struct Inv_reactive_pwr_pre_Id {            /* 无功功率数值前置 */
     Enum_Inv_Mfr_Id_t mfr_id;                       /* 厂家编号。 */
@@ -182,6 +183,7 @@ typedef struct Inv_reactive_pwr_pre_Id {            /* 无功功率数值前置 
 typedef struct Inv_reactive_pwr_ctrl_Id{ // 无功功率数值控制寄存器
     Enum_Inv_Mfr_Id_t mfr_id;          /* 当前无功数值控制配置所属厂家编号。 */
     Inv_CtrlRegBlk_t reactive_pwr_ctrl; /* 无功功率数值写寄存器配置。 */
+    Inv_ReadRegBlk_t reactive_pwr_read; /* 无功功率数值读寄存器配置。 */
 }Inv_reactive_pwr_ctrl_Id_t;
 typedef struct Inv_pwr_factor_pre_Id {              /* 功率因数前置 */
     Enum_Inv_Mfr_Id_t mfr_id;                       /* 厂家编号。 */
@@ -190,6 +192,7 @@ typedef struct Inv_pwr_factor_pre_Id {              /* 功率因数前置 */
 typedef struct Inv_pwr_factor_ctrl_Id{ // 功率因数控制寄存器
     Enum_Inv_Mfr_Id_t mfr_id;       /* 当前功率因数控制配置所属厂家编号。 */
     Inv_CtrlRegBlk_t pwr_factor_ctrl; /* 功率因数写寄存器配置。 */
+    Inv_ReadRegBlk_t pwr_factor_read; /* 功率因数读寄存器配置。 */
 }Inv_pwr_factor_ctrl_Id_t;
 typedef struct Inv_active_pwr_pct_pre_Id {          /* 有功功率百分比前置 */
     Enum_Inv_Mfr_Id_t mfr_id;                       /* 厂家编号。 */
@@ -198,6 +201,7 @@ typedef struct Inv_active_pwr_pct_pre_Id {          /* 有功功率百分比前�
 typedef struct Inv_active_pwr_pct_ctrl_Id{ // 有功功率百分比控制寄存器
     Enum_Inv_Mfr_Id_t mfr_id;            /* 当前有功百分比控制配置所属厂家编号。 */
     Inv_CtrlRegBlk_t active_pwr_pct_ctrl; /* 有功功率百分比写寄存器配置。 */
+    Inv_ReadRegBlk_t active_pwr_pct_read; /* 有功功率百分比读寄存器配置。 */
 }Inv_active_pwr_pct_ctrl_Id_t;
 typedef struct Inv_reactive_pwr_pct_pre_Id {        /* 无功功率百分比前置 */
     Enum_Inv_Mfr_Id_t mfr_id;                       /* 厂家编号。 */
@@ -206,6 +210,7 @@ typedef struct Inv_reactive_pwr_pct_pre_Id {        /* 无功功率百分比前�
 typedef struct Inv_reactive_pwr_pct_ctrl_Id{ // 无功功率百分比控制寄存器
     Enum_Inv_Mfr_Id_t mfr_id;              /* 当前无功百分比控制配置所属厂家编号。 */
     Inv_CtrlRegBlk_t reactive_pwr_pct_ctrl; /* 无功功率百分比写寄存器配置。 */
+    Inv_ReadRegBlk_t reactive_pwr_pct_read; /* 无功功率百分比读寄存器配置。 */
 }Inv_reactive_pwr_pct_ctrl_Id_t;
 
 
@@ -246,6 +251,7 @@ Inv_Mfr_Id_t g_inv_mfr[] = {    // 厂家信息
 Inv_Feature_Id_t g_inv_feature[] = {    // 厂家特征数据
     //逆变器ID           寄存器地址   寄存器个数     读功能码  数据类型    字节序        小数位数  预留   特征值下限(报文值)   特征值上限(报文值)
     {INV_MFR_SUNGROW_1,   {5035 ,        1,            0x04,   TYPE_U16, Type_Byte_ABCD,     1,      0,             495,                505}},      // 电网频率
+    {INV_MFR_AISIWEI_1,   {1000,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     0,      0,            1970,               2038}},      // 日期年,范围取1970~2038
     {INV_MFR_HUAWEI_1,    {40000,        2,            0x03,   TYPE_U32, Type_Byte_ABCD,     0,      0,       946684800,         3155759999}},      // 纪元秒,本地时间
     {INV_MFR_HUAWEI_2,    {32200,        2,            0x03,   TYPE_U32, Type_Byte_ABCD,     0,      0,       946684800,         3155759999}},      // 纪元秒,本地时间
     {INV_MFR_GOODWE_1,    {30124,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     0,      0,            4950,               5050}},      // 电网频率,范围取49.5~50.5
@@ -262,13 +268,12 @@ Inv_Feature_Id_t g_inv_feature[] = {    // 厂家特征数据
     {INV_MFR_SINENG_1,    {40201,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     0,      0,            1970,               2038}},      // 日期年,范围取1970~2038
     {INV_MFR_AUXSOL_1,    {10004,        1,            0x04,   TYPE_U16, Type_Byte_ABCD,     2,      0,            4950,               5050}},      // 电网频率,范围取49.5~50.5
     {INV_MFR_TEBA_1,      {4269,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     2,      0,            4950,               5050}},      // 电网频率,范围取49.5~50.5
-    {INV_MFR_AISIWEI_1,   {1000,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     0,      0,            1970,               2038}},      // 日期年,范围取1970~2038
     {INV_MFR_HSNV_1,      {40538,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     2,      0,            4950,               5050}},      // 电网频率,范围取49.5~50.5
     {INV_MFR_YHNJ_1,      {4009,         1,            0x04,   TYPE_U16, Type_Byte_ABCD,     0,      0,            1,                    12}},      // 日期月,范围取1~12
     {INV_MFR_KSTAR_1,     {3046,         1,            0x04,   TYPE_U16, Type_Byte_ABCD,     1,      0,            2300,               9600}},      // 电网电压上限,范围取230~960
     {INV_MFR_CSI_1,       {33038,        1,            0x04,   TYPE_I16, Type_Byte_ABCD,     2,      0,            98,                  102}},      // 三相功率因数,范围取0.98~1.02
     {INV_MFR_CHNT_1,      {12288,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     0,      0,            2000,               2099}},      // 日期年，范围取2000~2099
-    {INV_MFR_CHNT_2,      {4100,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     0,      0,            2000,               2099}},      // 日期年，范围取2000~2099
+    {INV_MFR_CHNT_2,      {4100,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     0,      0,            0x2000,           0x2099}},      // 日期年，范围取2000~2099
     {INV_MFR_AFORE_1,     {500,          1,            0x03,   TYPE_U16, Type_Byte_ABCD,     0,      0,            3329,              25356}},      // 年月,高字节13~99,低字节1~12,组合范围为0x0D01~0x630C
 };
 
@@ -829,22 +834,23 @@ Inv_active_pwr_pre_Id_t g_inv_active_pwr_pre[] = {    // 逆变器有功功率�
 };
 
 Inv_active_pwr_ctrl_Id_t g_inv_active_pwr_ctrl[] = {    // 逆变器有功功率控制寄存器
-    //逆变器ID           寄存器地址   寄存器个数     写功能码  数据类型    字节序        小数位数  预留
-    {INV_MFR_SUNGROW_1,   {5038 ,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_HUAWEI_1,    {40120,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_HUAWEI_2,    {40120,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_GOODWE_1,    {42404,        2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
-//    {INV_MFR_GOODWE_2,    {42404,        2,            0x10,   TYPE_U32, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_SINENG_1,    {46050,        2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_AUXSOL_1,    {15335,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     2,      0}},
-    {INV_MFR_TEBA_1,      {4356,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
-    {INV_MFR_AISIWEI_1,   {5456,         2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_HSNV_1,      {40012,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
-    {INV_MFR_YHNJ_1,      {6004,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_KSTAR_1,     {4010,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_CSI_1,       {1316,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_CHNT_1,      {24596,        2,            0x10,   TYPE_U32, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_AFORE_1,     {1503,         2,            0x10,   TYPE_U32, Type_Byte_ABCD,     3,      0}},
+    //写寄存器:                                                                                          //读寄存器:
+    //逆变器ID             寄存器地址    寄存器个数   写功能码 数据类型  字节序             小数位数 预留 寄存器地址    寄存器个数   读功能码 数据类型  字节序             小数位数 预留
+    {INV_MFR_SUNGROW_1,   {5038 ,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}, {5038 ,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_HUAWEI_1,    {40120,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}, {40120,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_HUAWEI_2,    {40120,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}, {40120,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_GOODWE_1,    {42404,        2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}, {42404,        2,            0x03,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
+//    {INV_MFR_GOODWE_2,    {42404,        2,            0x10,   TYPE_U32, Type_Byte_ABCD,     3,      0}, {42404,        2,            0x03,   TYPE_U32, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_SINENG_1,    {46050,        2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}, {46050,        2,            0x03,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_AUXSOL_1,    {15335,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     2,      0}, {15335,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_TEBA_1,      {4356,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     2,      0}, {4356,         1,            0x03,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_AISIWEI_1,   {5456,         2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}, {5456,         2,            0x03,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_HSNV_1,      {40012,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     2,      0}, {40012,        1,            0x03,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_YHNJ_1,      {6004,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}, {6004,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_KSTAR_1,     {4010,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0}, {3035,         1,            0x04,   TYPE_U16, Type_Byte_ABCD,     0,      0}},
+    {INV_MFR_CSI_1,       {1316,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     1,      0}, {1316,         1,            0x03,   TYPE_I16, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_CHNT_1,      {24596,        2,            0x10,   TYPE_U32, Type_Byte_ABCD,     3,      0}, {24596,        2,            0x03,   TYPE_U32, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_AFORE_1,     {1503,         2,            0x10,   TYPE_U32, Type_Byte_ABCD,     3,      0}, {1503,         2,            0x03,   TYPE_U32, Type_Byte_ABCD,     3,      0}},
 };
 
 
@@ -855,29 +861,30 @@ Inv_reactive_pwr_pre_Id_t g_inv_reactive_pwr_pre[] = {    // 逆变器无功功�
     {INV_MFR_TEBA_1,      {4372,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x01}},
 //    {INV_MFR_AISIWEI_1    {4005,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x01}},
     {INV_MFR_HSNV_1,      {40002,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x02}},
-    {INV_MFR_KSTAR_1,     {4006,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x01}},
+//    {INV_MFR_KSTAR_1,     {4006,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x01}},
     {INV_MFR_CSI_1,       {1537,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x06}},
     {INV_MFR_AFORE_1,     {1551,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x01}},
 
 };
 
 Inv_reactive_pwr_ctrl_Id_t g_inv_reactive_pwr_ctrl[] = {    // 逆变器无功功率控制寄存器
-    //逆变器ID           寄存器地址   寄存器个数     读功能码  数据类型    字节序        小数位数  预留
-    {INV_MFR_SUNGROW_1,   {5039 ,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_GOODWE_1,    {42411,        2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
-//    {INV_MFR_GOODWE_2,    {42411,        2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_GOODWE_3,    {258,          2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_GOODWE_4,    {258,          2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_GROWATT_1,   {137,          2,            0x10,   TYPE_I32, Type_Byte_ABCD,     4,      0}},
-    {INV_MFR_SINENG_1,    {46052,        2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_AUXSOL_1,    {15336,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
-    {INV_MFR_TEBA_1,      {4366,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
-    {INV_MFR_HSNV_1,      {40004,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_YHNJ_1,      {6007,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_KSTAR_1,     {3366,         2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_CSI_1,       {1317,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_CHNT_1,      {24598,        2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_AFORE_1,     {1553,         2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
+    //写寄存器:                                                                                          //读寄存器:
+    //逆变器ID             寄存器地址    寄存器个数   写功能码 数据类型  字节序             小数位数 预留 寄存器地址    寄存器个数   读功能码 数据类型  字节序             小数位数 预留
+    {INV_MFR_SUNGROW_1,   {5039 ,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     1,      0}, {5039 ,        1,            0x03,   TYPE_I16, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_GOODWE_1,    {42411,        2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}, {42411,        2,            0x03,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
+//    {INV_MFR_GOODWE_2,    {42411,        2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}, {42411,        2,            0x03,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_GOODWE_3,    {258,          2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}, {258,          2,            0x03,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_GOODWE_4,    {258,          2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}, {258,          2,            0x03,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_GROWATT_1,   {137,          2,            0x10,   TYPE_I32, Type_Byte_ABCD,     4,      0}, {137,          2,            0x03,   TYPE_I32, Type_Byte_ABCD,     4,      0}},
+    {INV_MFR_SINENG_1,    {46052,        2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}, {46052,        2,            0x03,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_AUXSOL_1,    {15336,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     2,      0}, {15336,        1,            0x03,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_TEBA_1,      {4366,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     2,      0}, {4366,         1,            0x03,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_HSNV_1,      {40004,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     1,      0}, {40004,        1,            0x03,   TYPE_I16, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_YHNJ_1,      {6007,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     1,      0}, {6007,         1,            0x03,   TYPE_I16, Type_Byte_ABCD,     1,      0}},
+//    {INV_MFR_KSTAR_1,     {3366,         2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}, {3366,         2,            0x04,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_CSI_1,       {1317,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     1,      0}, {1317,         1,            0x03,   TYPE_I16, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_CHNT_1,      {24598,        2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}, {24598,        2,            0x03,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_AFORE_1,     {1553,         2,            0x10,   TYPE_I32, Type_Byte_ABCD,     3,      0}, {1553,         2,            0x03,   TYPE_I32, Type_Byte_ABCD,     3,      0}},
 };
 
 
@@ -889,6 +896,7 @@ Inv_pwr_factor_pre_Id_t g_inv_pwr_factor_pre[] = {    // 逆变器功率因数�
     {INV_MFR_AUXSOL_1,    {15261,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0xA1}},
     {INV_MFR_TEBA_1,      {4364,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x01}},
     {INV_MFR_HSNV_1,      {40002,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x01}},
+    {INV_MFR_KSTAR_1,     {4006,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x00}},
     {INV_MFR_YHNJ_1,      {6005,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x01}},
     {INV_MFR_CSI_1,       {1537,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x03}},
     {INV_MFR_CHNT_1,      {20528,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x01}},
@@ -896,28 +904,30 @@ Inv_pwr_factor_pre_Id_t g_inv_pwr_factor_pre[] = {    // 逆变器功率因数�
 };
 
 Inv_pwr_factor_ctrl_Id_t g_inv_pwr_factor_ctrl[] = {    // 逆变器功率因数控制寄存器
-    //逆变器ID           寄存器地址   寄存器个数     读功能码  数据类型    字节序        小数位数  预留
-    {INV_MFR_SUNGROW_1,   {5018 ,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_HUAWEI_1,    {40122,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_HUAWEI_2,    {40122,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_GOODWE_1,    {42413,        1,            0x10,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
-//    {INV_MFR_GOODWE_2,    {42413,        1,            0x10,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_SAJ_1,       {4126,         1,            0x10,   TYPE_U16, Type_Byte_ABCD,     3,      0}},   // 三晶逆变器控制功能码必须是0x10
-    {INV_MFR_SAJ_2,       {4126,         1,            0x10,   TYPE_U16, Type_Byte_ABCD,     3,      0}},   // 三晶逆变器控制功能码必须是0x10
-    {INV_MFR_SAJ_3,       {13335,        1,            0x10,   TYPE_U16, Type_Byte_ABCD,     3,      0}},   // 三晶逆变器控制功能码必须是0x10
-    {INV_MFR_JINLONG_1,   {3052,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_SOFAR_1,     {4361,         1,            0x10,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
-    {INV_MFR_SINENG_1,    {46056,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     4,      0}},
-    {INV_MFR_AUXSOL_1,    {15259,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_TEBA_1,      {4360,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     3,      0}},
-//    {INV_MFR_AISIWEI_1,   {6850,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     4,      0}},
-    {INV_MFR_HSNV_1,      {40003,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     4,      0}},
-    {INV_MFR_YHNJ_1,      {6008,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_YHNJ_2,      {98,           1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_CSI_1,       {512,          1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_CHNT_1,      {24591,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_CHNT_2,      {4098,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
-    {INV_MFR_AFORE_1,     {1555,         2,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
+    //写寄存器:                                                                                          //读寄存器:
+    //逆变器ID             寄存器地址    寄存器个数   写功能码 数据类型  字节序             小数位数 预留 寄存器地址    寄存器个数   读功能码 数据类型  字节序             小数位数 预留
+    {INV_MFR_SUNGROW_1,   {5018 ,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}, {5018 ,        1,            0x03,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_HUAWEI_1,    {40122,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}, {40122,        1,            0x03,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_HUAWEI_2,    {40122,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}, {40122,        1,            0x03,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_GOODWE_1,    {42413,        1,            0x10,   TYPE_I16, Type_Byte_ABCD,     3,      0}, {42413,        1,            0x03,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
+//    {INV_MFR_GOODWE_2,    {42413,        1,            0x10,   TYPE_I16, Type_Byte_ABCD,     3,      0}, {42413,        1,            0x03,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_SAJ_1,       {4126,         1,            0x10,   TYPE_U16, Type_Byte_ABCD,     3,      0}, {4126,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     3,      0}},   // 三晶逆变器控制功能码必须是0x10
+    {INV_MFR_SAJ_2,       {4126,         1,            0x10,   TYPE_U16, Type_Byte_ABCD,     3,      0}, {4126,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     3,      0}},   // 三晶逆变器控制功能码必须是0x10
+    {INV_MFR_SAJ_3,       {13335,        1,            0x10,   TYPE_U16, Type_Byte_ABCD,     3,      0}, {13335,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     3,      0}},   // 三晶逆变器控制功能码必须是0x10
+    {INV_MFR_JINLONG_1,   {3052,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}, {3052,         1,            0x03,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_SOFAR_1,     {4361,         1,            0x10,   TYPE_I16, Type_Byte_ABCD,     2,      0}, {4361,         1,            0x03,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_SINENG_1,    {46056,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     4,      0}, {46056,        1,            0x03,   TYPE_I16, Type_Byte_ABCD,     4,      0}},
+    {INV_MFR_AUXSOL_1,    {15259,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}, {15259,        1,            0x03,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_TEBA_1,      {4360,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     3,      0}, {4360,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     3,      0}},
+//    {INV_MFR_AISIWEI_1,   {6850,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     4,      0}, {6850,         1,            0x03,   TYPE_I16, Type_Byte_ABCD,     4,      0}},
+    {INV_MFR_HSNV_1,      {40003,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     4,      0}, {40003,        1,            0x03,   TYPE_I16, Type_Byte_ABCD,     4,      0}},
+    {INV_MFR_KSTAR_1,     {4003,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     3,      0}, {3049,         1,            0x04,   TYPE_U16, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_YHNJ_1,      {6008,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}, {6008,         1,            0x03,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_YHNJ_2,      {98,           1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}, {98,           1,            0x03,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_CSI_1,       {512,          1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}, {512,          1,            0x03,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_CHNT_1,      {24591,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}, {24591,        1,            0x03,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_CHNT_2,      {4098,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}, {4098,         1,            0x03,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
+    {INV_MFR_AFORE_1,     {1555,         2,            0x06,   TYPE_I16, Type_Byte_ABCD,     3,      0}, {1555,         2,            0x03,   TYPE_I16, Type_Byte_ABCD,     3,      0}},
 };
 
 
@@ -930,39 +940,41 @@ Inv_active_pwr_pct_pre_Id_t g_inv_active_pwr_pct_pre[] = {    // 逆变器有功
     {INV_MFR_AISIWEI_1,   {4000,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x01}},
     {INV_MFR_HSNV_1,      {40011,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x02}},
     {INV_MFR_YHNJ_1,      {6002,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x00}},
+    {INV_MFR_KSTAR_1,     {4039,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x00}},
     {INV_MFR_CSI_1,       {1538,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x02}},
     {INV_MFR_CHNT_1,      {20528,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x00}},
     {INV_MFR_CHNT_2,      {9730,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x01}},
 };
 
 Inv_active_pwr_pct_ctrl_Id_t g_inv_active_pwr_pct_ctrl[] = {    // 有功功率百分比控制寄存器
-    //逆变器ID           寄存器地址   寄存器个数     读功能码  数据类型    字节序        小数位数  预留
-    {INV_MFR_SUNGROW_1,   {5007 ,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_HUAWEI_1,    {40125,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_HUAWEI_2,    {40125,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_GOODWE_1,    {42407,        1,            0x10,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
-//    {INV_MFR_GOODWE_2,    {42407,        1,            0x10,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_GOODWE_3,    {256,          1,            0x10,   TYPE_U16, Type_Byte_ABCD,     0,      0}},
-    {INV_MFR_GOODWE_4,    {256,          1,            0x10,   TYPE_U16, Type_Byte_ABCD,     0,      0}},
-    {INV_MFR_SAJ_1,       {4124,         1,            0x10,   TYPE_U16, Type_Byte_ABCD,     1,      0}},   // 三晶逆变器控制功能码必须是0x10
-    {INV_MFR_SAJ_2,       {4124,         1,            0x10,   TYPE_U16, Type_Byte_ABCD,     1,      0}},   // 三晶逆变器控制功能码必须是0x10
-    {INV_MFR_SAJ_3,       {13323,        1,            0x10,   TYPE_U16, Type_Byte_ABCD,     1,      0}},   // 三晶逆变器控制功能码必须是0x10
-    {INV_MFR_GROWATT_1,   {3,            1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0}},
-    {INV_MFR_GROWATT_2,   {3,            1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0}},
-    {INV_MFR_JINLONG_1,   {3051,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     2,      0}},
-    {INV_MFR_SOFAR_1,     {4358,         1,            0x10,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_SINENG_1,    {46054,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
-    {INV_MFR_AUXSOL_1,    {15256,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_TEBA_1,      {4355,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
-    {INV_MFR_AISIWEI_1,   {5402,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     2,      0}},
-    {INV_MFR_HSNV_1,      {40013,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
-    {INV_MFR_YHNJ_1,      {6003,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_YHNJ_2,      {96,           1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0}},
-    {INV_MFR_KSTAR_1,     {4004,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0}},
-    {INV_MFR_CSI_1,       {1294,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_CHNT_1,      {12293,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0}},
-    {INV_MFR_CHNT_2,      {4097,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_AFORE_1,     {1502,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
+    //写寄存器:                                                                                          //读寄存器:
+    //逆变器ID             寄存器地址    寄存器个数   写功能码 数据类型  字节序             小数位数 预留 寄存器地址    寄存器个数   读功能码 数据类型  字节序             小数位数 预留
+    {INV_MFR_SUNGROW_1,   {5007 ,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}, {5007 ,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_HUAWEI_1,    {40125,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}, {40125,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_HUAWEI_2,    {40125,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}, {40125,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_GOODWE_1,    {42407,        1,            0x10,   TYPE_U16, Type_Byte_ABCD,     1,      0}, {42407,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
+//    {INV_MFR_GOODWE_2,    {42407,        1,            0x10,   TYPE_U16, Type_Byte_ABCD,     1,      0}, {42407,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_GOODWE_3,    {256,          1,            0x10,   TYPE_U16, Type_Byte_ABCD,     0,      0}, {256,          1,            0x03,   TYPE_U16, Type_Byte_ABCD,     0,      0}},
+    {INV_MFR_GOODWE_4,    {256,          1,            0x10,   TYPE_U16, Type_Byte_ABCD,     0,      0}, {256,          1,            0x03,   TYPE_U16, Type_Byte_ABCD,     0,      0}},
+    {INV_MFR_SAJ_1,       {4124,         1,            0x10,   TYPE_U16, Type_Byte_ABCD,     1,      0}, {4124,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     1,      0}},   // 三晶逆变器控制功能码必须是0x10
+    {INV_MFR_SAJ_2,       {4124,         1,            0x10,   TYPE_U16, Type_Byte_ABCD,     1,      0}, {4124,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     1,      0}},   // 三晶逆变器控制功能码必须是0x10
+    {INV_MFR_SAJ_3,       {13323,        1,            0x10,   TYPE_U16, Type_Byte_ABCD,     1,      0}, {13323,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     1,      0}},   // 三晶逆变器控制功能码必须是0x10
+    {INV_MFR_GROWATT_1,   {3,            1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0}, {3,            1,            0x03,   TYPE_U16, Type_Byte_ABCD,     0,      0}},
+    {INV_MFR_GROWATT_2,   {3,            1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0}, {3,            1,            0x03,   TYPE_U16, Type_Byte_ABCD,     0,      0}},
+    {INV_MFR_JINLONG_1,   {3051,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     2,      0}, {3051,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_SOFAR_1,     {4358,         1,            0x10,   TYPE_U16, Type_Byte_ABCD,     1,      0}, {4358,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_SINENG_1,    {46054,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     2,      0}, {46054,        1,            0x03,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_AUXSOL_1,    {15256,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}, {15256,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_TEBA_1,      {4355,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     2,      0}, {4355,         1,            0x03,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_AISIWEI_1,   {5402,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     2,      0}, {5402,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_HSNV_1,      {40013,        1,            0x06,   TYPE_I16, Type_Byte_ABCD,     2,      0}, {40013,        1,            0x03,   TYPE_I16, Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_YHNJ_1,      {6003,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}, {6003,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_YHNJ_2,      {96,           1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0}, {96,           1,            0x03,   TYPE_U16, Type_Byte_ABCD,     0,      0}},
+    {INV_MFR_KSTAR_1,     {4004,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0}, {3050,         1,            0x04,   TYPE_U16, Type_Byte_ABCD,     0,      0}},
+    {INV_MFR_CSI_1,       {1294,         1,            0x06,   TYPE_I16, Type_Byte_ABCD,     1,      0}, {1294,         1,            0x03,   TYPE_I16, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_CHNT_1,      {12293,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0}, {12293,        1,            0x03,   TYPE_U16, Type_Byte_ABCD,     0,      0}},
+    {INV_MFR_CHNT_2,      {4097,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}, {4097,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_AFORE_1,     {1502,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     1,      0}, {1502,         1,            0x03,   TYPE_U16, Type_Byte_ABCD,     1,      0}},
 };
 
 
@@ -977,7 +989,7 @@ Inv_reactive_pwr_pct_pre_Id_t g_inv_reactive_pwr_pct_pre[] = {    // 逆变器�
     {INV_MFR_AISIWEI_1,   {4005,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x01}},
     {INV_MFR_HSNV_1,      {40002,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x03}},
     {INV_MFR_YHNJ_1,      {6005,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x00}},
-    {INV_MFR_KSTAR_1,     {4006,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x01}},
+//    {INV_MFR_KSTAR_1,     {4006,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x01}},
     {INV_MFR_CSI_1,       {1537,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x02}},
     {INV_MFR_CHNT_1,      {20528,        1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x02}},
     {INV_MFR_CHNT_2,      {9729,         1,            0x06,   TYPE_U16, Type_Byte_ABCD,     0,      0,   0x01}},
@@ -985,30 +997,31 @@ Inv_reactive_pwr_pct_pre_Id_t g_inv_reactive_pwr_pct_pre[] = {    // 逆变器�
 };
 
 Inv_reactive_pwr_pct_ctrl_Id_t g_inv_reactive_pwr_pct_ctrl[] = {    // 无功功率百分比控制寄存器
-    //逆变器ID           寄存器地址   寄存器个数     读功能码  数据类型    字节序        小数位数  预留
-    {INV_MFR_SUNGROW_1,   {5036 ,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_HUAWEI_1,    {40123,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_HUAWEI_2,    {40123,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_GOODWE_1,    {42414,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
-//    {INV_MFR_GOODWE_2,    {42414,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_GOODWE_3,    {265,          1,            0x10,   TYPE_I16, Type_Byte_ABCD,      0,      0}},
-    {INV_MFR_GOODWE_4,    {265,          1,            0x10,   TYPE_I16, Type_Byte_ABCD,      0,      0}},
-    {INV_MFR_GROWATT_1,   {4,            1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     0,      0}},
-    {INV_MFR_GROWATT_2,   {4,            1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     0,      0}},
-    {INV_MFR_JINLONG_1,   {3050,         1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     2,      0}},
-    {INV_MFR_SOFAR_1,     {4360,         1,            0x10,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_SINENG_1,    {46055,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     2,      0}},
-    {INV_MFR_AUXSOL_1,    {15262,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_TEBA_1,      {4365,         1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     2,      0}},
-    {INV_MFR_AISIWEI_1,   {5515,         1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     2,      0}},
-    {INV_MFR_HSNV_1,      {40005,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     2,      0}},
-    {INV_MFR_YHNJ_1,      {6006,         1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_YHNJ_2,      {97,           1,            0x06,   TYPE_U16,  Type_Byte_ABCD,     0,      0}},
-    {INV_MFR_KSTAR_1,     {4005,         1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     0,      0}},
-    {INV_MFR_CSI_1,       {1295,         1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_CHNT_1,      {24592,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     2,      0}},
-    {INV_MFR_CHNT_2,      {4099,         1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
-    {INV_MFR_AFORE_1,     {1552,         1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
+    //写寄存器:                                                                                           //读寄存器:
+    //逆变器ID             寄存器地址    寄存器个数   写功能码 数据类型   字节序             小数位数 预留 寄存器地址    寄存器个数   读功能码 数据类型   字节序             小数位数 预留
+    {INV_MFR_SUNGROW_1,   {5036 ,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}, {5036 ,        1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_HUAWEI_1,    {40123,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}, {40123,        1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_HUAWEI_2,    {40123,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}, {40123,        1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_GOODWE_1,    {42414,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}, {42414,        1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
+//    {INV_MFR_GOODWE_2,    {42414,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}, {42414,        1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_GOODWE_3,    {265,          1,            0x10,   TYPE_I16, Type_Byte_ABCD,      0,      0}, {265,          1,            0x03,   TYPE_I16, Type_Byte_ABCD,      0,      0}},
+    {INV_MFR_GOODWE_4,    {265,          1,            0x10,   TYPE_I16, Type_Byte_ABCD,      0,      0}, {265,          1,            0x03,   TYPE_I16, Type_Byte_ABCD,      0,      0}},
+    {INV_MFR_GROWATT_1,   {4,            1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     0,      0}, {4,            1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     0,      0}},
+    {INV_MFR_GROWATT_2,   {4,            1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     0,      0}, {4,            1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     0,      0}},
+    {INV_MFR_JINLONG_1,   {3050,         1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     2,      0}, {3050,         1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_SOFAR_1,     {4360,         1,            0x10,   TYPE_I16,  Type_Byte_ABCD,     1,      0}, {4360,         1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_SINENG_1,    {46055,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     2,      0}, {46055,        1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_AUXSOL_1,    {15262,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}, {15262,        1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_TEBA_1,      {4365,         1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     2,      0}, {4365,         1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_AISIWEI_1,   {5515,         1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     2,      0}, {5515,         1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_HSNV_1,      {40005,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     2,      0}, {40005,        1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_YHNJ_1,      {6006,         1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}, {6006,         1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_YHNJ_2,      {97,           1,            0x06,   TYPE_U16,  Type_Byte_ABCD,     0,      0}, {97,           1,            0x03,   TYPE_U16,  Type_Byte_ABCD,     0,      0}},
+//    {INV_MFR_KSTAR_1,     {4005,         1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     0,      0}, {3051,         1,            0x04,   TYPE_I16,  Type_Byte_ABCD,     0,      0}},    // 程序不支持TYPE_I8、TYPE_U8的数据类型,无法解析
+    {INV_MFR_CSI_1,       {1295,         1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}, {1295,         1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_CHNT_1,      {24592,        1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     2,      0}, {24592,        1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     2,      0}},
+    {INV_MFR_CHNT_2,      {4099,         1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}, {4099,         1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
+    {INV_MFR_AFORE_1,     {1552,         1,            0x06,   TYPE_I16,  Type_Byte_ABCD,     1,      0}, {1552,         1,            0x03,   TYPE_I16,  Type_Byte_ABCD,     1,      0}},
 };
 
 
@@ -1025,6 +1038,98 @@ Inv_reactive_pwr_pct_ctrl_Id_t g_inv_reactive_pwr_pct_ctrl[] = {    // 无功功
             }                                                                          \
         }                                                                              \
     } while(0)
+
+/* 在前置数据表中查找目标厂家的首条配置，并统计连续回一厂家的条数。
+ * 同厂家的多条前置必须在表内连续排列，否则只统计到第一段连续区域。
+ * 没有匹配项时指针保持清零之后的RT_NULL，个数保持 0。 */
+#define INV_BIND_MFR_PREREG(ptr_target, cnt_target, stride_target, table, member)        \
+    do {                                                                                 \
+        uint16_t table_index;                                                            \
+        uint16_t run_index;                                                              \
+        (ptr_target) = RT_NULL;                                                          \
+        (cnt_target) = 0U;                                                               \
+        (stride_target) = (uint16_t)sizeof((table)[0]);                                  \
+        for(table_index = 0U; table_index < INV_ARRAY_COUNT(table); ++table_index) {     \
+            if((table)[table_index].mfr_id == mfr_id) {                                  \
+                run_index = table_index;                                                 \
+                while((run_index < INV_ARRAY_COUNT(table)) &&                            \
+                      ((table)[run_index].mfr_id == mfr_id)) {                           \
+                    ++run_index;                                                         \
+                }                                                                        \
+                (ptr_target) = &(table)[table_index].member;                             \
+                (cnt_target) = (uint8_t)(run_index - table_index);                       \
+                break;                                                                   \
+            }                                                                            \
+        }                                                                                \
+    } while(0)
+
+/* 取前置数据表第row行记录的厂家编号，按行结构步长定位，避免把字段指针当数组基址。
+ * 前置数据表的行结构为{厂家编号, 前置配置}，相邻两行的同一字段间隔等于行结构大小，
+ * 并不等于sizeof(Enum_Inv_Mfr_Id_t)，因此必须按步长寻址。 */
+static Enum_Inv_Mfr_Id_t inv_prereg_row_mfr(const uint8_t *base, uint16_t step, uint16_t row)
+{
+    Enum_Inv_Mfr_Id_t mfr;
+    rt_memcpy(&mfr, base + ((uint32_t)row * (uint32_t)step), sizeof(mfr));
+    return mfr;
+}
+
+/* 校验单张前置数据表中同一厂家的配置是否连续排列。
+ * 同一厂家一旦被其他厂家隔开，后续再次出现即为不连续，装配时只会绑定第一段。
+ * 发现不连续时通过break_row返回重复出现的行号，便于现场快速定位配置错误。 */
+static rt_bool_t inv_prereg_table_contiguous(const uint8_t *base, uint16_t step,
+                                             uint16_t row_count, uint16_t *break_row)
+{
+    uint16_t row_index;
+
+    for(row_index = 1U; row_index < row_count; ++row_index) {
+        Enum_Inv_Mfr_Id_t current = inv_prereg_row_mfr(base, step, row_index);
+        Enum_Inv_Mfr_Id_t previous = inv_prereg_row_mfr(base, step, (uint16_t)(row_index - 1U));
+        uint16_t prev_index;
+
+        /* 与上一行同厂家说明仍在连续区域内。 */
+        if(current == previous) {
+            continue;
+        }
+        /* 当前厂家在前面已经出现过，说明同厂家的配置被其他厂家隔开了。 */
+        for(prev_index = 0U; prev_index < (uint16_t)(row_index - 1U); ++prev_index) {
+            if(inv_prereg_row_mfr(base, step, prev_index) == current) {
+                *break_row = row_index;
+                return RT_FALSE;
+            }
+        }
+    }
+    return RT_TRUE;
+}
+
+/* 对7张前置数据表依次执行连续性自检。 */
+static void inv_prereg_check_tables(void)
+{
+#define INV_PREREG_CHECK_TABLE(table)                                                        \
+    do {                                                                                     \
+        uint16_t break_row = 0U;                                                             \
+        const uint8_t *base = (const uint8_t *)&(table)[0];                                  \
+                                                                                             \
+        if(inv_prereg_table_contiguous(base, (uint16_t)sizeof(table[0]),                     \
+                                       (uint16_t)INV_ARRAY_COUNT(table),                     \
+                                       &break_row) == RT_FALSE) {                            \
+            rt_kprintf("[prereg] " #table                                                    \
+                       ": mfr[%d] rows are not contiguous after row %d, "                    \
+                       "only the first block takes effect\n",                               \
+                       (int)inv_prereg_row_mfr(base, (uint16_t)sizeof(table[0]), break_row), \
+                       (int)break_row);                                                      \
+        }                                                                                    \
+    } while(0)
+
+    INV_PREREG_CHECK_TABLE(g_inv_pwr_on_pre);
+    INV_PREREG_CHECK_TABLE(g_inv_pwr_off_pre);
+    INV_PREREG_CHECK_TABLE(g_inv_active_pwr_pre);
+    INV_PREREG_CHECK_TABLE(g_inv_reactive_pwr_pre);
+    INV_PREREG_CHECK_TABLE(g_inv_pwr_factor_pre);
+    INV_PREREG_CHECK_TABLE(g_inv_active_pwr_pct_pre);
+    INV_PREREG_CHECK_TABLE(g_inv_reactive_pwr_pct_pre);
+
+#undef INV_PREREG_CHECK_TABLE
+}
 
 /* 将一条协议的全部可选点初始化为不支持。地址字段为16位，因此全0xFF表示为0xFFFF。 */
 static void inv_proto_set_all_points_unused(Inv_Proto_t *protocol)
@@ -1057,24 +1162,33 @@ static void inv_proto_set_all_points_unused(Inv_Proto_t *protocol)
     protocol->ctrl.pwr_on.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
     protocol->ctrl.pwr_off.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
     protocol->ctrl.active_pwr_ctrl.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
+    protocol->ctrl.active_pwr_read.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
     protocol->ctrl.reactive_pwr_ctrl.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
+    protocol->ctrl.reactive_pwr_read.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
     protocol->ctrl.pwr_factor_ctrl.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
+    protocol->ctrl.pwr_factor_read.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
     protocol->ctrl.active_pwr_pct_ctrl.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
+    protocol->ctrl.active_pwr_pct_read.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
     protocol->ctrl.reactive_pwr_pct_ctrl.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
+    protocol->ctrl.reactive_pwr_pct_read.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
     protocol->daily_energy.reg_addr = INVERTER_PROTOCOL_REGISTER_UNUSED;
 }
 
 /* 按厂家枚举逐项查询各配置表，同时组装RAM协议库和同槽号的前置协议库。
  * 两个库只在装配阶段共用同一个厂家循环，数据结构与存储完全独立：
- * 前置库不进入238字节协议结构，协议库读写(04E70100)格式不受影响。 */
+ * 前置库不进入268字节协议结构，协议库读写(04E70100)格式不受影响。 */
 void inv_proto_default_lib_init(void)
 {
     Enum_Inv_Mfr_Id_t mfr_id;
 
     rt_memset(&g_inv_proto_lib, 0, sizeof(g_inv_proto_lib));
 
-    /* 前置库先全部置0xFF；地址0xFFFF表示该厂家该控制点不写前置使能寄存器。 */
-    rt_memset(&g_inv_prereg_lib, 0xFF, sizeof(g_inv_prereg_lib));
+    /* 前置库先全部清零：未配置厂家的指针保持为空、个数为0。
+     * 这里不能填0xFF，否则指针会变成非法地址0xFFFFFFFF，误引用会直接硬重启。 */
+    rt_memset(&g_inv_prereg_lib, 0, sizeof(g_inv_prereg_lib));
+
+    /* 装配前先检查7张前置表的同厂家行是否连续，不连续只告警不阻止启动。 */
+    inv_prereg_check_tables();
 
     for(mfr_id = INV_MFR_SUNGROW_1; mfr_id < INV_MFR_MAX; ++mfr_id) {
         Inv_Proto_t *protocol = &g_inv_proto_lib.proto[(uint16_t)mfr_id];
@@ -1128,24 +1242,51 @@ void inv_proto_default_lib_init(void)
         INV_COPY_MFR_POINT(protocol->ctrl.pwr_on, g_inv_pwr_on, pwr_on);
         INV_COPY_MFR_POINT(protocol->ctrl.pwr_off, g_inv_pwr_off, pwr_off);
         INV_COPY_MFR_POINT(protocol->ctrl.active_pwr_ctrl, g_inv_active_pwr_ctrl, active_pwr_ctrl);
+        INV_COPY_MFR_POINT(protocol->ctrl.active_pwr_read, g_inv_active_pwr_ctrl, active_pwr_read);
         INV_COPY_MFR_POINT(protocol->ctrl.reactive_pwr_ctrl, g_inv_reactive_pwr_ctrl, reactive_pwr_ctrl);
+        INV_COPY_MFR_POINT(protocol->ctrl.reactive_pwr_read, g_inv_reactive_pwr_ctrl, reactive_pwr_read);
         INV_COPY_MFR_POINT(protocol->ctrl.pwr_factor_ctrl, g_inv_pwr_factor_ctrl, pwr_factor_ctrl);
+        INV_COPY_MFR_POINT(protocol->ctrl.pwr_factor_read, g_inv_pwr_factor_ctrl, pwr_factor_read);
         INV_COPY_MFR_POINT(protocol->ctrl.active_pwr_pct_ctrl, g_inv_active_pwr_pct_ctrl, active_pwr_pct_ctrl);
+        INV_COPY_MFR_POINT(protocol->ctrl.active_pwr_pct_read, g_inv_active_pwr_pct_ctrl, active_pwr_pct_read);
         INV_COPY_MFR_POINT(protocol->ctrl.reactive_pwr_pct_ctrl, g_inv_reactive_pwr_pct_ctrl, reactive_pwr_pct_ctrl);
+        INV_COPY_MFR_POINT(protocol->ctrl.reactive_pwr_pct_read, g_inv_reactive_pwr_pct_ctrl, reactive_pwr_pct_read);
 
         /* 同槽号装配7项前置使能寄存器，与上面的控制类在同一轮厂家循环内完成，
-         * 保证前置库槽位和协议库槽位始终一一对应；未配置项保持0xFF。 */
-        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_on_pre, g_inv_pwr_on_pre, pwr_on_pre);
-        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_off_pre, g_inv_pwr_off_pre, pwr_off_pre);
-        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pre, g_inv_active_pwr_pre, active_pwr_pre);
-        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pre, g_inv_reactive_pwr_pre, reactive_pwr_pre);
-        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_factor_pre, g_inv_pwr_factor_pre, pwr_factor_pre);
-        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pct_pre, g_inv_active_pwr_pct_pre, active_pwr_pct_pre);
-        INV_COPY_MFR_POINT(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pct_pre, g_inv_reactive_pwr_pct_pre, reactive_pwr_pct_pre);
+         * 保证前置库槽位和协议库槽位始终一一对应；未配置项指针为空、个数为0。 */
+        INV_BIND_MFR_PREREG(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_on_pre,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_on_pre_cnt,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_on_pre_stride,
+                            g_inv_pwr_on_pre, pwr_on_pre);
+        INV_BIND_MFR_PREREG(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_off_pre,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_off_pre_cnt,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_off_pre_stride,
+                            g_inv_pwr_off_pre, pwr_off_pre);
+        INV_BIND_MFR_PREREG(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pre,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pre_cnt,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pre_stride,
+                            g_inv_active_pwr_pre, active_pwr_pre);
+        INV_BIND_MFR_PREREG(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pre,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pre_cnt,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pre_stride,
+                            g_inv_reactive_pwr_pre, reactive_pwr_pre);
+        INV_BIND_MFR_PREREG(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_factor_pre,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_factor_pre_cnt,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].pwr_factor_pre_stride,
+                            g_inv_pwr_factor_pre, pwr_factor_pre);
+        INV_BIND_MFR_PREREG(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pct_pre,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pct_pre_cnt,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].active_pwr_pct_pre_stride,
+                            g_inv_active_pwr_pct_pre, active_pwr_pct_pre);
+        INV_BIND_MFR_PREREG(g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pct_pre,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pct_pre_cnt,
+                            g_inv_prereg_lib.prereg[(uint16_t)mfr_id].reactive_pwr_pct_pre_stride,
+                            g_inv_reactive_pwr_pct_pre, reactive_pwr_pct_pre);
 
         g_inv_proto_lib.valid[(uint16_t)mfr_id] = INVERTER_PROTOCOL_VALID;
     }
 }
 
 #undef INV_COPY_MFR_POINT
+#undef INV_BIND_MFR_PREREG
 #undef INV_ARRAY_COUNT

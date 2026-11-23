@@ -22,7 +22,7 @@
 #include <rtdbg.h>
 
 
-#define DLT645_FRAME_BUFFER_SIZE        512U /* 238字节协议库应答加数据标识、帧头和前导码后需要超过256字节缓冲区。 */
+#define DLT645_FRAME_BUFFER_SIZE        512U /* 268字节协议库应答加数据标识、帧头和前导码后需要超过300字节缓冲区。 */
 uint8_t g_packBuf[DLT645_FRAME_BUFFER_SIZE] = {0};
 uint8_t sg_dl645_addr_bcd[DL645_ADDR_SIZE] = {0};
 
@@ -165,7 +165,7 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
     // 协议库总数必须放在槽位通配点之前，避免04E701FE被通配规则提前匹配。
     {0x04E701FEU, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_RAW, DLT645_SELECTOR_NONE, 1U, 1, 0, INVERTER_PROTOCOL_LIBRARY_COUNT, dlt645_read_protocol_count, RT_NULL, "protocol library count"}, /* 有效协议数量根据RAM有效标志实时统计，仅支持读取。 */
     // 协议库槽位01～64分别映射RAM中的100条临时协议。
-    {0x04E70100U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_PROTOCOL, INV_PROTO_SIZE, 1, 0, 0, dlt645_read_protocol, dlt645_write_protocol, "protocol library slot"}, /* 有效槽位返回238字节结构，无效槽位返回全FF，写入不保存到Flash。 */
+    {0x04E70100U, 0xFFFFFF00U, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_PROTOCOL, INV_PROTO_SIZE, 1, 0, 0, dlt645_read_protocol, dlt645_write_protocol, "protocol library slot"}, /* 有效槽位返回268字节结构，无效槽位返回全FF，写入不保存到Flash。 */
 
     //事件类
     //开关机总次数

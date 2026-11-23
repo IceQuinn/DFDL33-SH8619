@@ -47,18 +47,22 @@ typedef enum Type_Byte
     Type_Byte_DCBA = 3
 } Type_Byte_t;
 
-/* 数据类和参数类使用的只读Modbus RTU寄存器描述，不保存实时数据。 */
+/* 变量类、参数类和控制类共用的Modbus RTU寄存器描述，不保存实时数据。
+ * 同一个结构既用于只读抄读点，也用于可写控制点，读写语义由使用位置决定：
+ * 变量类/参数类的第4字节为读功能码(0x03读保持/0x04读输入)；
+ * 控制类5个调节点的第4字节为写功能码(0x06写单个/0x10写多个)。
+ * 读写寄存器个数为1～16，控制类写入时0x06只允许1个寄存器。 */
 #pragma pack(1)
 typedef struct Inv_RegBlk
 {
     /* Modbus RTU请求报文中直接使用的16位寄存器地址，不保存40001等其他表示形式，也不在使用时执行地址转换。 */
     uint16_t reg_addr;
 
-    /* 连续读取的16位Modbus寄存器个数。 */
+    /* 连续读写的16位Modbus寄存器个数。 */
     uint8_t reg_cnt;
 
-    /* Modbus RTU读寄存器功能码，例如0x03表示读保持寄存器、0x04表示读输入寄存器；0表示未配置读功能。 */
-    uint8_t read_func_code;
+    /* Modbus RTU功能码：只读点表示读功能码0x03/0x04；控制点表示写功能码0x06/0x10；0表示未配置。 */
+    uint8_t func_code;
 
     /* 数据类型占bit0～bit3，使用user_comm.h中的TYPE_*值，取值范围0～15。 */
     uint16_t data_type : 4;
@@ -73,41 +77,25 @@ typedef struct Inv_RegBlk
     uint16_t reserved : 4;
 } Inv_RegBlk_t;
 
-/* 只读寄存器块由地址2字节、寄存器个数1字节、读功能码1字节和数据格式2字节组成，共6字节。 */
+/* 统一寄存器块由地址2字节、寄存器个数1字节、功能码1字节和数据格式2字节组成，共6字节。 */
 #define INV_REG_BLK_SIZE                            6
 typedef char Inv_RegBlkSizeCheck_t[
     (sizeof(Inv_RegBlk_t) == INV_REG_BLK_SIZE) ? 1 : -1];
 
-/* 控制类使用的普通Modbus RTU写寄存器描述，写入值由调用方提供。 */
-typedef struct Inv_CtrlRegBlk
-{
-    /* Modbus RTU请求报文中直接使用的16位寄存器地址，不保存其他地址表示形式。 */
-    uint16_t reg_addr;
+/* 控制类5个调节点与变量类使用完全相同的寄存器描述结构，写入值由调用方提供。
+ * 保留该别名是为了让控制类代码继续使用控制语义的类型名，布局与Inv_RegBlk_t完全相同。 */
+typedef Inv_RegBlk_t Inv_CtrlRegBlk_t;
+typedef Inv_RegBlk_t Inv_ReadRegBlk_t;
 
-    /* 连续写入的16位Modbus寄存器个数。 */
-    uint8_t reg_cnt;
-
-    /* Modbus RTU写寄存器功能码，例如0x06表示写单个寄存器、0x10表示写多个寄存器；0表示未配置写入。 */
-    uint8_t write_func_code;
-
-    /* 数据类型占bit0～bit3，取值范围0～15。 */
-    uint16_t data_type : 4;
-
-    /* 字节序占bit4～bit7，取值范围0～15。 */
-    uint16_t byte_order : 4;
-
-    /* 小数位数占bit8～bit11，取值范围0～15。 */
-    uint16_t decimal_places : 4;
-
-    /* bit12～bit15预留。 */
-    uint16_t reserved : 4;
-
-} Inv_CtrlRegBlk_t;
-
-/* 普通控制寄存器块由地址2字节、寄存器个数1字节、写功能码1字节和数据格式2字节组成，共6字节。 */
+/* 普通控制寄存器块与统一寄存器块同为6字节，第4字节为写功能码0x06/0x10。 */
 #define INV_CTRL_REG_BLK_SIZE                       6
 typedef char Inv_CtrlRegBlkSizeCheck_t[
     (sizeof(Inv_CtrlRegBlk_t) == INV_CTRL_REG_BLK_SIZE) ? 1 : -1];
+
+/* 读寄存器配置与统一寄存器块同为6字节，第4字节为读功能码0x03/0x04。 */
+#define INV_READ_REG_BLK_SIZE                       6
+typedef char Inv_ReadRegBlkSizeCheck_t[
+    (sizeof(Inv_ReadRegBlk_t) == INV_READ_REG_BLK_SIZE) ? 1 : -1];
 
 /* 开机、关机固定命令使用的控制寄存器描述，包含协议规定的默认写入值。 */
 typedef struct Inv_CtrlDefaultRegBlk
@@ -224,7 +212,7 @@ typedef struct Inv_ProtoParam
 typedef char Inv_ProtoParamSizeCheck_t[
     (sizeof(Inv_ProtoParam_t) == INV_PROTO_PARAM_SIZE) ? 1 : -1];
 
-/* 控制类：用于写入控制命令的寄存器。
+/* 控制类：用于写入控制命令的寄存器，以及回读控制结果使用的读寄存器。
  * 开机和关机可能共用同一个地址但写入值不同，也可能使用不同寄存器，因此
  * 使用两个独立的固定命令控制点。控制百分比及功率值按各自
  * decimal_places 转换。 */
@@ -236,26 +224,44 @@ typedef struct Inv_ProtoCtrl
     /* 逆变器关机控制寄存器。 */
     Inv_CtrlDefaultRegBlk_t pwr_off;
 
-    /* 有功功率数值控制寄存器。 */
+    /* 有功功率数值写寄存器，功能码为0x06或0x10。 */
     Inv_CtrlRegBlk_t active_pwr_ctrl;
 
-    /* 无功功率数值控制寄存器。 */
+    /* 有功功率数值读寄存器，地址与写寄存器相同，功能码为0x03或0x04。 */
+    Inv_ReadRegBlk_t active_pwr_read;
+
+    /* 无功功率数值写寄存器，功能码为0x06或0x10。 */
     Inv_CtrlRegBlk_t reactive_pwr_ctrl;
-    
-    /* 功率因数控制寄存器。 */
+
+    /* 无功功率数值读寄存器，地址与写寄存器相同，功能码为0x03或0x04。 */
+    Inv_ReadRegBlk_t reactive_pwr_read;
+
+    /* 功率因数写寄存器，功能码为0x06或0x10。 */
     Inv_CtrlRegBlk_t pwr_factor_ctrl;
 
-    /* 有功功率百分比控制寄存器。 */
+    /* 功率因数读寄存器，地址与写寄存器相同，功能码为0x03或0x04。 */
+    Inv_ReadRegBlk_t pwr_factor_read;
+
+    /* 有功功率百分比写寄存器，功能码为0x06或0x10。 */
     Inv_CtrlRegBlk_t active_pwr_pct_ctrl;
 
-    /* 无功功率百分比控制寄存器。 */
+    /* 有功功率百分比读寄存器，地址与写寄存器相同，功能码为0x03或0x04。 */
+    Inv_ReadRegBlk_t active_pwr_pct_read;
+
+    /* 无功功率百分比写寄存器，功能码为0x06或0x10。 */
     Inv_CtrlRegBlk_t reactive_pwr_pct_ctrl;
+
+    /* 无功功率百分比读寄存器，地址与写寄存器相同，功能码为0x03或0x04。 */
+    Inv_ReadRegBlk_t reactive_pwr_pct_read;
 } Inv_ProtoCtrl_t;
 
-/* 控制类包含2个带默认值控制点和5个普通控制点，共8×2+6×5=46字节。 */
-#define INV_PROTO_CTRL_SIZE                         46
+/* 控制类包含2个带默认值控制点、5个写寄存器配置和5个读寄存器配置，共8×2+6×10=76字节。 */
+#define INV_PROTO_CTRL_SIZE                         76
 typedef char Inv_ProtoCtrlSizeCheck_t[
     (sizeof(Inv_ProtoCtrl_t) == INV_PROTO_CTRL_SIZE) ? 1 : -1];
+
+/* 控制类需要回读的五类调节量数量：有功/无功数值、功率因数、有功/无功百分比。 */
+#define INV_PROTO_CTRL_REG_COUNT                    5
 
 /* 一条完整逆变器协议配置，包含数据类、参数类和控制类。 */
 typedef struct Inv_Proto
@@ -292,47 +298,70 @@ typedef struct Inv_ProtoLib
 } Inv_ProtoLib_t;
 #pragma pack()
 
-/* 厂家信息34字节、特征数据14字节、数据类108字节、参数类30字节、控制类46字节、日发电量6字节，共238字节。 */
-#define INV_PROTO_SIZE                              238
+/* 厂家信息34字节、特征数据14字节、数据类108字节、参数类30字节、控制类76字节、日发电量6字节，共268字节。 */
+#define INV_PROTO_SIZE                              268
 typedef char Inv_ProtoSizeCheck_t[
     (sizeof(Inv_Proto_t) == INV_PROTO_SIZE) ? 1 : -1];
 
-/* AB头6字节、100个有效标志和100条238字节协议，共6+100+238×100=23906字节。 */
-#define INV_PROTO_LIB_SIZE                          23906
+/* AB头6字节、100个有效标志和100条268字节协议，共6+100+268×100=26906字节。 */
+#define INV_PROTO_LIB_SIZE                          26906
 typedef char Inv_ProtoLibSizeCheck_t[
     (sizeof(Inv_ProtoLib_t) == INV_PROTO_LIB_SIZE) ? 1 : -1];
 
-/* 前置(使能)寄存器配置：开关机及五类调节控制各自一项，每项8字节，共56字节。
- * 前置寄存器只保存在独立的前置协议库中，不进入238字节协议结构，
- * 因此协议库读写(04E70100)的报文格式保持不变。 */
+/* 单个控制点最多支持的前置使能寄存器条数，用于配置数据表定义。 */
+#define INV_PROTO_PREREG_MAX_COUNT                  8
+
+/* 前置(使能)寄存器配置：开关机及五类调节控制各自一组。
+ * 每组保存“首条配置指针 + 条数 + 步长”，指针指向各前置数据表中该厂家的
+ * 首条配置成员。前置数据表的元素结构为{厂家ID, 前置配置}，厂家ID占1字节，
+ * 因此相邻两条同名成员的间隔(步长)等于该元素结构的大小，并不恒等于
+ * sizeof(Inv_CtrlDefaultRegBlk_t)，必须按步长逐个寻址，不能直接做数组下标。
+ * 数据表内同厂家的多条配置必须连续排列。
+ * 前置寄存器只保存在独立的前置协议库中，不进入268字节协议结构，
+ * 因此协议库读写(04E70100)的报文格式保持不变。
+ * 未配置时指针为RT_NULL且个数为0，由inv_proto_default_lib_init()清零后保持。 */
 #pragma pack(1)
 typedef struct Inv_ProtoPreReg
 {
-    /* 开机前置使能寄存器及固定使能值。 */
-    Inv_CtrlDefaultRegBlk_t pwr_on_pre;
+    /* 开机前置使能寄存器首条配置、条数及相邻两条成员之间的步长。 */
+    const Inv_CtrlDefaultRegBlk_t *pwr_on_pre;
+    uint8_t pwr_on_pre_cnt;
+    uint16_t pwr_on_pre_stride;
 
-    /* 关机前置使能寄存器及固定使能值。 */
-    Inv_CtrlDefaultRegBlk_t pwr_off_pre;
+    /* 关机前置使能寄存器首条配置、条数及相邻两条成员之间的步长。 */
+    const Inv_CtrlDefaultRegBlk_t *pwr_off_pre;
+    uint8_t pwr_off_pre_cnt;
+    uint16_t pwr_off_pre_stride;
 
-    /* 有功功率数值前置使能寄存器及固定使能值。 */
-    Inv_CtrlDefaultRegBlk_t active_pwr_pre;
+    /* 有功功率数值前置使能寄存器首条配置、条数及相邻两条成员之间的步长。 */
+    const Inv_CtrlDefaultRegBlk_t *active_pwr_pre;
+    uint8_t active_pwr_pre_cnt;
+    uint16_t active_pwr_pre_stride;
 
-    /* 无功功率数值前置使能寄存器及固定使能值。 */
-    Inv_CtrlDefaultRegBlk_t reactive_pwr_pre;
+    /* 无功功率数值前置使能寄存器首条配置、条数及相邻两条成员之间的步长。 */
+    const Inv_CtrlDefaultRegBlk_t *reactive_pwr_pre;
+    uint8_t reactive_pwr_pre_cnt;
+    uint16_t reactive_pwr_pre_stride;
 
-    /* 功率因数前置使能寄存器及固定使能值。 */
-    Inv_CtrlDefaultRegBlk_t pwr_factor_pre;
+    /* 功率因数前置使能寄存器首条配置、条数及相邻两条成员之间的步长。 */
+    const Inv_CtrlDefaultRegBlk_t *pwr_factor_pre;
+    uint8_t pwr_factor_pre_cnt;
+    uint16_t pwr_factor_pre_stride;
 
-    /* 有功功率百分比前置使能寄存器及固定使能值。 */
-    Inv_CtrlDefaultRegBlk_t active_pwr_pct_pre;
+    /* 有功功率百分比前置使能寄存器首条配置、条数及相邻两条成员之间的步长。 */
+    const Inv_CtrlDefaultRegBlk_t *active_pwr_pct_pre;
+    uint8_t active_pwr_pct_pre_cnt;
+    uint16_t active_pwr_pct_pre_stride;
 
-    /* 无功功率百分比前置使能寄存器及固定使能值。 */
-    Inv_CtrlDefaultRegBlk_t reactive_pwr_pct_pre;
+    /* 无功功率百分比前置使能寄存器首条配置、条数及相邻两条成员之间的步长。 */
+    const Inv_CtrlDefaultRegBlk_t *reactive_pwr_pct_pre;
+    uint8_t reactive_pwr_pct_pre_cnt;
+    uint16_t reactive_pwr_pct_pre_stride;
 } Inv_ProtoPreReg_t;
 #pragma pack()
 
-/* 7项前置配置均为8字节固定值写命令块，合计56字节。 */
-#define INV_PROTO_PREREG_SIZE                       56
+/* 7组前置配置均为4字节指针加1字节个数加2字节步长，按1字节对齐合计7×7=49字节。 */
+#define INV_PROTO_PREREG_SIZE                       49
 typedef char Inv_ProtoPreRegSizeCheck_t[
     (sizeof(Inv_ProtoPreReg_t) == INV_PROTO_PREREG_SIZE) ? 1 : -1];
 
@@ -340,32 +369,32 @@ typedef char Inv_ProtoPreRegSizeCheck_t[
 #pragma pack(1)
 typedef struct Inv_PreRegLib
 {
-    /* AB区校验头；首版不持久化时保持全FF，不参与运行。 */
+    /* AB区校验头；首版不持久化时保持全0，不参与运行。 */
     rcd_head head;
 
-    /* 100条协议各自的前置使能配置，地址0xFFFF表示该控制点无前置写。 */
+    /* 100条协议各自的前置使能配置指针和条数。 */
     Inv_ProtoPreReg_t prereg[INVERTER_PROTOCOL_LIBRARY_COUNT];
 } Inv_PreRegLib_t;
 #pragma pack()
 
-/* AB头6字节和100条56字节前置配置，共6+100×56=5606字节。 */
-#define INV_PREREG_LIB_SIZE                         5606
+/* AB头6字节和100条49字节前置配置，共6+100×49=4906字节。 */
+#define INV_PREREG_LIB_SIZE                         4906
 typedef char Inv_PreRegLibSizeCheck_t[
     (sizeof(Inv_PreRegLib_t) == INV_PREREG_LIB_SIZE) ? 1 : -1];
 
 /* 全局逆变器协议库，数组下标范围为0~99，前4项分别对应阳光、华为、固德威和锦浪。 */
 extern Inv_ProtoLib_t g_inv_proto_lib;
 
-/* 全局前置协议库，槽位下标与协议库完全一致，内容不参与协议库读写。 */
+/* 全局前置协议库，槽位下标与协议库完全一致。每槽只存前置配置指针和条数，不存配置副本，内容不参与协议库读写。 */
 extern Inv_PreRegLib_t g_inv_prereg_lib;
 
 /* 统计RAM协议库中有效槽位数量，返回范围为0～100。 */
 uint8_t Inv_Proto_Valid_Count(void);
 
-/* 按1～100槽位读取238字节协议；无效槽位以全FF返回，越界或缓冲区不足返回错误。 */
+/* 按1～100槽位读取268字节协议；无效槽位以全FF返回，越界或缓冲区不足返回错误。 */
 rt_err_t Inv_Proto_Read_Wire(uint16_t proto_number, uint8_t *wire_data, uint16_t capacity);
 
-/* 校验并临时覆盖1～100槽位的238字节协议；全FF、重复厂家版本或非法结构返回错误。 */
+/* 校验并临时覆盖1～100槽位的268字节协议；全FF、重复厂家版本或非法结构返回错误。 */
 rt_err_t Inv_Proto_Write_Wire(uint16_t proto_number, const uint8_t *wire_data, uint16_t data_len);
 
 /* 按厂家枚举轮询各分项配置表，在同一厂家循环内重建RAM中的默认协议库和同槽号前置协议库。 */

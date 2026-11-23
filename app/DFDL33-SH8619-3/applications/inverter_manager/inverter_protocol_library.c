@@ -37,7 +37,7 @@ static rt_bool_t inv_proto_manufacturer_valid(const char *manufacturer)
 /* 检查6字节寄存器描述的公共字段，FFFF地址表示厂家不支持该数据点并直接允许。 */
 static rt_bool_t inv_proto_register_valid(const Inv_RegBlk_t *block, rt_bool_t is_write)
 {
-    uint8_t function_code = ((const uint8_t *)block)[3]; /* 读写描述第4字节均为Modbus功能码，按公共线布局读取。 */
+    uint8_t function_code = block->func_code; /* 读写描述统一使用func_code字段，按is_write区分校验规则。 */
 
     if(block->reg_addr == INVERTER_PROTOCOL_REGISTER_UNUSED) /* 未支持寄存器不参与其余字段校验。 */
     {
@@ -55,12 +55,13 @@ static rt_bool_t inv_proto_register_valid(const Inv_RegBlk_t *block, rt_bool_t i
     return (function_code == 0x03U) || (function_code == 0x04U); /* 采集点只接受保持寄存器或输入寄存器读功能码。 */
 }
 
-/* 对238字节协议的厂家、版本、特征、数据、参数和控制描述执行写入前完整校验。 */
+/* 对268字节协议的厂家、版本、特征、数据、参数和控制描述执行写入前完整校验。 */
 static rt_bool_t inv_proto_content_valid(const Inv_Proto_t *proto)
 {
     const Inv_RegBlk_t *data_blocks = (const Inv_RegBlk_t *)&proto->data; /* 数据类连续包含18个同布局只读寄存器块。 */
     const Inv_RegBlk_t *param_blocks = (const Inv_RegBlk_t *)&proto->param; /* 参数类连续包含5个同布局只读寄存器块。 */
-    const Inv_CtrlRegBlk_t *ctrl_blocks = &proto->ctrl.active_pwr_ctrl; /* 普通控制类从有功功率控制开始连续排列5项。 */
+    const Inv_CtrlRegBlk_t *ctrl_writes = &proto->ctrl.active_pwr_ctrl; /* 5个写寄存器配置从有功功率数值写寄存器开始按下标2步进排列。 */
+    const Inv_ReadRegBlk_t *ctrl_reads = &proto->ctrl.active_pwr_read; /* 5个读寄存器配置从有功功率数值读寄存器开始按下标2步进排列。 */
     uint16_t index; /* 当前校验的同类寄存器描述下标。 */
 
     if((inv_proto_manufacturer_valid(proto->mfr_info.name) == RT_FALSE) ||
@@ -92,9 +93,12 @@ static rt_bool_t inv_proto_content_valid(const Inv_Proto_t *proto)
     {
         return RT_FALSE;
     }
-    for(index = 0U; index < 5U; ++index)
+    for(index = 0U; index < INV_PROTO_CTRL_REG_COUNT; ++index)
     {
-        if(inv_proto_register_valid((const Inv_RegBlk_t *)&ctrl_blocks[index], RT_TRUE) == RT_FALSE) /* 五个调节控制点必须逐项合法或明确为FFFF。 */
+        /* 五个调节控制点的写配置和读配置必须逐项合法或明确为FFFF，写配置只接受06/10，读配置只接受03/04。
+         * 写配置与读配置在控制类中交替排列，因此按2个寄存器块为步长依次定位第index组。 */
+        if((inv_proto_register_valid(&ctrl_writes[2U * index], RT_TRUE) == RT_FALSE) ||
+           (inv_proto_register_valid(&ctrl_reads[2U * index], RT_FALSE) == RT_FALSE))
         {
             return RT_FALSE;
         }
@@ -118,7 +122,7 @@ uint8_t Inv_Proto_Valid_Count(void)
     return count;
 }
 
-/* 将指定RAM协议槽位复制为645线上的238字节数据，无效槽位固定返回全FF。 */
+/* 将指定RAM协议槽位复制为645线上的268字节数据，无效槽位固定返回全FF。 */
 rt_err_t Inv_Proto_Read_Wire(uint16_t proto_number, uint8_t *wire_data, uint16_t capacity)
 {
     uint16_t index; /* 由1起始协议编号换算得到的0起始数组下标。 */
@@ -134,7 +138,7 @@ rt_err_t Inv_Proto_Read_Wire(uint16_t proto_number, uint8_t *wire_data, uint16_t
     {
         rt_memcpy(wire_data, &g_inv_proto_lib.proto[index], INV_PROTO_SIZE);
     }
-    else /* 规范要求无效协议槽位仍正常应答，但238字节全部填FF。 */
+    else /* 规范要求无效协议槽位仍正常应答，但268字节全部填FF。 */
     {
         rt_memset(wire_data, 0xFF, INV_PROTO_SIZE);
     }
@@ -142,7 +146,7 @@ rt_err_t Inv_Proto_Read_Wire(uint16_t proto_number, uint8_t *wire_data, uint16_t
     return RT_EOK;
 }
 
-/* 校验238字节线数据并原子覆盖RAM协议槽位，本接口不执行任何Flash保存。 */
+/* 校验268字节线数据并原子覆盖RAM协议槽位，本接口不执行任何Flash保存。 */
 rt_err_t Inv_Proto_Write_Wire(uint16_t proto_number, const uint8_t *wire_data, uint16_t data_len)
 {
     Inv_Proto_t candidate; /* 先在临时对象中完成解析和校验，失败时不污染当前运行协议。 */
@@ -150,7 +154,7 @@ rt_err_t Inv_Proto_Write_Wire(uint16_t proto_number, const uint8_t *wire_data, u
     uint16_t compare_index; /* 检查厂家和版本重复时使用的槽位下标。 */
     rt_base_t level; /* 原子替换协议内容时保存的中断状态。 */
 
-    if((proto_number == 0U) || (proto_number > INVERTER_PROTOCOL_LIBRARY_COUNT) || (wire_data == RT_NULL) || (data_len != INV_PROTO_SIZE)) /* 写入必须精确携带238字节。 */
+    if((proto_number == 0U) || (proto_number > INVERTER_PROTOCOL_LIBRARY_COUNT) || (wire_data == RT_NULL) || (data_len != INV_PROTO_SIZE)) /* 写入必须精确携带268字节。 */
     {
         return -RT_EINVAL;
     }

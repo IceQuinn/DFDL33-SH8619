@@ -7,6 +7,7 @@
 
 #include "inv_data.h"
 #include <stdlib.h>
+#include "sys.h"
 
 #define EVENT_DATA_VER              1
 
@@ -613,10 +614,10 @@ void Event_Data_Deal_Loop(void *parameter)
         if (rt_mq_recv(&Event_Data_mq, Events_Cache_Data, sizeof(Events_Cache_Data), RT_WAITING_FOREVER) == RT_EOK)
         {
             Show_Event_Data(Events_Cache_Data[0], &Events_Cache_Data[1]);
-//             if(is_power_down() && !is_power_down_legal_work()){
-//                 LOG_W("Power Down! Do not save new event");
-//                 continue;
-//             }
+            if(is_power_down() && !is_power_down_legal_work()){
+                LOG_W("Power Down! Do not save new event data");
+                continue;
+            }
 
             rt_mutex_take(&event_mgmt_mutex, RT_WAITING_FOREVER);
 

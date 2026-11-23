@@ -78,13 +78,13 @@ rt_err_t dlt645_read_protocol_count(const Dlt645PointTypeDef *point, uint32_t id
     return RT_EOK;
 }
 
-/* 读取DI0指定的协议槽位，协议模块负责对无效槽位填充238字节FF。 */
+/* 读取DI0指定的协议槽位，协议模块负责对无效槽位填充268字节FF。 */
 rt_err_t dlt645_read_protocol(const Dlt645PointTypeDef *point, uint32_t id,
                               uint8_t *data, uint16_t capacity, uint16_t *data_len)
 {
     uint16_t proto_number = (uint8_t)id; /* 分发层已将DI0限制为01～64，可直接作为1起始协议编号。 */
 
-    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) || (point->data_len != INV_PROTO_SIZE) || (capacity < INV_PROTO_SIZE)) /* 完整协议必须一次容纳238字节。 */
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) || (point->data_len != INV_PROTO_SIZE) || (capacity < INV_PROTO_SIZE)) /* 完整协议必须一次容纳268字节。 */
     {
         return -RT_EINVAL;
     }
@@ -1210,11 +1210,12 @@ static rt_err_t dlt645_bcd_decode_s32(const uint8_t *data, uint16_t data_len, in
     return RT_EOK;
 }
 
-/* 根据数据标识取得五类调节量对应的控制类型、协议配置和实时缓存。 */
+/* 根据数据标识取得五类调节量对应的控制类型、写寄存器配置、读寄存器配置和实时缓存。 */
 static rt_err_t dlt645_get_control_source(uint32_t id,
                                           uint8_t archive_index,
                                           Inv_Control_Type_t *control_type,
                                           const Inv_CtrlRegBlk_t **control_reg,
+                                          const Inv_ReadRegBlk_t **read_reg,
                                           Inv_RealtimeValue_t **source)
 {
     const Inv_Proto_t *protocol = Inv_Archive_Get_Protocol(archive_index); /* 取得该档案绑定的厂家协议配置。 */
@@ -1235,26 +1236,31 @@ static rt_err_t dlt645_get_control_source(uint32_t id,
     case 0x05U:
         *control_type = INV_CONTROL_ACTIVE_POWER;
         *control_reg = &protocol->ctrl.active_pwr_ctrl;
+        *read_reg = &protocol->ctrl.active_pwr_read;
         *source = &inv_data->ctrl.active_pwr_ctrl;
         break;
     case 0x06U:
         *control_type = INV_CONTROL_REACTIVE_POWER;
         *control_reg = &protocol->ctrl.reactive_pwr_ctrl;
+        *read_reg = &protocol->ctrl.reactive_pwr_read;
         *source = &inv_data->ctrl.reactive_pwr_ctrl;
         break;
     case 0x07U:
         *control_type = INV_CONTROL_POWER_FACTOR;
         *control_reg = &protocol->ctrl.pwr_factor_ctrl;
+        *read_reg = &protocol->ctrl.pwr_factor_read;
         *source = &inv_data->ctrl.pwr_factor_ctrl;
         break;
     case 0x08U:
         *control_type = INV_CONTROL_ACTIVE_POWER_PERCENT;
         *control_reg = &protocol->ctrl.active_pwr_pct_ctrl;
+        *read_reg = &protocol->ctrl.active_pwr_pct_read;
         *source = &inv_data->ctrl.active_pwr_pct_ctrl;
         break;
     case 0x09U:
         *control_type = INV_CONTROL_REACTIVE_POWER_PERCENT;
         *control_reg = &protocol->ctrl.reactive_pwr_pct_ctrl;
+        *read_reg = &protocol->ctrl.reactive_pwr_pct_read;
         *source = &inv_data->ctrl.reactive_pwr_pct_ctrl;
         break;
     default:
@@ -1324,17 +1330,19 @@ rt_err_t dlt645_read_control_value(const Dlt645PointTypeDef *point, uint32_t id,
     for(archive_offset = 0U; archive_offset < archive_count; ++archive_offset)
     {
         Inv_Control_Type_t control_type;       /* 当前数据标识对应的下行控制类型。 */
-        const Inv_CtrlRegBlk_t *control_reg;   /* 当前逆变器协议中的控制寄存器配置。 */
+        const Inv_CtrlRegBlk_t *control_reg;   /* 当前逆变器协议中的写寄存器配置。 */
+        const Inv_ReadRegBlk_t *read_reg;      /* 当前逆变器协议中的读寄存器配置，回读值按其小数位换算。 */
         Inv_RealtimeValue_t *source;           /* 当前逆变器最近一次有效控制回读值。 */
         uint8_t *field = &data[archive_offset * point->data_len]; /* 当前档案在应答中的固定字段位置。 */
 
-        if(dlt645_get_control_source(id, first_archive + archive_offset, &control_type, &control_reg, &source) != RT_EOK) /* 空档案或不支持时保留槽位并填FF。 */
+        if(dlt645_get_control_source(id, first_archive + archive_offset, &control_type, &control_reg, &read_reg, &source) != RT_EOK) /* 空档案或不支持时保留槽位并填FF。 */
         {
             rt_memset(field, 0xFF, point->data_len);
             continue;
         }
-        RT_UNUSED(control_type); /* 读取只需要配置和缓存，控制类型由公共映射接口同时返回供写入复用。 */
-        dlt645_append_value(source, control_reg->decimal_places, target_decimals, (uint8_t)point->data_len, RT_TRUE, field); /* 五类调节值统一使用符号位BCD。 */
+        RT_UNUSED(control_type); /* 读取只需要读写配置和缓存，控制类型由公共映射接口同时返回供写入复用。 */
+        RT_UNUSED(control_reg);  /* 回读值按读寄存器配置换算，写寄存器配置仅由写入路径使用。 */
+        dlt645_append_value(source, read_reg->decimal_places, target_decimals, (uint8_t)point->data_len, RT_TRUE, field); /* 回读值按读寄存器配置的小数位换算，五类调节值统一使用符号位BCD。 */
     }
     *data_len = required_len; /* 单台返回一个字段，全量返回12个固定字段。 */
     return RT_EOK;
@@ -1428,7 +1436,8 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
     {
         uint8_t slot = first_archive + archive_offset; /* 当前档案在response中的固定槽位下标。 */
         const uint8_t *field = &data[archive_offset * point->data_len]; /* 当前逆变器对应的完整写字段。 */
-        const Inv_CtrlRegBlk_t *control_reg; /* 当前档案对应调节寄存器的小数位和支持信息。 */
+        const Inv_CtrlRegBlk_t *control_reg; /* 当前档案对应调节写寄存器的小数位和支持信息。 */
+        const Inv_ReadRegBlk_t *write_read_reg; /* 映射接口要求返回的读寄存器配置，本次写不直接使用。 */
         Inv_RealtimeValue_t *source;         /* 映射接口要求返回的缓存指针，本次写不直接使用。 */
         Inv_Control_Type_t type;             /* 当前槽位对应的下行控制类型。 */
         int32_t decoded_value;               /* 从符号位BCD解码得到的645定点整数。 */
@@ -1458,7 +1467,7 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
         }
 
         /* 3 协议不支持：单控回其他错误，全控只记本台不支持且不计入成功台数。 */
-        source_result = dlt645_get_control_source(id, slot, &type, &control_reg, &source);
+        source_result = dlt645_get_control_source(id, slot, &type, &control_reg, &write_read_reg, &source);
         ctrl_type = type;
         if(source_result == -RT_ENOSYS)
         {
@@ -1480,7 +1489,8 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
             }
             continue;
         }
-        RT_UNUSED(source); /* 写入只使用控制配置，实时缓存由后续645主动读取实际寄存器时更新。 */
+        RT_UNUSED(source);          /* 写入只使用控制配置，实时缓存由后续645主动读取实际寄存器时更新。 */
+        RT_UNUSED(write_read_reg);  /* 下行控制值按写寄存器小数位换算，读寄存器配置仅由读取路径使用。 */
 
         /* 5 数值非法：单控回其他错误，全控只记本台失败。 */
         if((dlt645_bcd_decode_s32(field, point->data_len, &decoded_value) != RT_EOK) ||
