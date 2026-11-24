@@ -133,6 +133,18 @@ rt_err_t dlt645_write_device_action(const Dlt645PointTypeDef *point,
                                     uint16_t response_capacity,
                                     uint16_t *response_len);
 
+/* 五类调节与开关机写请求的逐台处理状态，事件记录通过它判断本次是否真的下发了调控。
+ * 取值含义：00已下发成功、01写入全FF未执行调节、02下发或响应失败、03协议未配置该功能、
+ * 04数据非法、内部异常或目标槽位没有档案（单控与全控口径一致，都返回本值）。 */
+typedef enum Dlt645ControlStatus
+{
+    DLT645_CONTROL_STATUS_SUCCESS = 0x00U,
+    DLT645_CONTROL_STATUS_NOT_CONTROLLED = 0x01U,
+    DLT645_CONTROL_STATUS_FAILED = 0x02U,
+    DLT645_CONTROL_STATUS_UNSUPPORTED = 0x03U,
+    DLT645_CONTROL_STATUS_OTHER = 0x04U
+} Dlt645ControlStatusTypeDef;
+
 /* 读取指定逆变器或全部逆变器的三相电压数据块。 */
 rt_err_t dlt645_read_voltage(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
 /* 读取指定逆变器或全部逆变器的三相电流数据块。 */

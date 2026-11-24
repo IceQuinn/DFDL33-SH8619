@@ -6,6 +6,7 @@
 #include <time.h>
 
 #include "inv_data.h"
+#include "dlt645_data_api.h"
 #include <stdlib.h>
 #include "sys.h"
 
@@ -216,10 +217,10 @@ void Show_Event_Data(uint8_t event_class, void *p_evt_data)
             }
             rt_kprintf("\n");
 
-            /* 调控值行（无效值显示 --） */
+            /* 调控值行（无效值显示 --）；inv_values为int16，无值哨兵为INT16_MIN。 */
             rt_kprintf("Value :");
             for(int i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
-                if(p->inv_values[i] == INT32_MIN){
+                if(p->inv_values[i] == INT16_MIN){
                     rt_kprintf(" --\t");
                 }else{
                     rt_kprintf("%d\t", p->inv_values[i]);
@@ -670,8 +671,9 @@ void Send_Inv_OnOff_Event_Data(EventTime start_time, EventTime end_time,
         SwitchEvent.event_type[i]      = ctrl_type[i];
         SwitchEvent.control_result[i]  = ctrl_result[i];
 
-        /* 参与了控制的才递增次数 */
-        if (ctrl_result[i] != 1)
+        /* 只有下发值为全FF（01未调控）才不计次；00成功、02失败、03不支持、04其他问题都算一次调控意图，
+         * 包括没有档案的情况——主站实际下发了调控值，事件里也保留了该值。 */
+        if(ctrl_result[i] != DLT645_CONTROL_STATUS_NOT_CONTROLLED)
         {
             if (p_cnt[i] < Event_Management[event].Event_Max_Cnt)
             {
@@ -736,10 +738,23 @@ void Send_PowerEvent_Data(EventTime start_time, EventTime end_time,
         for(int i = 0; i < INVERTER_ARCHIVE_MAX_COUNT; ++i)
         {
             PowerFactorEvent.control_result[i] = ctrl_result[i];
-            PowerFactorEvent.inv_values[i]     = (int16_t)ctrl_value[i];
+            /* 未参与或值非法的槽位用INT16_MIN表示无值；功率因数645值域为-1000～1000，不会与该哨兵冲突。 */
+            if(ctrl_value[i] == INT32_MIN)
+            {
+                PowerFactorEvent.inv_values[i] = INT16_MIN;
+            }
+            else if((ctrl_value[i] < (int32_t)INT16_MIN) || (ctrl_value[i] > (int32_t)INT16_MAX))
+            {
+                PowerFactorEvent.inv_values[i] = INT16_MIN; /* 超出int16表示范围时按无值处理，避免截断产生错误数值。 */
+            }
+            else
+            {
+                PowerFactorEvent.inv_values[i] = (int16_t)ctrl_value[i];
+            }
 
-            /* 参与了控制的才递增次数 */
-            if(ctrl_result[i] != 1) //未调控不递增控制次数，其余递增
+            /* 只有下发值为全FF（01未调控）才不计次；00成功、02失败、03不支持、04其他问题都算一次调控意图，
+             * 包括没有档案和厂家精度无法承载的情况，两者都代表本次存在调控意图。 */
+            if(ctrl_result[i] != DLT645_CONTROL_STATUS_NOT_CONTROLLED)
             {
                 if(p_cnt[i] < Event_Management[event].Event_Max_Cnt)
                 {
@@ -764,8 +779,9 @@ void Send_PowerEvent_Data(EventTime start_time, EventTime end_time,
             PowerControlEvent.control_result[i] = ctrl_result[i];
             PowerControlEvent.control_value[i]  = ctrl_value[i];
 
-            /* 参与了控制的才递增次数 */
-            if(ctrl_result[i] != 1)
+            /* 只有下发值为全FF（01未调控）才不计次；00成功、02失败、03不支持、04其他问题都算一次调控意图，
+             * 包括没有档案和厂家精度无法承载的情况，两者都代表本次存在调控意图。 */
+            if(ctrl_result[i] != DLT645_CONTROL_STATUS_NOT_CONTROLLED)
             {
                 if(p_cnt[i] < Event_Management[event].Event_Max_Cnt)
                 {
@@ -798,8 +814,9 @@ void Send_PowerTimeControlEvent_Data(EventTime start_time, EventTime end_time,
         PowerControlEvent.control_result[i] = ctrl_result[i];
         PowerControlEvent.control_value[i]  = ctrl_value[i];
 
-        /* 参与了控制的才递增次数 */
-        if(ctrl_result[i] != 1)
+        /* 只有下发值为全FF（01未调控）才不计次；00成功、02失败、03不支持、04其他问题都算一次调控意图，
+         * 包括没有档案的情况——主站实际下发了调控值，事件里也保留了该值。 */
+        if(ctrl_result[i] != DLT645_CONTROL_STATUS_NOT_CONTROLLED)
         {
             if(p_cnt[i] < Event_Management[event].Event_Max_Cnt)
             {

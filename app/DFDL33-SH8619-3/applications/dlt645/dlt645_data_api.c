@@ -128,17 +128,6 @@ typedef enum Dlt645NominalPowerType
     DLT645_NOMINAL_POWER_QN      /* 额定无功功率Qn。 */
 } Dlt645NominalPowerTypeDef;
 
-/* 全量调节应答中每个字节表示对应档案槽位的最终处理状态。 */
-typedef enum Dlt645ControlStatus
-{
-    DLT645_CONTROL_STATUS_SUCCESS = 0x00U,     /* 已向逆变器下发调节命令并收到成功响应。 */
-    DLT645_CONTROL_STATUS_NOT_CONTROLLED = 0x01U, /* 写入值为全FF，因此没有执行下行调节。 */
-    DLT645_CONTROL_STATUS_FAILED = 0x02U,      /* 下行发送、等待或设备响应阶段失败。 */
-    DLT645_CONTROL_STATUS_UNSUPPORTED = 0x03U, /* 当前逆变器协议没有配置该调节功能。 */
-    DLT645_CONTROL_STATUS_OTHER = 0x04U,       /* 数据非法或内部资源异常，单控映射为01其他错误。 */
-    DLT645_CONTROL_STATUS_NO_ARCHIVE = 0x05U   /* 目标槽位没有有效档案，单控映射为02无请求数据。 */
-} Dlt645ControlStatusTypeDef;
-
 /* 计算10的指定次幂，协议配置小数位超过9时返回0表示配置不可转换。 */
 static uint32_t dlt645_decimal_scale(uint8_t decimal_places)
 {
@@ -1210,7 +1199,27 @@ static rt_err_t dlt645_bcd_decode_s32(const uint8_t *data, uint16_t data_len, in
     return RT_EOK;
 }
 
-/* 根据数据标识取得五类调节量对应的控制类型、写寄存器配置、读寄存器配置和实时缓存。 */
+/* 由DI1确定五类调节量对应的下行控制类型，与dlt645_get_control_source内的映射保持一致。 */
+static Inv_Control_Type_t dlt645_control_type_by_di1(uint8_t point_type)
+{
+    switch(point_type)
+    {
+    case 0x05U:
+        return INV_CONTROL_ACTIVE_POWER;
+    case 0x06U:
+        return INV_CONTROL_REACTIVE_POWER;
+    case 0x07U:
+        return INV_CONTROL_POWER_FACTOR;
+    case 0x08U:
+        return INV_CONTROL_ACTIVE_POWER_PERCENT;
+    case 0x09U:
+        return INV_CONTROL_REACTIVE_POWER_PERCENT;
+    default:
+        return INV_CONTROL_TYPE_MAX; /* 点表外的数据标识没有对应控制类型。 */
+    }
+}
+
+/* 根据数据标识取得五类调节量对应的写入寄存器配置、读寄存器配置和实时缓存。 */
 static rt_err_t dlt645_get_control_source(uint32_t id,
                                           uint8_t archive_index,
                                           Inv_Control_Type_t *control_type,
@@ -1231,34 +1240,30 @@ static rt_err_t dlt645_get_control_source(uint32_t id,
         return -RT_ENOSYS;
     }
 
+    *control_type = dlt645_control_type_by_di1(point_type); /* 控制类型只由DI1决定，与档案无关。 */
     switch(point_type)
     {
     case 0x05U:
-        *control_type = INV_CONTROL_ACTIVE_POWER;
         *control_reg = &protocol->ctrl.active_pwr_ctrl;
         *read_reg = &protocol->ctrl.active_pwr_read;
         *source = &inv_data->ctrl.active_pwr_ctrl;
         break;
     case 0x06U:
-        *control_type = INV_CONTROL_REACTIVE_POWER;
         *control_reg = &protocol->ctrl.reactive_pwr_ctrl;
         *read_reg = &protocol->ctrl.reactive_pwr_read;
         *source = &inv_data->ctrl.reactive_pwr_ctrl;
         break;
     case 0x07U:
-        *control_type = INV_CONTROL_POWER_FACTOR;
         *control_reg = &protocol->ctrl.pwr_factor_ctrl;
         *read_reg = &protocol->ctrl.pwr_factor_read;
         *source = &inv_data->ctrl.pwr_factor_ctrl;
         break;
     case 0x08U:
-        *control_type = INV_CONTROL_ACTIVE_POWER_PERCENT;
         *control_reg = &protocol->ctrl.active_pwr_pct_ctrl;
         *read_reg = &protocol->ctrl.active_pwr_pct_read;
         *source = &inv_data->ctrl.active_pwr_pct_ctrl;
         break;
     case 0x09U:
-        *control_type = INV_CONTROL_REACTIVE_POWER_PERCENT;
         *control_reg = &protocol->ctrl.reactive_pwr_pct_ctrl;
         *read_reg = &protocol->ctrl.reactive_pwr_pct_read;
         *source = &inv_data->ctrl.reactive_pwr_pct_ctrl;
@@ -1403,7 +1408,7 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
     uint8_t source_decimals;        /* 645点表数值对应的小数位数。 */
     uint8_t archived_count = 0U;    /* 全控中有有效档案的槽位数，用于区分全部无档案。 */
     uint8_t success_count = 0U;     /* 实际下发成功的台数，至少一台成功才正常应答。 */
-    int32_t values[INVERTER_ARCHIVE_MAX_COUNT]; /* 逐台调控值记录，DLT645_CONTROL_VALUE_NONE_S32表示本台未参与本次控制或值非法，供事件记录使用。 */
+    int32_t values[INVERTER_ARCHIVE_MAX_COUNT]; /* 逐台调控值记录，按645点表精度保存（有功/无功4位小数、功率因数3位、百分比1位），DLT645_CONTROL_VALUE_NONE_S32表示本台未参与本次控制或值非法，供事件记录使用。 */
     rt_bool_t single;               /* DI0为01～0C时为真，表示本次请求只控制一台逆变器。 */
     rt_err_t single_result = RT_EOK; /* 单控最终返回码，无档案优先，循环内累积。 */
 
@@ -1421,9 +1426,15 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
         return -RT_EINVAL;
     }
 
-    uint8_t ctrl_type = 0xff;
+    uint8_t ctrl_type = 0xff; /* 帧级控制类型，由DI1在入口确定。 */
     EventTime start_time;
     Get_EventTime(&start_time);
+
+    ctrl_type = (uint8_t)dlt645_control_type_by_di1((uint8_t)(id >> 8)); /* 控制类型只由DI1决定，不随各档案的跳过结果变化。 */
+    if(ctrl_type >= (uint8_t)INV_CONTROL_TYPE_MAX)
+    {
+        return -RT_EINVAL; /* 点表外的数据标识不能映射到逆变器控制类型。 */
+    }
 
     rt_memset(response, DLT645_CONTROL_STATUS_NOT_CONTROLLED, INVERTER_ARCHIVE_MAX_COUNT); /* 默认不控制，单控未涉及的槽位也保持此值，避免残留旧状态。 */
     for(archive_offset = 0U; archive_offset < INVERTER_ARCHIVE_MAX_COUNT; ++archive_offset)
@@ -1439,14 +1450,27 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
         const Inv_CtrlRegBlk_t *control_reg; /* 当前档案对应调节写寄存器的小数位和支持信息。 */
         const Inv_ReadRegBlk_t *write_read_reg; /* 映射接口要求返回的读寄存器配置，本次写不直接使用。 */
         Inv_RealtimeValue_t *source;         /* 映射接口要求返回的缓存指针，本次写不直接使用。 */
-        Inv_Control_Type_t type;             /* 当前槽位对应的下行控制类型。 */
-        int32_t decoded_value;               /* 从符号位BCD解码得到的645定点整数。 */
+        Inv_Control_Type_t type;             /* 当前槽位对应的下行控制类型，与帧级类型相同。 */
+        int32_t decoded_value;               /* 从符号位BCD解码得到的645定点整数，按645点表精度表示。 */
+        int32_t command_value;               /* 按当前厂家写寄存器小数位换算后的下行值，不覆盖values[slot]中的645原值。 */
         rt_err_t source_result;              /* 档案、协议和控制配置查询结果。 */
 
-        /* 1 无档案：单控回无请求数据，全控不处理；无档案槽位不看下发的值。 */
+        /* 1 事件记录值：只依赖报文和645点表，与档案、协议无关，因此必须先于任何跳过执行。
+         * 这样没有档案或协议不支持时，事件记录仍能保留主站实际下发的645调控值。 */
+        if((dlt645_bcd_decode_s32(field, point->data_len, &decoded_value) == RT_EOK) &&
+           (decoded_value >= point->write_min) && (decoded_value <= point->write_max))
+        {
+            values[slot] = decoded_value; /* 645原值，保持主站下发的完整精度。 */
+        }
+        else
+        {
+            values[slot] = DLT645_CONTROL_VALUE_NONE_S32; /* 值非法或BCD不可解码时按未参与处理。 */
+        }
+
+        /* 2 无档案：单控与全控都回04其他问题；已落值的事件记录不受影响。 */
         if(Inv_Data_Get(slot) == RT_NULL)
         {
-            response[slot] = (single == RT_TRUE) ? DLT645_CONTROL_STATUS_NO_ARCHIVE : DLT645_CONTROL_STATUS_NOT_CONTROLLED;
+            response[slot] = DLT645_CONTROL_STATUS_OTHER; /* 逐台状态统一为04，应答帧的无请求数据错误码仍由single_result给出。 */
             if(single == RT_TRUE)
             {
                 single_result = -RT_EEMPTY; /* 不提前返回，保证后续事件记录能执行。 */
@@ -1455,7 +1479,7 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
         }
         ++archived_count; /* 本槽位有档案，参与全控成功台数统计。 */
 
-        /* 2 FF：单控视为值不合理回其他错误，全控表示本台不控制。 */
+        /* 3 FF：单控视为值不合理回其他错误，全控表示本台不控制。 */
         if(dlt645_field_is_ff(field, point->data_len) == RT_TRUE)
         {
             response[slot] = (single == RT_TRUE) ? DLT645_CONTROL_STATUS_FAILED : DLT645_CONTROL_STATUS_NOT_CONTROLLED;
@@ -1466,9 +1490,8 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
             continue;
         }
 
-        /* 3 协议不支持：单控回其他错误，全控只记本台不支持且不计入成功台数。 */
+        /* 4 协议不支持：单控回其他错误，全控只记本台不支持且不计入成功台数。 */
         source_result = dlt645_get_control_source(id, slot, &type, &control_reg, &write_read_reg, &source);
-        ctrl_type = type;
         if(source_result == -RT_ENOSYS)
         {
             response[slot] = DLT645_CONTROL_STATUS_UNSUPPORTED;
@@ -1479,7 +1502,7 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
             continue;
         }
 
-        /* 4 内部映射异常：单控回其他错误，全控只记本台失败。 */
+        /* 5 内部映射异常：单控回其他错误，全控只记本台失败。 */
         if(source_result != RT_EOK)
         {
             response[slot] = DLT645_CONTROL_STATUS_FAILED;
@@ -1492,14 +1515,9 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
         RT_UNUSED(source);          /* 写入只使用控制配置，实时缓存由后续645主动读取实际寄存器时更新。 */
         RT_UNUSED(write_read_reg);  /* 下行控制值按写寄存器小数位换算，读寄存器配置仅由读取路径使用。 */
 
-        /* 5 数值非法：单控回其他错误，全控只记本台失败。 */
-        if((dlt645_bcd_decode_s32(field, point->data_len, &decoded_value) != RT_EOK) ||
-           (decoded_value < point->write_min) ||
-           (decoded_value > point->write_max) ||
-           (dlt645_rescale_value(decoded_value, source_decimals, control_reg->decimal_places,
-                                 &values[slot]) != RT_EOK)) /* BCD、业务范围和协议定点换算任一失败均计为失败。 */
+        /* 6 645值非法：单控回其他错误，全控只记本台失败。 */
+        if(values[slot] == DLT645_CONTROL_VALUE_NONE_S32) /* 第1步已经完成BCD解码和业务范围校验。 */
         {
-            values[slot] = DLT645_CONTROL_VALUE_NONE_S32; /* 非法值不保留，事件记录按未参与处理。 */
             response[slot] = DLT645_CONTROL_STATUS_FAILED;
             if((single == RT_TRUE) && (single_result == RT_EOK))
             {
@@ -1508,8 +1526,18 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
             continue;
         }
 
-        /* 6 数值合法：换算结果已保存在 values[slot]，立即下发并记录本台结果。 */
-        response[slot] = dlt645_control_one_value(slot, type, values[slot]);
+        /* 7 协议定点换算：只把645原值换算为下行值，换算失败不影响已记录的645原值。 */
+        if(dlt645_rescale_value(values[slot], source_decimals, control_reg->decimal_places,
+                                &command_value) == RT_EOK)
+        {
+            /* 8 645原值与厂家小数位均可表示：使用换算后的下行值立即下发。 */
+            response[slot] = dlt645_control_one_value(slot, type, command_value);
+        }
+        else
+        {
+            /* 厂家小数位无法承载该645值：不下发，事件记录保留645原值并计为一次调控。 */
+            response[slot] = DLT645_CONTROL_STATUS_FAILED;
+        }
         if(response[slot] == DLT645_CONTROL_STATUS_SUCCESS)
         {
             ++success_count; /* 单控和全控都计入下发成功台数。 */
@@ -1525,7 +1553,6 @@ rt_err_t dlt645_write_control_value(const Dlt645PointTypeDef *point, uint32_t id
     Get_EventTime(&end_time);
     Send_PowerEvent_Data(start_time, end_time, ctrl_type, response, values);
 
-    /* TODO: 在此调用事件记录，携带 response[]（逐台状态）与 values[]（逐台调控值）。 */
 
     if(single == RT_TRUE) /* 单控只有一台，按循环内累积的结论应答。 */
     {
@@ -1607,6 +1634,43 @@ static rt_err_t dlt645_encode_hhmm(uint8_t hour, uint8_t minute, uint8_t *data)
         return -RT_EINVAL;
     }
     return RT_EOK;
+}
+
+/* 取单台时段块中第一个启用时段的控制值原值，按645点表精度保存，作为事件记录值，与厂家精度换算结果无关。 */
+static int32_t dlt645_decode_time_control_first_value(uint32_t id, const uint8_t *block)
+{
+    Time_Ctrl_Mode_t mode;   /* 当前数据标识对应的时段控制方式。 */
+    uint8_t value_len;       /* 单个时段值在645数据块中的字节长度。 */
+    uint8_t source_decimals; /* 645时段值的小数位，仅用于数据格式校验。 */
+    uint8_t period_index;    /* 当前解析的第1或第2时段下标。 */
+
+    if((block == RT_NULL) ||
+       (dlt645_time_control_format(id, &mode, &value_len, &source_decimals) != RT_EOK)) /* 数据标识必须属于两类时段控制之一。 */
+    {
+        return DLT645_CONTROL_VALUE_NONE_S32;
+    }
+    RT_UNUSED(source_decimals); /* 645原值本身已按点表精度表示，解码后不再换算。 */
+    for(period_index = 0U; period_index < TIME_CTRL_PERIOD_COUNT; ++period_index)
+    {
+        uint16_t time_offset = period_index * 4U;                    /* 当前时段开始时间在单台块中的偏移。 */
+        uint16_t value_offset = 8U + period_index * value_len;       /* 当前时段控制值的偏移。 */
+        int32_t decoded_value;                                       /* 按645精度解码得到的定点值。 */
+
+        if((dlt645_field_is_ff(&block[time_offset], 2U) == RT_TRUE) ||
+           (dlt645_field_is_ff(&block[time_offset + 2U], 2U) == RT_TRUE) ||
+           (dlt645_field_is_ff(&block[value_offset], value_len) == RT_TRUE)) /* 时段禁用或控制值为FF时该时段不记录数值。 */
+        {
+            continue;
+        }
+        if((dlt645_bcd_decode_s32(&block[value_offset], value_len, &decoded_value) != RT_EOK) ||
+           ((mode == TIME_CTRL_ACTIVE_POWER_PERCENT) &&
+            ((decoded_value < 0) || (decoded_value > DLT645_CONTROL_PERCENT_MAX)))) /* BCD不可解码或百分比越界的时段不记录。 */
+        {
+            continue;
+        }
+        return decoded_value; /* 返回第一个启用时段的645原值，保留主站下发的完整精度。 */
+    }
+    return DLT645_CONTROL_VALUE_NONE_S32;
 }
 
 /* 把单台645时段数据块解析为绑定接收当天的一次性时段命令。 */
@@ -1804,7 +1868,10 @@ rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point, uint32_t id,
     uint8_t archive_count;          /* 本次写入包含的固定单台块数量。 */
     uint8_t archive_offset;         /* 当前预检查或提交的相对档案槽位。 */
     Time_Ctrl_Command_t commands[INVERTER_ARCHIVE_MAX_COUNT]; /* 预解析完成且绑定接收当天的逐台命令。 */
-    int32_t values[INVERTER_ARCHIVE_MAX_COUNT]; /* 逐台时段调控值记录，DLT645_CONTROL_VALUE_NONE_S32表示本台未参与本次控制或值非法，供事件记录使用。 */
+    int32_t values[INVERTER_ARCHIVE_MAX_COUNT]; /* 逐台时段调控值记录，按645点表精度保存（有功4位小数、百分比1位小数），DLT645_CONTROL_VALUE_NONE_S32表示本台未参与本次控制或值非法，供事件记录使用。 */
+    Time_Ctrl_Mode_t frame_mode;    /* 帧级时段控制方式，由DI1唯一确定。 */
+    uint8_t frame_value_len;        /* 帧级单个时段值在645数据块中的字节长度。 */
+    uint8_t frame_decimals;         /* 帧级645时段值的小数位数。 */
     rt_bool_t single;               /* DI0为01～0C时为真，表示本次请求只控制一台逆变器。 */
     rt_err_t single_result = RT_EOK; /* 单控最终返回码，无档案优先，循环内累积。 */
     rt_bool_t has_error = RT_FALSE; /* 任一槽位出现硬性时间或长度错误时最终返回写异常。 */
@@ -1831,6 +1898,11 @@ rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point, uint32_t id,
     Get_EventTime(&start_time);
 
     rt_memset(apply, 0, sizeof(apply)); /* 空档案配全FF允许跳过，不修改任何邮箱。 */
+    rt_memset(commands, 0, sizeof(commands)); /* 空档案槽位不解析，清零后事件记录与提交阶段不会读到未初始化的栈内容。 */
+    if(dlt645_time_control_format(id, &frame_mode, &frame_value_len, &frame_decimals) != RT_EOK) /* DI1必须属于两类时段控制之一。 */
+    {
+        return -RT_EINVAL;
+    }
     rt_memset(response, DLT645_CONTROL_STATUS_NOT_CONTROLLED, INVERTER_ARCHIVE_MAX_COUNT); /* 默认不控制，单控未涉及的槽位也保持此值。 */
     for(archive_offset = 0U; archive_offset < INVERTER_ARCHIVE_MAX_COUNT; ++archive_offset)
     {
@@ -1842,9 +1914,10 @@ rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point, uint32_t id,
         uint8_t archive_index = first_archive + archive_offset; /* 当前数据块对应的实际档案槽位。 */
         const uint8_t *block = &data[archive_offset * point->data_len]; /* 当前逆变器的完整时段控制数据块。 */
 
+        values[archive_index] = dlt645_decode_time_control_first_value(id, block); /* 事件记录值按645精度在入口准备，只依赖报文，先于任何跳过执行。 */
         if(Inv_Data_Get(archive_index) == RT_NULL) /* 无档案槽位没有可下发的目标设备。 */
         {
-            response[archive_index] = (single == RT_TRUE) ? DLT645_CONTROL_STATUS_NO_ARCHIVE : DLT645_CONTROL_STATUS_NOT_CONTROLLED;
+            response[archive_index] = DLT645_CONTROL_STATUS_OTHER; /* 单控与全控都回04其他问题，应答帧错误码仍由single_result给出。 */
             if(single == RT_TRUE)
             {
                 single_result = -RT_EEMPTY; /* 单控无档案返回02，不提前返回。 */
@@ -1878,18 +1951,6 @@ rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point, uint32_t id,
             continue;
         }
         apply[archive_offset] = RT_TRUE; /* 本台校验成功才允许更新，不受其他槽位失败影响。 */
-        /* 记录本台第一个启用时段的下发值，两个时段均 FF 或未启用时保持哨兵值。 */
-        for(uint8_t period_index = 0U; period_index < TIME_CTRL_PERIOD_COUNT; ++period_index)
-        {
-            if(commands[archive_offset].periods[period_index].enabled == RT_TRUE)
-            {
-                if(commands[archive_offset].periods[period_index].value_is_ff != RT_TRUE) /* FF调控值不记录具体数值。 */
-                {
-                    values[archive_index] = commands[archive_offset].periods[period_index].value;
-                }
-                break;
-            }
-        }
     }
 
     /* 单台硬性校验失败：保持原有单台写异常语义。 */
@@ -1927,10 +1988,9 @@ rt_err_t dlt645_write_time_control(const Dlt645PointTypeDef *point, uint32_t id,
         rt_kprintf("time control batch save failed\n");
     }
 
-    /* TODO: 在此调用事件记录，携带 response[]（逐台状态）与 values[]（逐台调控值）。 */
     EventTime end_time;
     Get_EventTime(&end_time);
-    Send_PowerTimeControlEvent_Data(start_time, end_time, commands[first_archive].periods[0].mode, response, values);
+    Send_PowerTimeControlEvent_Data(start_time, end_time, (uint8_t)frame_mode, response, values); /* 事件类型取帧级DI1对应的时段方式，不依赖首档案是否被跳过。 */
 
     if(single == RT_TRUE) /* 单控只有一台，按循环内累积的结论应答。 */
     {
@@ -2058,10 +2118,21 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
     {
         uint8_t slot = first_archive + archive_offset; /* 当前档案在response中的固定槽位下标。 */
 
-        /* 1 无档案：单控回无请求数据，全控不处理；无档案槽位不看下发的值。 */
+        /* 1 事件记录值：只依赖报文和645点表，与档案无关，必须先于任何跳过执行。 */
+        if((dlt645_bcd_decode_u32(&data[archive_offset], point->data_len, &value) == RT_EOK) &&
+           (value >= point->write_min) && (value <= point->write_max))
+        {
+            values[slot] = (uint8_t)value; /* 开关机645原值，下发失败也保留本次意图值。 */
+        }
+        else
+        {
+            values[slot] = DLT645_CONTROL_VALUE_NONE; /* 非法值不保留，事件记录按未参与处理。 */
+        }
+
+        /* 2 无档案：单控与全控都回04其他问题；已落值的事件记录不受影响。 */
         if(Inv_Data_Get(slot) == RT_NULL)
         {
-            response[slot] = (single == RT_TRUE) ? DLT645_CONTROL_STATUS_NO_ARCHIVE : DLT645_CONTROL_STATUS_NOT_CONTROLLED;
+            response[slot] = DLT645_CONTROL_STATUS_OTHER; /* 逐台状态统一为04，应答帧的无请求数据错误码仍由single_result给出。 */
             if(single == RT_TRUE)
             {
                 single_result = -RT_EEMPTY; /* 不提前返回，保证后续事件记录能执行。 */
@@ -2070,7 +2141,7 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
         }
         ++archived_count; /* 本槽位有档案，参与全控成功台数统计。 */
 
-        /* 2 FF：单控视为值不合理回其他错误，全控表示本台不控制。 */
+        /* 3 FF：单控视为值不合理回其他错误，全控表示本台不控制。 */
         if(data[archive_offset] == 0xFFU)
         {
             response[slot] = (single == RT_TRUE) ? DLT645_CONTROL_STATUS_FAILED : DLT645_CONTROL_STATUS_NOT_CONTROLLED;
@@ -2081,12 +2152,9 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
             continue;
         }
 
-        /* 3 数值非法：单控回其他错误，全控只记本台失败。 */
-        if((dlt645_bcd_decode_u32(&data[archive_offset], point->data_len, &value) != RT_EOK) ||
-           (value < point->write_min) ||
-           (value > point->write_max)) /* 开关机仅允许00开机、01关机。 */
+        /* 4 数值非法：第1步已完成判定并置为未参与，这里只更新应答状态。开关机仅允许00开机、01关机。 */
+        if(values[slot] == DLT645_CONTROL_VALUE_NONE)
         {
-            values[slot] = DLT645_CONTROL_VALUE_NONE; /* 非法值不保留，事件记录按未参与处理。 */
             response[slot] = DLT645_CONTROL_STATUS_FAILED;
             if((single == RT_TRUE) && (single_result == RT_EOK))
             {
@@ -2095,8 +2163,7 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
             continue;
         }
 
-        /* 4 数值合法：已通过范围校验，窄化到uint8_t安全，然后立即下发。 */
-        values[slot] = (uint8_t)value; /* 供事件记录取用，下发前赋值使失败时仍保留本次意图值。 */
+        /* 5 数值合法：已通过范围校验并已落值，这里只负责下发。 */
         response[slot] = (dlt645_control_run_state(slot, value) == RT_EOK) ?
                         DLT645_CONTROL_STATUS_SUCCESS : DLT645_CONTROL_STATUS_FAILED;
         if(response[slot] == DLT645_CONTROL_STATUS_SUCCESS)
@@ -2113,7 +2180,6 @@ rt_err_t dlt645_write_run_state(const Dlt645PointTypeDef *point,
     Get_EventTime(&end_time);
     Send_Inv_OnOff_Event_Data(start_time, end_time, values, response);
 
-    /* TODO: 在此调用事件记录，携带 response[]（逐台状态）与 values[]（逐台调控值）。 */
 
     if(single == RT_TRUE) /* 单控只有一台，按循环内累积的结论应答。 */
     {
