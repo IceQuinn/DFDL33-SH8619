@@ -145,6 +145,33 @@ void Show_Event_Data(uint8_t event_class, void *p_evt_data)
             }
             rt_kprintf("\n");
 
+            /* 调控值行（无效值显示 --） */
+            rt_kprintf("Value :");
+            for(int i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
+                if(p->control_value[i] == INT32_MIN){
+                    rt_kprintf(" --\t");
+                }else{
+                    int32_t val = p->control_value[i];
+                    if(0 == p->event_type)
+                    {
+                        if(val < 0){
+                            rt_kprintf("-%d.%04d\t", -val/10000, -val%10000);
+                        }else{
+                            rt_kprintf("%d.%04d\t", val/10000, val%10000);
+                        }
+                    }
+                    else if(1 == p->event_type)
+                    {
+                        if(val < 0){
+                            rt_kprintf("-%d.%d\t", -val/10, -val%10);
+                        }else{
+                            rt_kprintf("%d.%d\t", val/10, val%10);
+                        }
+                    }
+                }
+            }
+            rt_kprintf("\n");
+
             /* 调控结果行（文字映射） */
             rt_kprintf("Result:");
             for(int i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
@@ -158,21 +185,8 @@ void Show_Event_Data(uint8_t event_class, void *p_evt_data)
                     rt_kprintf("不支持\t");
                 }else if (p->control_result[i] == 4){
                     rt_kprintf("其它\t");
-                }else if (p->control_result[i] == 5){
-                    rt_kprintf("无档案\t");
                 }else{
                     rt_kprintf("%d\t", p->control_result[i]);
-                }
-            }
-            rt_kprintf("\n");
-
-            /* 调控值行（无效值显示 --） */
-            rt_kprintf("Value :");
-            for(int i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
-                if(p->control_value[i] == INT32_MIN){
-                    rt_kprintf(" --\t");
-                }else{
-                    rt_kprintf("%d\t", p->control_value[i]);
                 }
             }
             rt_kprintf("\n");
@@ -196,6 +210,23 @@ void Show_Event_Data(uint8_t event_class, void *p_evt_data)
             }
             rt_kprintf("\n");
 
+            /* 调控值行（无效值显示 --） */
+            rt_kprintf("Value :");
+            for(int i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
+                if(p->inv_values[i] == INT16_MIN){
+                    rt_kprintf(" --\t");
+                }else{
+//                    rt_kprintf("%d\t", p->inv_values[i]);
+                    int16_t val = p->inv_values[i];
+                    if(val < 0){
+                        rt_kprintf("-%d.%03d\t", -val / 1000, -val % 1000);
+                    }else{
+                        rt_kprintf("%d.%03d\t", val / 1000, val % 1000);
+                    }
+                }
+            }
+            rt_kprintf("\n");
+
             /* 调控结果行 */
             rt_kprintf("Result:");
             for(int i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
@@ -209,21 +240,8 @@ void Show_Event_Data(uint8_t event_class, void *p_evt_data)
                     rt_kprintf("不支持\t");
                 }else if(p->control_result[i] == 4){
                     rt_kprintf("其它\t");
-                }else if(p->control_result[i] == 5){
-                    rt_kprintf("无档案\t");
                 }else{
                     rt_kprintf("%d\t", p->control_result[i]);
-                }
-            }
-            rt_kprintf("\n");
-
-            /* 调控值行（无效值显示 --）；inv_values为int16，无值哨兵为INT16_MIN。 */
-            rt_kprintf("Value :");
-            for(int i = 0; i < EVENT_MAX_INVERTER_NUM; i++){
-                if(p->inv_values[i] == INT16_MIN){
-                    rt_kprintf(" --\t");
-                }else{
-                    rt_kprintf("%d\t", p->inv_values[i]);
                 }
             }
             rt_kprintf("\n");
@@ -273,9 +291,7 @@ void Show_Event_Data(uint8_t event_class, void *p_evt_data)
                     rt_kprintf("不支持\t");
                 }else if(p->control_result[i] == 4){
                     rt_kprintf("其它\t");
-                }else if(p->control_result[i] == 5){
-                    rt_kprintf("无档案\t");
-                } else {
+                }else{
                     rt_kprintf("%d\t", p->control_result[i]);
                 }
             }
@@ -738,7 +754,7 @@ void Send_PowerEvent_Data(EventTime start_time, EventTime end_time,
         for(int i = 0; i < INVERTER_ARCHIVE_MAX_COUNT; ++i)
         {
             PowerFactorEvent.control_result[i] = ctrl_result[i];
-            /* 未参与或值非法的槽位用INT16_MIN表示无值；功率因数645值域为-1000～1000，不会与该哨兵冲突。 */
+            /* 未参与或值非法的槽位用INT16_MIN表示无值；功率因数645值域为-1000～1000。 */
             if(ctrl_value[i] == INT32_MIN)
             {
                 PowerFactorEvent.inv_values[i] = INT16_MIN;

@@ -250,6 +250,69 @@ class DLT645Tests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.registry.encode(data_identifier, {"action_value": "0"})
 
+    def test_voltage_over_limit_setting_round_trip(self):
+        """04E63002电压越限事件触发限值：越限值NNN.N两字节定点0.1V，判定持续时间NNNNNN三字节秒。"""
+        definition = self.registry.get("04E63002")
+        self.assertEqual(definition.category, "parameter")
+        self.assertEqual(definition.group_id, "voltage_over_limit_setting")
+        self.assertEqual(definition.access, "read_write")
+
+        payload = self.registry.encode("04E63002", {"over_limit_setting": "231.0", "over_limit_delay_seconds": "3"})
+        self.assertEqual(payload, bytes.fromhex("10 23 03 00 00"))  # 2310低字节在前，3秒三字节BCD。
+        self.assertEqual(
+            self.registry.decode("04E63002", payload),
+            [("越限条件发生限值", "231", "V"), ("越限条件判定持续时间", "3", "s")],
+        )
+
+        maximum = self.registry.encode(
+            "04E63002", {"over_limit_setting": "999.9", "over_limit_delay_seconds": "999999"}
+        )
+        self.assertEqual(maximum, bytes.fromhex("99 99 99 99 99"))
+        for invalid_values in (
+            {"over_limit_setting": "0", "over_limit_delay_seconds": "3"},      # 0会让越限判定恒成立
+            {"over_limit_setting": "1000", "over_limit_delay_seconds": "3"},   # 超出两字节BCD
+            {"over_limit_setting": "231.0", "over_limit_delay_seconds": "1000000"},
+        ):
+            with self.subTest(values=invalid_values):
+                with self.assertRaises(ValueError):
+                    self.registry.encode("04E63002", invalid_values)
+
+    def test_comm_err_limit_round_trip(self):
+        """04E63001通信异常事件触发限值：hhmmss起始三字节、hhmmss结束三字节、NNNN间隔两字节（单位分钟）、NN日最大次数一字节。"""
+        definition = self.registry.get("04E63001")
+        self.assertEqual(definition.category, "parameter")
+        self.assertEqual(definition.group_id, "comm_err_limit")
+        self.assertEqual(definition.access, "read_write")
+
+        payload = self.registry.encode(
+            "04E63001",
+            {"start_hhmmss": "80000", "end_hhmmss": "170000", "interval_minutes": "5", "daily_max_count": "3"},
+        )
+        self.assertEqual(payload, bytes.fromhex("00 00 08 00 00 17 05 00 03"))  # 08:00:00、17:00:00、5分钟、3次
+        self.assertEqual(
+            self.registry.decode("04E63001", payload),
+            [
+                ("监测起始时间（08:00:00写作80000）", "80000", ""),
+                ("监测结束时间（17:00:00写作170000）", "170000", ""),
+                ("监测间隔（0为关闭异常统计，单位分钟，两字节BCD上限9999分钟）", "5", "min"),
+                ("日发生最大次数（0为不限制，一字节BCD上限99）", "3", "次"),
+            ],
+        )
+
+        maximum = self.registry.encode(
+            "04E63001",
+            {"start_hhmmss": "235959", "end_hhmmss": "235959", "interval_minutes": "9999", "daily_max_count": "99"},
+        )
+        self.assertEqual(maximum, bytes.fromhex("59 59 23 59 59 23 99 99 99"))  # 各字段均取BCD满位
+        for invalid_values in (
+            {"start_hhmmss": "240000", "end_hhmmss": "170000", "interval_minutes": "5", "daily_max_count": "3"},
+            {"start_hhmmss": "80000", "end_hhmmss": "170000", "interval_minutes": "10000", "daily_max_count": "3"},
+            {"start_hhmmss": "80000", "end_hhmmss": "170000", "interval_minutes": "5", "daily_max_count": "100"},
+        ):
+            with self.subTest(values=invalid_values):
+                with self.assertRaises(ValueError):
+                    self.registry.encode("04E63001", invalid_values)
+
     def test_voltage_calibration_write_request(self):
         """电压校准位于扩展设备维护类别，只允许写1，报文沿用标准密码及操作者代码字段。"""
         definition = self.registry.get("04000D00")  # 核对上位机与固件一致使用04000D00，而不是相邻维护命令。
@@ -557,6 +620,7 @@ class DLT645Tests(unittest.TestCase):
             "inverter_power_factor_adjustment", "inverter_active_power_percentage_adjustment",
             "inverter_reactive_power_percentage_adjustment", "inverter_daily_energy",
             "active_power_schedule", "active_power_percent_schedule", "inverter_archive_count", "inverter_archive",
+            "comm_err_limit", "voltage_over_limit_setting",  # 参数类最后两项，按标识号04E63001在前、04E63002在后排列
         ])
         self.assertEqual(groups("event"), [
             family + '_' + kind

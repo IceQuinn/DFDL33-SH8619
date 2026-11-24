@@ -43,8 +43,14 @@ typedef struct GSE8615_CONFIG_V1
     uint32_t altitude;                              /* 高度，单位0.01m；追加在结构体尾部以兼容旧版Flash配置字段偏移。 */
     uint16_t poll_interval_seconds;                 /* 全局逆变器周期抄读间隔，单位秒，0关闭周期抄读，其余有效范围5～3600。 */
 
-    uint16_t overvoltage_setting;
-    uint32_t overvoltage_t_delay;
+    uint16_t overvoltage_setting;                   /* 电压越限事件触发限值，单位0.1V，对应04E63002第一字段。 */
+    uint32_t overvoltage_t_delay;                   /* 电压越限判定持续时间，单位秒，对应04E63002第二字段。 */
+
+    /* 04E63001光伏逆变器通信异常事件触发限值，四项均为全局共享配置。 */
+    uint32_t comm_err_start_seconds;                /* 监测起始时间，单位秒，一天内的秒数0～86399，对应hhmmss。 */
+    uint32_t comm_err_end_seconds;                  /* 监测结束时间，单位秒，一天内的秒数0～86399，对应hhmmss。 */
+    uint16_t comm_err_interval_minutes;             /* 监测间隔，单位分钟，0关闭异常统计，1～9999有效（NNNN两字节BCD），对应NNNN。 */
+    uint8_t  comm_err_daily_max_count;              /* 日发生最大次数，0表示不限制，1～99有效（NN为一字节BCD），对应NN。 */
 
 }GSE8625_CfgTypeDef_Vlast;
 

@@ -23,7 +23,8 @@
       "inverter_status", "inverter_active_power_adjustment", "inverter_reactive_power_adjustment",
       "inverter_power_factor_adjustment", "inverter_active_power_percentage_adjustment",
       "inverter_reactive_power_percentage_adjustment", "inverter_daily_energy",
-      "active_power_schedule", "active_power_percent_schedule", "inverter_archive_count", "inverter_archive"
+      "active_power_schedule", "active_power_percent_schedule", "inverter_archive_count", "inverter_archive",
+      "comm_err_limit", "voltage_over_limit_setting"
     ],
     "event": ["event_switch_count", "event_switch_record", "event_active_count", "event_active_record", "event_reactive_count", "event_reactive_record", "event_factor_count", "event_factor_record", "event_schedule_count", "event_schedule_record", "event_voltage_count", "event_voltage_record", "event_communication_count", "event_communication_record"],
     "other": ["device_maintenance", "serial_port_parameter", "protocol_library_count", "protocol_library_slots"]
@@ -424,6 +425,20 @@
     "device_action": {
       "fields": [
         {"name": "action_value", "description": "执行值（仅允许1）", "type": "bcd", "length": 1, "byte_order": "little", "decimals": 0, "minimum": 1, "maximum": 1, "default": "1"}
+      ]
+    },
+    "voltage_over_limit_setting": {
+      "fields": [
+        {"name": "over_limit_setting", "description": "越限条件发生限值", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 1, "minimum": 0.1, "maximum": 999.9, "default": "231.0", "unit": "V"},
+        {"name": "over_limit_delay_seconds", "description": "越限条件判定持续时间", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 0, "minimum": 0, "maximum": 999999, "default": "3", "unit": "s"}
+      ]
+    },
+    "comm_err_limit": {
+      "fields": [
+        {"name": "start_hhmmss", "description": "监测起始时间（08:00:00写作80000）", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 0, "minimum": 0, "maximum": 235959, "default": "80000"},
+        {"name": "end_hhmmss", "description": "监测结束时间（17:00:00写作170000）", "type": "bcd", "length": 3, "byte_order": "little", "decimals": 0, "minimum": 0, "maximum": 235959, "default": "170000"},
+        {"name": "interval_minutes", "description": "监测间隔（0为关闭异常统计，单位分钟，两字节BCD上限9999分钟）", "type": "bcd", "length": 2, "byte_order": "little", "decimals": 0, "minimum": 0, "maximum": 9999, "default": "5", "unit": "min"},
+        {"name": "daily_max_count", "description": "日发生最大次数（0为不限制，一字节BCD上限99）", "type": "bcd", "length": 1, "byte_order": "little", "decimals": 0, "minimum": 0, "maximum": 99, "default": "3", "unit": "次"}
       ]
     }
   },
@@ -1438,6 +1453,34 @@
       "access": "read_write",
       "read_schema": "inverter_archive",
       "write_schema": "inverter_archive"
+    },
+    {
+      "id": "comm_err_limit",
+      "category": "parameter",
+      "prefix": "04E630",
+      "display": "04 E6 30 01 | 光伏逆变器通信异常事件触发限值",
+      "description": "光伏逆变器通信异常事件触发限值",
+      "suffixes": {
+        "values": ["01"],
+        "labels": {"01": "光伏逆变器通信异常事件触发限值"}
+      },
+      "access": "read_write",
+      "read_schema": "comm_err_limit",
+      "write_schema": "comm_err_limit"
+    },
+    {
+      "id": "voltage_over_limit_setting",
+      "category": "parameter",
+      "prefix": "04E630",
+      "display": "04 E6 30 02 | 电压越限事件触发限值",
+      "description": "电压越限事件触发限值",
+      "suffixes": {
+        "values": ["02"],
+        "labels": {"02": "电压越限事件触发限值"}
+      },
+      "access": "read_write",
+      "read_schema": "voltage_over_limit_setting",
+      "write_schema": "voltage_over_limit_setting"
     },
     {
       "id": "event_switch_count",

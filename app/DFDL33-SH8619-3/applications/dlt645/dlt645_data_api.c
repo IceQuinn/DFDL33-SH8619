@@ -35,6 +35,20 @@
 #define DLT645_POLL_INTERVAL_LEN             2U /* 0或5～3600秒需要两字节低字节在前BCD才能完整表示。 */
 #define DLT645_POLL_INTERVAL_MIN             5U /* 全局周期抄读间隔最小允许5秒。 */
 #define DLT645_POLL_INTERVAL_MAX          3600U /* 全局周期抄读间隔最大允许3600秒。 */
+#define DLT645_VOLT_LIMIT_LEN                5U /* 电压越限触发限值由2字节限值和3字节持续时间组成。 */
+#define DLT645_VOLT_LIMIT_VALUE_LEN          2U /* 越限条件发生限值格式NNN.N，与电压变量同为0.1V单位两字节BCD。 */
+#define DLT645_VOLT_LIMIT_VALUE_MIN          1U /* 限值为0时越限比较恒成立且回差恒不满足，因此禁止配置为0。 */
+#define DLT645_VOLT_LIMIT_VALUE_MAX       9999U /* NNN.N两字节BCD最大表示999.9V。 */
+#define DLT645_VOLT_LIMIT_DELAY_LEN          3U /* 越限条件判定持续时间格式NNNNNN，单位为秒。 */
+#define DLT645_VOLT_LIMIT_DELAY_MAX     999999U /* NNNNNN三字节BCD最大表示999999秒。 */
+#define DLT645_COMM_LIMIT_LEN                9U /* 通信异常触发限值由2个3字节时间、1个2字节间隔和1个1字节次数组成。 */
+#define DLT645_COMM_LIMIT_TIME_LEN           3U /* 监测起始时间和结束时间格式hhmmss，各占3字节BCD。 */
+#define DLT645_COMM_LIMIT_INTERVAL_LEN       2U /* 监测间隔格式NNNN，占2字节BCD，单位秒。 */
+#define DLT645_COMM_LIMIT_COUNT_LEN          1U /* 日发生最大次数格式NN，占1字节BCD。 */
+#define DLT645_COMM_TIME_MAX             235959U /* hhmmss六位BCD最大合法时刻23:59:59。 */
+#define DLT645_COMM_START_SECONDS_MAX     86399U /* 监测起始/结束时间在内存中以一天内秒数保存，最大23:59:59。 */
+#define DLT645_COMM_INTERVAL_MAX           9999U /* NNNN为两字节BCD，每字节只存两位十进制数，因此上限是9999分钟而不是65535。 */
+#define DLT645_COMM_COUNT_MAX                99U /* NN为一字节BCD，每字节只存两位十进制数，因此上限是99次而不是255。 */
 #define DLT645_FIRMWARE_VERSION_LEN         32U /* 04800001厂家软件版本号固定占32字节ASCII。 */
 #define DLT645_REALTIME_READ_TIMEOUT_MS   55000U /* 为主站60秒超时保留5秒组帧和发送余量。 */
 #define DLT645_CONTROL_WAIT_TICKS          4000  /* 单台控制最多等待4秒（前置使能+实际控制两帧），FF逐台执行仍可控制在60秒内。 */
@@ -1013,6 +1027,226 @@ rt_err_t dlt645_write_poll_interval(const Dlt645PointTypeDef *point, uint32_t id
 
     ctu_cfg.poll_interval_seconds = (uint16_t)interval_seconds; /* 校验成功后更新全局轮询配置，调度器下一次判断即可使用。 */
     ctu_cfg_save(); /* 周期抄读间隔写成功后立即保存。 */
+    *response_len = 0U; /* 成功时由顶层发送不带额外数据的标准写应答。 */
+    return RT_EOK;
+}
+
+/* 读取04E63002电压越限事件触发限值，按NNN.N两字节和NNNNNN三字节低字节在前BCD返回。 */
+rt_err_t dlt645_read_volt_limit(const Dlt645PointTypeDef *point, uint32_t id,
+                                uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint16_t setting = ctu_cfg.overvoltage_setting;        /* 越限条件发生限值，内存单位为0.1V。 */
+    uint32_t delay_seconds = ctu_cfg.overvoltage_t_delay;  /* 越限条件判定持续时间，内存单位为秒。 */
+
+    RT_UNUSED(id); /* 04E63002为全局唯一定值，不使用DI0选择逆变器。 */
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
+       (point->data_len != DLT645_VOLT_LIMIT_LEN) || (capacity < point->data_len)) /* 固定需要5字节输出空间。 */
+    {
+        return -RT_EINVAL;
+    }
+    if((setting < DLT645_VOLT_LIMIT_VALUE_MIN) || (setting > DLT645_VOLT_LIMIT_VALUE_MAX) ||
+       (dlt645_encode_bcd((int32_t)setting, data, DLT645_VOLT_LIMIT_VALUE_LEN, RT_FALSE) != RT_EOK)) /* 越界配置不能截断回复。 */
+    {
+        return -RT_EINVAL;
+    }
+    if((delay_seconds > DLT645_VOLT_LIMIT_DELAY_MAX) ||
+       (dlt645_encode_bcd((int32_t)delay_seconds, &data[DLT645_VOLT_LIMIT_VALUE_LEN],
+                          DLT645_VOLT_LIMIT_DELAY_LEN, RT_FALSE) != RT_EOK)) /* 持续时间上限为三字节BCD可表示范围。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    *data_len = point->data_len; /* 限值两字节加持续时间三字节固定返回5字节业务数据。 */
+    return RT_EOK;
+}
+
+/* 判断待写入的整段数据是否全为FF，用于把FF认定为写值错误而不是不判断限值。 */
+static rt_bool_t dlt645_data_is_all_ff(const uint8_t *data, uint16_t length)
+{
+    uint16_t index;
+
+    for(index = 0U; index < length; ++index)
+    {
+        if(data[index] != 0xFFU)
+        {
+            return RT_FALSE;
+        }
+    }
+    return RT_TRUE;
+}
+
+/* 把一天内秒数转换为645使用的hhmmss六位BCD数值，供04E63001两项时间字段编码使用。 */
+static uint32_t dlt645_comm_seconds_to_hhmmss(uint32_t seconds)
+{
+    uint32_t hour = seconds / 3600U;
+    uint32_t minute = (seconds % 3600U) / 60U;
+    uint32_t second = seconds % 60U;
+
+    return (hour * 10000U) + (minute * 100U) + second;
+}
+
+/* 把645的hhmmss六位BCD数值还原为一天内秒数，供04E63001两项时间字段解码使用。 */
+static uint32_t dlt645_comm_hhmmss_to_seconds(uint32_t hhmmss)
+{
+    uint32_t hour = hhmmss / 10000U;
+    uint32_t minute = (hhmmss % 10000U) / 100U;
+    uint32_t second = hhmmss % 100U;
+
+    return (hour * 3600U) + (minute * 60U) + second;
+}
+
+/* 校验hhmmss的时、分、秒三段是否都在合法范围内，非法值不允许写入配置。 */
+static rt_bool_t dlt645_comm_hhmmss_valid(uint32_t hhmmss)
+{
+    uint32_t hour = hhmmss / 10000U;
+    uint32_t minute = (hhmmss % 10000U) / 100U;
+    uint32_t second = hhmmss % 100U;
+
+    return ((hour < 24U) && (minute < 60U) && (second < 60U)) ? RT_TRUE : RT_FALSE;
+}
+
+/* 读取04E63001光伏逆变器通信异常事件触发限值，按3字节时间、3字节时间、2字节间隔和1字节次数低字节在前BCD返回。 */
+rt_err_t dlt645_read_comm_err_limit(const Dlt645PointTypeDef *point, uint32_t id,
+                                    uint8_t *data, uint16_t capacity, uint16_t *data_len)
+{
+    uint32_t start_hhmmss;    /* 监测起始时间的hhmmss数值。 */
+    uint32_t end_hhmmss;      /* 监测结束时间的hhmmss数值。 */
+
+    RT_UNUSED(id); /* 04E63001为全局唯一定值，不使用DI0选择逆变器。 */
+    if((point == RT_NULL) || (data == RT_NULL) || (data_len == RT_NULL) ||
+       (point->data_len != DLT645_COMM_LIMIT_LEN) || (capacity < point->data_len)) /* 固定需要9字节输出空间。 */
+    {
+        return -RT_EINVAL;
+    }
+    if(ctu_cfg.comm_err_start_seconds > DLT645_COMM_START_SECONDS_MAX) /* 超出一天的秒数无法组成合法hhmmss。 */
+    {
+        return -RT_EINVAL;
+    }
+    if(ctu_cfg.comm_err_end_seconds > DLT645_COMM_START_SECONDS_MAX)
+    {
+        return -RT_EINVAL;
+    }
+    start_hhmmss = dlt645_comm_seconds_to_hhmmss(ctu_cfg.comm_err_start_seconds);
+    end_hhmmss = dlt645_comm_seconds_to_hhmmss(ctu_cfg.comm_err_end_seconds);
+    if((dlt645_encode_bcd((int32_t)start_hhmmss, data, DLT645_COMM_LIMIT_TIME_LEN, RT_FALSE) != RT_EOK) ||
+       (dlt645_encode_bcd((int32_t)end_hhmmss, &data[DLT645_COMM_LIMIT_TIME_LEN],
+                          DLT645_COMM_LIMIT_TIME_LEN, RT_FALSE) != RT_EOK)) /* 六位BCD最大235959，不会越界。 */
+    {
+        return -RT_EINVAL;
+    }
+    if((ctu_cfg.comm_err_interval_minutes > DLT645_COMM_INTERVAL_MAX) ||
+       (ctu_cfg.comm_err_daily_max_count > DLT645_COMM_COUNT_MAX)) /* 写入口已限制范围，这里防Flash中残留的旧值越过BCD位数。 */
+    {
+        return -RT_EINVAL;
+    }
+    if(dlt645_encode_bcd((int32_t)ctu_cfg.comm_err_interval_minutes,
+                         &data[2U * DLT645_COMM_LIMIT_TIME_LEN], DLT645_COMM_LIMIT_INTERVAL_LEN, RT_FALSE) != RT_EOK) /* 配置与645侧同为分钟，无需换算。 */
+    {
+        return -RT_EINVAL;
+    }
+    if(dlt645_encode_bcd((int32_t)ctu_cfg.comm_err_daily_max_count,
+                         &data[(2U * DLT645_COMM_LIMIT_TIME_LEN) + DLT645_COMM_LIMIT_INTERVAL_LEN],
+                         DLT645_COMM_LIMIT_COUNT_LEN, RT_FALSE) != RT_EOK)
+    {
+        return -RT_EINVAL;
+    }
+
+    *data_len = point->data_len; /* 两个时间各3字节、间隔2字节、次数1字节，共固定返回9字节业务数据。 */
+    return RT_EOK;
+}
+
+/* 写入04E63001光伏逆变器通信异常事件触发限值，校验通过后立即更新配置并保存到Flash。 */
+rt_err_t dlt645_write_comm_err_limit(const Dlt645PointTypeDef *point, uint32_t id,
+                                     const uint8_t *data, uint16_t data_len,
+                                     uint8_t *response, uint16_t response_capacity,
+                                     uint16_t *response_len)
+{
+    int32_t start_hhmmss;    /* 监测起始时间的hhmmss数值。 */
+    int32_t end_hhmmss;      /* 监测结束时间的hhmmss数值。 */
+    int32_t interval_minutes; /* 监测间隔，单位分钟，与配置字段同单位直接保存。 */
+    int32_t daily_max_count;  /* 日发生最大次数。 */
+
+    RT_UNUSED(id); /* 04E63001为全局唯一定值。 */
+    RT_UNUSED(response); /* 标准写成功应答不携带额外业务数据。 */
+    RT_UNUSED(response_capacity);
+    if((point == RT_NULL) || (data == RT_NULL) || (response_len == RT_NULL) ||
+       (point->data_len != DLT645_COMM_LIMIT_LEN) || (data_len != point->data_len)) /* 写请求必须携带完整9字节。 */
+    {
+        return -RT_EINVAL;
+    }
+    if(dlt645_data_is_all_ff(data, data_len) == RT_TRUE) /* 全FF不表示不判断限值，直接按写值错误处理。 */
+    {
+        return -RT_EINVAL;
+    }
+    if((dlt645_bcd_decode_u32(data, DLT645_COMM_LIMIT_TIME_LEN, &start_hhmmss) != RT_EOK) ||
+       (dlt645_bcd_decode_u32(&data[DLT645_COMM_LIMIT_TIME_LEN], DLT645_COMM_LIMIT_TIME_LEN,
+                              &end_hhmmss) != RT_EOK) ||
+       (dlt645_bcd_decode_u32(&data[2U * DLT645_COMM_LIMIT_TIME_LEN], DLT645_COMM_LIMIT_INTERVAL_LEN,
+                              &interval_minutes) != RT_EOK) ||
+       (dlt645_bcd_decode_u32(&data[(2U * DLT645_COMM_LIMIT_TIME_LEN) + DLT645_COMM_LIMIT_INTERVAL_LEN],
+                              DLT645_COMM_LIMIT_COUNT_LEN, &daily_max_count) != RT_EOK)) /* 非法BCD按写值错误处理。 */
+    {
+        return -RT_EINVAL;
+    }
+    if((start_hhmmss < 0) || (start_hhmmss > (int32_t)DLT645_COMM_TIME_MAX) ||
+       (dlt645_comm_hhmmss_valid((uint32_t)start_hhmmss) != RT_TRUE) ||
+       (end_hhmmss < 0) || (end_hhmmss > (int32_t)DLT645_COMM_TIME_MAX) ||
+       (dlt645_comm_hhmmss_valid((uint32_t)end_hhmmss) != RT_TRUE)) /* 时分秒任一段越界都不允许写入。 */
+    {
+        return -RT_EINVAL;
+    }
+    if((interval_minutes < 0) || (interval_minutes > (int32_t)DLT645_COMM_INTERVAL_MAX) ||
+       (daily_max_count < 0) || (daily_max_count > (int32_t)DLT645_COMM_COUNT_MAX)) /* 间隔和次数上限由BCD位数决定，不是字节可表示的全值域。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    ctu_cfg.comm_err_start_seconds = dlt645_comm_hhmmss_to_seconds((uint32_t)start_hhmmss);
+    ctu_cfg.comm_err_end_seconds = dlt645_comm_hhmmss_to_seconds((uint32_t)end_hhmmss);
+    ctu_cfg.comm_err_interval_minutes = (uint16_t)interval_minutes; /* 配置与645侧同为分钟。 */
+    ctu_cfg.comm_err_daily_max_count = (uint8_t)daily_max_count;
+    ctu_cfg_save(); /* 触发限值写成功后立即保存。 */
+    *response_len = 0U; /* 成功时由顶层发送不带额外数据的标准写应答。 */
+    return RT_EOK;
+}
+
+/* 写入04E63002电压越限事件触发限值，校验通过后立即更新配置并保存到Flash。 */
+rt_err_t dlt645_write_volt_limit(const Dlt645PointTypeDef *point, uint32_t id,
+                                 const uint8_t *data, uint16_t data_len,
+                                 uint8_t *response, uint16_t response_capacity,
+                                 uint16_t *response_len)
+{
+    int32_t setting;      /* 由两字节BCD解码得到的越限条件发生限值，单位0.1V。 */
+    int32_t delay_seconds; /* 由三字节BCD解码得到的越限条件判定持续时间，单位秒。 */
+
+    RT_UNUSED(id); /* 04E63002为全局唯一定值。 */
+    RT_UNUSED(response); /* 标准写成功应答不携带额外业务数据。 */
+    RT_UNUSED(response_capacity);
+    if((point == RT_NULL) || (data == RT_NULL) || (response_len == RT_NULL) ||
+       (point->data_len != DLT645_VOLT_LIMIT_LEN) || (data_len != point->data_len)) /* 写请求必须携带完整5字节。 */
+    {
+        return -RT_EINVAL;
+    }
+    if(dlt645_data_is_all_ff(data, data_len) == RT_TRUE) /* 规范暂不支持写入FF表示不判断限值。 */
+    {
+        return -RT_EINVAL;
+    }
+    if((dlt645_bcd_decode_u32(data, DLT645_VOLT_LIMIT_VALUE_LEN, &setting) != RT_EOK) ||
+       (dlt645_bcd_decode_u32(&data[DLT645_VOLT_LIMIT_VALUE_LEN], DLT645_VOLT_LIMIT_DELAY_LEN,
+                              &delay_seconds) != RT_EOK)) /* 非法BCD或含非十进制数字都按写值错误处理。 */
+    {
+        return -RT_EINVAL;
+    }
+    if((setting < (int32_t)DLT645_VOLT_LIMIT_VALUE_MIN) ||
+       (setting > (int32_t)DLT645_VOLT_LIMIT_VALUE_MAX) ||
+       (delay_seconds < 0) || (delay_seconds > (int32_t)DLT645_VOLT_LIMIT_DELAY_MAX)) /* 越界值不允许部分更新。 */
+    {
+        return -RT_EINVAL;
+    }
+
+    ctu_cfg.overvoltage_setting = (uint16_t)setting;       /* 校验成功后更新越限定值，越限判定下一轮即使用新值。 */
+    ctu_cfg.overvoltage_t_delay = (uint32_t)delay_seconds; /* 持续时间内存单位同为秒，与645写入值一致。 */
+    ctu_cfg_save(); /* 触发限值写成功后立即保存。 */
     *response_len = 0U; /* 成功时由顶层发送不带额外数据的标准写应答。 */
     return RT_EOK;
 }

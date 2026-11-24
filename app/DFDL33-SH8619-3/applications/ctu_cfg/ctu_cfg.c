@@ -94,8 +94,15 @@ void set_default_para(enum CTU_RESET_CMD Reset_Cmd)
 
     ctu_cfg.poll_interval_seconds       = 0U;          /* 全局逆变器周期抄读时间默认10秒。 */
 
-    ctu_cfg.overvoltage_setting         = 2310;         //电压越限定值
-    ctu_cfg.overvoltage_t_delay         = 3000;         //电压越限延时
+    ctu_cfg.overvoltage_setting         = 2310;         //电压越限定值，单位0.1V
+    ctu_cfg.overvoltage_t_delay         = 3;            //电压越限延时，单位秒
+
+    /* 04E63001通信异常事件触发限值默认值：08:00:00至17:00:00监测、间隔5分钟、日发生最大3次。
+     * 起止时间在内存中保存一天内秒数，与645的hhmmss格式互转后再收发。 */
+    ctu_cfg.comm_err_start_seconds      = 28800U;       //监测起始时间08:00:00
+    ctu_cfg.comm_err_end_seconds        = 61200U;       //监测结束时间17:00:00
+    ctu_cfg.comm_err_interval_minutes   = 5U;           //监测间隔5分钟，单位为分钟
+    ctu_cfg.comm_err_daily_max_count    = 3U;           //日发生最大次数3次
 }
 
 void set_default_all_data(void)

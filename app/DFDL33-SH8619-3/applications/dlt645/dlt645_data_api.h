@@ -124,6 +124,30 @@ rt_err_t dlt645_write_poll_interval(const Dlt645PointTypeDef *point,
                                     uint16_t response_capacity,
                                     uint16_t *response_len);
 
+/* 读取04E63002电压越限事件触发限值，返回2字节NNN.N限值和3字节NNNNNN持续时间。 */
+rt_err_t dlt645_read_volt_limit(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
+/* 写入04E63002电压越限事件触发限值，限值1～9999、持续时间0～999999，保存后立即生效。 */
+rt_err_t dlt645_write_volt_limit(const Dlt645PointTypeDef *point,
+                                 uint32_t id,
+                                 const uint8_t *data,
+                                 uint16_t data_len,
+                                 uint8_t *response,
+                                 uint16_t response_capacity,
+                                 uint16_t *response_len);
+
+/* 读取04E63001光伏逆变器通信异常事件触发限值，返回起始/结束hhmmss各3字节、间隔2字节、日最大次数1字节。 */
+rt_err_t dlt645_read_comm_err_limit(const Dlt645PointTypeDef *point, uint32_t id, uint8_t *data, uint16_t capacity, uint16_t *data_len);
+
+/* 写入04E63001光伏逆变器通信异常事件触发限值，四项参数校验通过后整体更新并保存。 */
+rt_err_t dlt645_write_comm_err_limit(const Dlt645PointTypeDef *point,
+                                     uint32_t id,
+                                     const uint8_t *data,
+                                     uint16_t data_len,
+                                     uint8_t *response,
+                                     uint16_t response_capacity,
+                                     uint16_t *response_len);
+
 /* 处理04000A00～04000D00写1命令，分别执行设备重启、清除全部事件、恢复出厂设置和受理电压校准。 */
 rt_err_t dlt645_write_device_action(const Dlt645PointTypeDef *point,
                                     uint32_t id,

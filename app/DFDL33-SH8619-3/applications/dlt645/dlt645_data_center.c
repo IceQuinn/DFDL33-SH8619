@@ -193,6 +193,11 @@ static const Dlt645PointTypeDef g_dlt645_points[] =
     //有功时段控制时间
     {0x03E60901U, 0xFFFFFF00U, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 73U, 1, 0, 0, dlt645_read_power_ctrl_event_record, RT_NULL, "power period ctrl event record"},
 
+    //电压越限事件触发限值
+    {0x04E63002U, 0xFFFFFFFFU, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 5U, 1, 0, 0, dlt645_read_volt_limit, dlt645_write_volt_limit, "voltage over-limit setting"}, /* NNN.N越限条件发生限值2字节加NNNNNN判定持续时间3字节，全局唯一定值。 */
+    //光伏逆变器通信异常事件触发限值
+    {0x04E63001U, 0xFFFFFFFFU, DLT645_ACCESS_READ | DLT645_ACCESS_WRITE, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 9U, 1, 0, 0, dlt645_read_comm_err_limit, dlt645_write_comm_err_limit, "comm error trigger limit"}, /* hhmmss起始时间3字节加hhmmss结束时间3字节加NNNN间隔2字节加NN日最大次数1字节，全局唯一定值。 */
+
     //电压越限总次数
     {0x03E61100U, 0xFFFFFFFFU, DLT645_ACCESS_READ, DLT645_CODEC_CUSTOM, DLT645_SELECTOR_NONE, 3U, 1, 0, 0, dlt645_read_volt_over_limit_count, RT_NULL, "voltage over-limit count"},
     //电压越限事件记录
